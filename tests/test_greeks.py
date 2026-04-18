@@ -7,14 +7,11 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from trader.greeks import GreeksSnapshot, OptionChainGreeks, _sanitize_price
-from trader.strike_selector import (
-    StrikeSelectionCriteria,
-    StrikeSelector,
-    SpreadSelection,
-    calculate_limit_price,
+from trader.greeks import (
+    GreeksSnapshot, OptionChainGreeks, _sanitize_price,
+    StrikeSelectionCriteria, StrikeSelector, SpreadSelection, calculate_limit_price,
+    GreeksGate,
 )
-from trader.greeks_gate import GreeksGate
 
 
 # ── helpers ────────────────────────────────────────────────────

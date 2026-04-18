@@ -7,8 +7,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from common.logging import get_logger
-from trader.greeks import OptionChainGreeks
-from trader.strike_selector import SpreadSelection
+from trader.greeks.service import OptionChainGreeks
+from trader.greeks.strike_selector import SpreadSelection
 
 log = get_logger(__name__)
 
