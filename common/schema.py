@@ -102,11 +102,26 @@ class SentimentOut(BaseModel):
         from_attributes = True
 
 
+class SentimentLlmBudgetOut(BaseModel):
+    provider: str
+    model: Optional[str] = None
+    month_to_date_eur: float = 0.0
+    today_eur: float = 0.0
+    monthly_cap_eur: float = 0.0
+    daily_cap_eur: float = 0.0
+    remaining_month_eur: float = 0.0
+    remaining_today_eur: float = 0.0
+    budget_stopped: bool = False
+    reason: Optional[str] = None
+
+
 class StateOverview(BaseModel):
     bot: BotStateOut
     equity: Optional[EquitySnapshotOut] = None
     positions: List[PositionOut] = []
     position_count: int = 0
+    sentiment_provider: str = "rss_lexicon"
+    sentiment_llm_budget: Optional[SentimentLlmBudgetOut] = None
 
 
 class EventOut(BaseModel):

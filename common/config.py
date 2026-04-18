@@ -91,6 +91,70 @@ class FeaturesConfig(BaseModel):
     approve_mode_default: bool = True
 
 
+# ── Sentiment providers ─────────────────────────────────────
+
+class SentimentRssConfig(BaseModel):
+    feeds: List[str] = [
+        "https://feeds.reuters.com/reuters/businessNews",
+        "https://feeds.reuters.com/reuters/marketsNews",
+        "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+        "https://www.cnbc.com/id/15839135/device/rss/rss.html",
+        "https://www.ft.com/rss/home",
+        "https://www.economist.com/rss/the-world-this-week.xml",
+        "https://seekingalpha.com/market_currents.xml",
+        "http://feeds.marketwatch.com/marketwatch/topstories/",
+        "https://www.federalreserve.gov/feeds/press_all.xml",
+        "https://finance.yahoo.com/rss/",
+    ]
+    user_agent: str = "MarketAI/1.0 (+https://local)"
+    request_timeout_seconds: int = 20
+    max_items_per_run: int = 200
+
+
+class SentimentClaudeConfig(BaseModel):
+    enabled: bool = True
+    model: str = "claude-3-5-sonnet-latest"
+    api_key_env: str = "ANTHROPIC_API_KEY"
+    temperature: float = 0.2
+    request_timeout_seconds: int = 45
+    max_retries: int = 3
+    backoff_base_seconds: float = 2.0
+    backoff_max_seconds: float = 30.0
+
+    # Input/output sizing
+    max_items_per_run: int = 40
+    max_chars_per_item: int = 600
+    max_output_tokens: int = 4000
+
+    # Dedup
+    dedup_cache_days: int = 14
+
+    # Quality filters
+    min_confidence_to_use: float = 0.35
+
+    # Budget hard-cap (sentiment-only)
+    monthly_budget_eur: float = 10.0
+    eur_usd_rate: float = 1.08
+    hard_stop_on_budget: bool = True
+    daily_budget_fraction: float = 0.12
+    max_tokens_per_item_estimate: int = 300
+
+
+class SentimentConfig(BaseModel):
+    provider: str = "rss_lexicon"  # rss_lexicon | claude_llm
+    refresh_minutes: int = 60
+    rss: SentimentRssConfig = SentimentRssConfig()
+    claude: SentimentClaudeConfig = SentimentClaudeConfig()
+
+    @field_validator("provider")
+    @classmethod
+    def _validate_provider(cls, v: str) -> str:
+        v = v.strip().lower()
+        if v not in ("rss_lexicon", "claude_llm"):
+            raise ValueError("sentiment.provider must be 'rss_lexicon' or 'claude_llm'")
+        return v
+
+
 # ── root ────────────────────────────────────────────────────
 
 class AppConfig(BaseModel):
@@ -105,6 +169,7 @@ class AppConfig(BaseModel):
     execution: ExecutionConfig = ExecutionConfig()
     safety: SafetyConfig = SafetyConfig()
     features: FeaturesConfig = FeaturesConfig()
+    sentiment: SentimentConfig = SentimentConfig()
 
     @field_validator("mode")
     @classmethod
@@ -155,6 +220,13 @@ def _apply_env_overrides(raw: dict) -> dict:
         feat = dict(raw.get("features") or {})
         feat["approve_mode_default"] = env_approve.strip().lower() in ("1", "true", "yes", "on")
         raw["features"] = feat
+
+    # Sentiment provider override
+    env_provider = os.environ.get("SENTIMENT_PROVIDER")
+    if env_provider:
+        sent_section = dict(raw.get("sentiment") or {})
+        sent_section["provider"] = env_provider
+        raw["sentiment"] = sent_section
 
     return raw
 

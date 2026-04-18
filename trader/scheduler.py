@@ -35,7 +35,10 @@ class Scheduler:
                 state.last_heartbeat = utcnow()
 
     def _should_refresh_sentiment(self) -> bool:
-        interval = self.cfg.scheduling.sentiment_refresh_minutes
+        # Prefer the sentiment-section interval (spec: 60 minutes); fall back to
+        # the legacy scheduling-section value for back-compat with old configs.
+        interval = getattr(self.cfg.sentiment, "refresh_minutes", None) \
+            or self.cfg.scheduling.sentiment_refresh_minutes
         return (datetime.now() - self._last_sentiment).total_seconds() > interval * 60
 
     def _should_eval_signals(self) -> bool:
@@ -61,7 +64,7 @@ class Scheduler:
     def run_once(self) -> None:
         """Single iteration of the scheduler loop."""
         from trader.sync import full_sync
-        from trader.sentiment.scoring import refresh_and_store
+        from trader.sentiment.factory import refresh_and_store
         from trader.strategy import generate_signals
         from trader.execution import execute_signal
 
@@ -78,9 +81,13 @@ class Scheduler:
         # Refresh sentiment
         if self._should_refresh_sentiment():
             try:
-                refresh_and_store()
+                summary = refresh_and_store()
                 self._last_sentiment = datetime.now()
-                log.info("Sentiment refreshed.")
+                log.info(
+                    "Sentiment refreshed: provider=%s status=%s snapshots=%s",
+                    summary.get("provider"), summary.get("status"),
+                    summary.get("snapshots_written", 0),
+                )
             except Exception as e:
                 log.error("Sentiment refresh failed: %s", e)
 

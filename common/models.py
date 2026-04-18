@@ -149,3 +149,36 @@ class EventLog(Base):
     type = Column(String(50), default="")
     message = Column(Text, default="")
     payload_json = Column(Text, default="{}")
+
+
+class SentimentLlmItem(Base):
+    """Persistent dedup record for RSS items sent to the LLM."""
+    __tablename__ = "sentiment_llm_items"
+
+    id = Column(String(32), primary_key=True)           # sha256 prefix, hex
+    first_seen_at = Column(DateTime, default=utcnow, nullable=False)
+    last_seen_at = Column(DateTime, default=utcnow, nullable=False, index=True)
+    source = Column(String(200), default="")
+    title = Column(Text, default="")
+    url = Column(Text, nullable=True)
+    processed_at = Column(DateTime, nullable=True, index=True)
+
+
+class SentimentLlmUsage(Base):
+    """Per-call usage + cost record for the Anthropic sentiment extractor."""
+    __tablename__ = "sentiment_llm_usage"
+
+    id = Column(String(36), primary_key=True)           # uuid4 hex
+    ts = Column(DateTime, default=utcnow, nullable=False, index=True)
+    provider = Column(String(30), default="anthropic")
+    model = Column(String(100), default="")
+    request_kind = Column(String(50), default="sentiment_extraction")
+    input_items_count = Column(Integer, default=0)
+    prompt_tokens = Column(Integer, nullable=True)
+    completion_tokens = Column(Integer, nullable=True)
+    cost_usd_est = Column(Float, default=0.0)
+    cost_eur_est = Column(Float, default=0.0)
+    anthropic_request_id = Column(String(100), nullable=True)
+    status = Column(String(20), default="success")      # success | failed
+    error_type = Column(String(60), nullable=True)
+    error_message = Column(Text, nullable=True)

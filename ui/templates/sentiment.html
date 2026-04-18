@@ -3,10 +3,86 @@
 {% block content %}
 <h1>Sentiment</h1>
 
+<div class="panel">
+  <strong>Provider:</strong>
+  <span class="badge badge-{{ 'green' if provider == 'claude_llm' else 'gray' }}">
+    {{ provider }}
+  </span>
+
+  {% if provider == 'claude_llm' %}
+    <span style="margin-left: 1em;"><strong>LLM spend (EUR):</strong></span>
+    <span>today {{ "%.4f"|format(budget.today_eur) }} / {{ "%.2f"|format(budget.daily_cap_eur) }}</span>
+    &middot;
+    <span>MTD {{ "%.4f"|format(budget.month_to_date_eur) }} / {{ "%.2f"|format(budget.monthly_cap_eur) }}</span>
+    &middot;
+    <span>remaining today {{ "%.4f"|format(budget.remaining_today_eur) }}</span>
+    &middot;
+    <span>remaining month {{ "%.4f"|format(budget.remaining_month_eur) }}</span>
+    {% if budget.budget_stopped %}
+      <span class="badge badge-red" style="margin-left: 1em;">STOPPED ({{ budget.reason }})</span>
+    {% endif %}
+  {% endif %}
+</div>
+
 <div class="chart-container">
   <canvas id="sentimentChart"></canvas>
 </div>
 
+<h2>Market (US)</h2>
+<table>
+  <thead>
+    <tr><th>Time</th><th>Score</th><th>Summary</th></tr>
+  </thead>
+  <tbody>
+  {% for s in market_rows or [] %}
+    <tr>
+      <td>{{ s.timestamp }}</td>
+      <td><span class="badge badge-{{ 'green' if s.score > 0.2 else 'red' if s.score < -0.2 else 'gray' }}">{{ "%.2f"|format(s.score) }}</span></td>
+      <td><pre style="white-space: pre-wrap; margin:0;">{{ s.summary[:500] }}</pre></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="3">No market sentiment yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2>Sectors</h2>
+<table>
+  <thead>
+    <tr><th>Sector</th><th>Score</th><th>Summary</th></tr>
+  </thead>
+  <tbody>
+  {% for s in sector_rows or [] %}
+    <tr>
+      <td>{{ s.key }}</td>
+      <td><span class="badge badge-{{ 'green' if s.score > 0.2 else 'red' if s.score < -0.2 else 'gray' }}">{{ "%.2f"|format(s.score) }}</span></td>
+      <td>{{ s.summary[:200] }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="3">No sector sentiment yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2>Tickers (top 20 by magnitude)</h2>
+<table>
+  <thead>
+    <tr><th>Ticker</th><th>Score</th><th>Summary</th></tr>
+  </thead>
+  <tbody>
+  {% for s in ticker_rows or [] %}
+    <tr>
+      <td>{{ s.key }}</td>
+      <td><span class="badge badge-{{ 'green' if s.score > 0.2 else 'red' if s.score < -0.2 else 'gray' }}">{{ "%.2f"|format(s.score) }}</span></td>
+      <td>{{ s.summary[:200] }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="3">No ticker sentiment yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2>Recent snapshots</h2>
 <table>
   <thead>
     <tr><th>Time</th><th>Scope</th><th>Key</th><th>Score</th><th>Summary</th></tr>

@@ -11,7 +11,7 @@ Trades US stocks/ETFs via **debit spread** options strategies (defined risk only
 - **Risk engine** — drawdown stop, position limits, per-trade risk caps
 - **Approve mode** — signals generated but orders require manual approval (default ON)
 - **Dashboard** — full local web UI with charts, controls, and manual overrides
-- **Sentiment** — RSS-based headline scoring with sector tagging
+- **Sentiment** — pluggable: RSS lexicon (free) or Claude LLM extractor (per-item sentiment + sector/ticker tagging + strict €10/month budget cap)
 
 ## Quick Start (Docker on Windows)
 
@@ -229,6 +229,7 @@ Navigate to **http://localhost:8000**
 | POST | `/controls/approve_mode/off` | Allow auto-trading |
 | GET | `/signals/latest` | Latest signal snapshots |
 | GET | `/sentiment/latest` | Latest sentiment data |
+| GET | `/sentiment/llm-budget` | Claude sentiment spend + remaining caps |
 | GET | `/orders` | Order history |
 | GET | `/fills` | Fill history |
 | GET | `/positions` | Current positions |
@@ -262,6 +263,99 @@ scripts/run_all.py
 - **Stale data check** — refuses to trade on old market data
 - **Defined risk only** — only debit spreads allowed (max loss = debit paid)
 - **No shorting** — bear exposure only via bear put spreads
+
+## Sentiment: RSS lexicon vs Claude LLM
+
+The bot ships with two sentiment providers, selected via `config.yaml`:
+
+```yaml
+sentiment:
+  provider: "rss_lexicon"   # default — offline, free
+  # provider: "claude_llm"  # headlines → Anthropic Claude → per-item sentiment
+  refresh_minutes: 60
+```
+
+You can override at runtime with `SENTIMENT_PROVIDER=claude_llm`.
+
+### Enabling the Claude LLM provider
+
+1. **Create an Anthropic API key.**
+   Go to [console.anthropic.com](https://console.anthropic.com/) → *Settings* → *API Keys* → *Create Key*.
+
+   ⚠ Important: a Claude Pro / claude.ai chat subscription is **not** API access.
+   The API is metered separately and requires a key from the Anthropic Console.
+
+2. **Set the key in your environment.**
+   The bot reads it from `ANTHROPIC_API_KEY` (configurable per-run via
+   `sentiment.claude.api_key_env`). It is never read from `config.yaml`.
+
+   ```bash
+   # .env (bare-metal or docker-compose)
+   ANTHROPIC_API_KEY=sk-ant-...
+   ```
+
+3. **Flip the provider in `config.yaml`:**
+   ```yaml
+   sentiment:
+     provider: "claude_llm"
+   ```
+
+4. **Restart the trader.** The next scheduler tick (≤60 min) will run the LLM
+   extractor. You can also force an immediate refresh with:
+   ```bash
+   python -c "from trader.sentiment.factory import refresh_and_store; print(refresh_and_store())"
+   ```
+
+### What the Claude provider does (per refresh)
+
+1. Fetches headlines + snippets from the RSS feeds in
+   `sentiment.rss.feeds` (no full-page scraping).
+2. Deduplicates against `sentiment_llm_items` (default window: 14 days).
+3. Consults the sentiment-only budget table (`sentiment_llm_usage`). If the
+   month or day cap is exhausted, the refresh is **skipped** — no API call.
+4. Otherwise sends up to `max_items_per_run` items to Claude (default: 40)
+   with a strict JSON schema.
+5. Validates output. Items missing the required market entity are dropped;
+   if **all** items are invalid the run is treated as a failure and **no
+   snapshots are overwritten** (prior data is kept).
+6. Aggregates per-item entities into market / sector / ticker snapshots using
+   `weight = confidence * recency_decay(half-life 72h)`.
+
+On any API error the bot does **not** silently fall back to the RSS lexicon.
+It logs the failure to `events_log` (`sentiment_refresh_failed`) and leaves
+the previous snapshots in place.
+
+### Budget cap (€10/month by default)
+
+Costs are estimated from Anthropic-reported token counts when available, else
+from a conservative character-based heuristic. Spend is recorded to
+`sentiment_llm_usage` on every call (success or failure).
+
+Defaults (in `sentiment.claude`):
+
+| Knob | Default | Meaning |
+|------|---------|---------|
+| `monthly_budget_eur` | `10.0` | Hard ceiling for sentiment LLM calls per calendar month |
+| `daily_budget_fraction` | `0.12` | Per-day cap = monthly × fraction |
+| `hard_stop_on_budget` | `true` | If false, the provider only warns and keeps calling |
+| `eur_usd_rate` | `1.08` | Used to convert cost estimates to EUR |
+
+When a cap is hit, the dashboard's `/sentiment` page shows a red **STOPPED**
+badge and `/state` exposes the spend totals. There is no UI reset button —
+usage resets naturally at the month boundary.
+
+> Set a matching **spend limit in the Anthropic Console** (Billing →
+> Usage limits) for a true hard stop. This in-process cap is a best-effort
+> safety net, not a substitute for provider-side enforcement.
+
+### Sentiment-related tables
+
+- `sentiment_snapshots` — final per-scope scores (used by the strategy).
+- `sentiment_llm_items` — dedup ledger (hash id + processed_at).
+- `sentiment_llm_usage` — per-call token + cost audit (USD + EUR estimates).
+
+Apply the new migration with `alembic upgrade head` (or let `init_db.py` do
+it on next startup). Existing `sentiment_snapshots` rows are untouched.
 
 ## Running Tests
 

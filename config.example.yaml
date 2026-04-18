@@ -13,9 +13,9 @@ db:
   path: "app.db"
 
 scheduling:
-  sentiment_refresh_minutes: 30
+  sentiment_refresh_minutes: 60      # legacy — used when sentiment.refresh_minutes is absent
   signal_eval_minutes: 15
-  rebalance_time_local: "09:45"   # HH:MM in local time
+  rebalance_time_local: "09:45"      # HH:MM in local time
 
 universe:
   min_mcap: 1_000_000_000        # $1B
@@ -63,3 +63,51 @@ safety:
 
 features:
   approve_mode_default: true      # start in approve mode for safety
+
+sentiment:
+  provider: "rss_lexicon"         # rss_lexicon | claude_llm
+  refresh_minutes: 60
+
+  rss:
+    feeds:
+      - "https://feeds.reuters.com/reuters/businessNews"
+      - "https://feeds.reuters.com/reuters/marketsNews"
+      - "https://www.cnbc.com/id/100003114/device/rss/rss.html"
+      - "https://www.cnbc.com/id/15839135/device/rss/rss.html"
+      - "https://www.ft.com/rss/home"
+      - "https://www.economist.com/rss/the-world-this-week.xml"
+      - "https://seekingalpha.com/market_currents.xml"
+      - "http://feeds.marketwatch.com/marketwatch/topstories/"
+      - "https://www.federalreserve.gov/feeds/press_all.xml"
+      - "https://finance.yahoo.com/rss/"
+    user_agent: "MarketAI/1.0 (+https://local)"
+    request_timeout_seconds: 20
+    max_items_per_run: 200
+
+  claude:
+    enabled: true
+    model: "claude-3-5-sonnet-latest"
+    api_key_env: "ANTHROPIC_API_KEY"     # NEVER put the key itself in YAML
+    temperature: 0.2
+    request_timeout_seconds: 45
+    max_retries: 3
+    backoff_base_seconds: 2
+    backoff_max_seconds: 30
+
+    # Input/output sizing
+    max_items_per_run: 40
+    max_chars_per_item: 600
+    max_output_tokens: 4000
+
+    # Dedup
+    dedup_cache_days: 14
+
+    # Quality filters
+    min_confidence_to_use: 0.35
+
+    # Budget hard-cap (sentiment-only)
+    monthly_budget_eur: 10.0
+    eur_usd_rate: 1.08
+    hard_stop_on_budget: true
+    daily_budget_fraction: 0.12
+    max_tokens_per_item_estimate: 300

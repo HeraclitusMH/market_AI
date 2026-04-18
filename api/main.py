@@ -92,10 +92,50 @@ def page_signals(request: Request):
 
 @app.get("/sentiment", include_in_schema=False)
 def page_sentiment(request: Request):
+    import json as _json
+    from trader.sentiment import budget as _budget_mod
+    cfg = load_config()
     with get_db() as db:
-        rows = db.query(SentimentSnapshot).order_by(SentimentSnapshot.id.desc()).limit(100).all()
+        rows = db.query(SentimentSnapshot).order_by(SentimentSnapshot.id.desc()).limit(200).all()
+        status = _budget_mod.get_status(
+            db,
+            monthly_budget_eur=cfg.sentiment.claude.monthly_budget_eur,
+            daily_budget_fraction=cfg.sentiment.claude.daily_budget_fraction,
+            eur_usd_rate=cfg.sentiment.claude.eur_usd_rate,
+            hard_stop_on_budget=cfg.sentiment.claude.hard_stop_on_budget,
+        )
+
+    # Latest row per (scope, key) — DB-order is id DESC so first-seen wins.
+    latest: dict = {}
+    for r in rows:
+        latest.setdefault((r.scope, r.key), r)
+    market_rows = [r for (s, _), r in latest.items() if s == "market"]
+    sector_rows = sorted(
+        [r for (s, _), r in latest.items() if s == "sector"],
+        key=lambda r: abs(r.score), reverse=True,
+    )
+    ticker_rows = sorted(
+        [r for (s, _), r in latest.items() if s == "ticker"],
+        key=lambda r: abs(r.score), reverse=True,
+    )[:20]
+
+    # Parse breakdown JSON for display (defensive — legacy rows store plain strings).
+    def _parse(r):
+        try:
+            return _json.loads(r.sources_json)[0] if r.sources_json else None
+        except Exception:
+            return None
+    breakdowns = {r.id: _parse(r) for r in list(market_rows) + list(sector_rows) + list(ticker_rows)}
+
     return templates.TemplateResponse(request, "sentiment.html", {
-        "sentiments": rows, "page": "sentiment",
+        "sentiments": rows,
+        "market_rows": market_rows,
+        "sector_rows": sector_rows,
+        "ticker_rows": ticker_rows,
+        "breakdowns": breakdowns,
+        "provider": cfg.sentiment.provider,
+        "budget": status.as_dict(),
+        "page": "sentiment",
     })
 
 
