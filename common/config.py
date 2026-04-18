@@ -118,6 +118,47 @@ class AppConfig(BaseModel):
 _cached: Optional[AppConfig] = None
 
 
+def _apply_env_overrides(raw: dict) -> dict:
+    """Overlay env vars on top of the parsed YAML.
+
+    Precedence: env vars > config.yaml > config.example.yaml.
+    Unknown/unset env vars are ignored.
+    """
+    raw = dict(raw)  # shallow copy so we don't mutate the caller's dict
+
+    # MODE (PAPER / LIVE)
+    env_mode = os.environ.get("MODE")
+    if env_mode:
+        raw["mode"] = env_mode
+
+    # DB URL
+    env_db_url = os.environ.get("DATABASE_URL")
+    if env_db_url:
+        db_section = dict(raw.get("db") or {})
+        db_section["url"] = env_db_url
+        raw["db"] = db_section
+
+    # IBKR
+    ib_section = dict(raw.get("ibkr") or {})
+    if os.environ.get("IB_HOST"):
+        ib_section["host"] = os.environ["IB_HOST"]
+    if os.environ.get("IB_PORT"):
+        ib_section["port"] = int(os.environ["IB_PORT"])
+    if os.environ.get("IB_CLIENT_ID"):
+        ib_section["client_id"] = int(os.environ["IB_CLIENT_ID"])
+    if ib_section:
+        raw["ibkr"] = ib_section
+
+    # Features
+    env_approve = os.environ.get("APPROVE_MODE_DEFAULT")
+    if env_approve is not None:
+        feat = dict(raw.get("features") or {})
+        feat["approve_mode_default"] = env_approve.strip().lower() in ("1", "true", "yes", "on")
+        raw["features"] = feat
+
+    return raw
+
+
 def load_config(path: Optional[str] = None, *, reload: bool = False) -> AppConfig:
     global _cached
     if _cached is not None and not reload:
@@ -131,13 +172,14 @@ def load_config(path: Optional[str] = None, *, reload: bool = False) -> AppConfi
             path = _DEFAULT_CFG
         elif Path(_EXAMPLE_CFG).exists():
             path = _EXAMPLE_CFG
-        else:
-            _cached = AppConfig()
-            return _cached
 
-    with open(path, "r") as f:
-        raw = yaml.safe_load(f) or {}
+    if path is not None:
+        with open(path, "r") as f:
+            raw = yaml.safe_load(f) or {}
+    else:
+        raw = {}
 
+    raw = _apply_env_overrides(raw)
     _cached = AppConfig(**raw)
     return _cached
 

@@ -11,7 +11,7 @@ Automated swing trading bot for Interactive Brokers (IBKR) targeting US stocks/E
 Four top-level packages (`common/`, `trader/`, `api/`, `ui/`) — flat layout, no `src/` directory. Installed as editable package via `pyproject.toml`.
 
 - **`common/`** — shared config, DB engine, ORM models, Pydantic schemas, logging, time utils
-- **`trader/`** — trading engine: IBKR client, market data, indicators, sentiment, strategy, risk, execution, scheduler
+- **`trader/`** — trading engine: IBKR client, market data, indicators, sentiment, strategy, risk, execution, scheduler, Greeks (greeks/strike_selector/greeks_gate/greeks_logger)
 - **`api/`** — FastAPI app with API routes + server-rendered UI pages
 - **`ui/`** — Jinja2 templates + static CSS/JS
 - **`scripts/`** — `init_db.py` (DB setup), `run_all.py` (starts API + trader as subprocesses)
@@ -42,7 +42,11 @@ Four top-level packages (`common/`, `trader/`, `api/`, `ui/`) — flat layout, n
 - **Technical indicators** → `trader/indicators.py` (EMA, SMA, RSI, MACD, ATR + `compute_indicators()`)
 - **Strategy & scoring** → `trader/strategy.py` (`check_regime()` for SPY-based regime, `score_symbol()` per ticker, `generate_signals()` main entry)
 - **Risk engine** → `trader/risk.py` (`check_can_trade()`, `compute_max_risk_for_trade()`, `record_equity_snapshot()`)
-- **Order construction** → `trader/execution.py` (debit spread spec building, IBKR BAG combo orders, `execute_signal()` main entry)
+- **Order construction** → `trader/execution.py` (debit spread spec building, IBKR BAG combo orders, `execute_signal()` main entry — runs GreeksService → StrikeSelector → GreeksGate)
+- **Greeks fetching & IV Rank** → `trader/greeks.py` (`GreeksSnapshot`, `OptionChainGreeks`, `GreeksService`)
+- **Delta-based strike selection** → `trader/strike_selector.py` (`StrikeSelector`, `StrikeSelectionCriteria`, `SpreadSelection`, IV-adjusted criteria, `calculate_limit_price()`)
+- **Greeks trade gate** → `trader/greeks_gate.py` (`GreeksGate`, `GateResult` — 10 checks incl. IV rank, delta range, theta/delta ratio, vega, gamma-near-expiry, liquidity, pricing, buffer)
+- **Greeks logging** → `trader/greeks_logger.py` (structured JSON for chain fetches, strike selections, gate results, entry snapshots)
 - **Scheduler loop** → `trader/scheduler.py` (heartbeat 10s, sentiment refresh, signal eval, daily rebalance, IBKR sync)
 - **Trader entry point** → `trader/main.py`
 - **FastAPI app + UI routes** → `api/main.py` (both API routers and all 8 UI page handlers)
@@ -73,9 +77,12 @@ python trader/main.py            # Trader only (no API)
 - Risk engine with drawdown stop, position limits, cash reservation, kill switch, approve mode — tested
 - Sentiment system (RSS + mock providers) with DB persistence
 - Strategy scoring with SPY regime filter and weighted multi-factor model
-- Debit spread order construction (bull call / bear put) with IBKR BAG combos
+- Debit spread order construction (bull call / bear put) with IBKR BAG combos, delta-based strike selection, real bid/ask midpoint pricing
+- Live Greeks fetching via IBKR `modelGreeks` with `lastGreeks`/`bidGreeks-askGreeks` fallbacks, IBKR -1.0 sentinel sanitation, 30s cache TTL
+- IV Rank computed from `OPTION_IMPLIED_VOLATILITY` historical bars (252-day lookback) with IV-adjusted delta targets across 4 regimes (low/moderate/elevated/extreme)
+- 10-check Greeks gate (IV rank, delta range, theta, theta/delta ratio, vega, gamma-near-expiry, liquidity, pricing ROC, buffer, composite risk score)
 - Scheduler with configurable intervals
-- 18 pytest tests all passing
+- 44 pytest tests all passing (18 existing + 26 Greeks)
 
 ### Not Yet Tested End-to-End
 - Live IBKR connection (requires TWS/Gateway running)
@@ -84,11 +91,11 @@ python trader/main.py            # Trader only (no API)
 - The `close_all` control currently just activates the kill switch; actual position closing via IBKR not yet wired
 
 ### Known Limitations
-- Strike selection in `execution.py` uses index-based heuristic (picks around ATM) rather than delta-based selection — no Greeks available without live option data
-- Estimated debit is `spread_width * 0.4` (placeholder); real pricing requires live option market data
 - Universe is static (embedded 40 tickers); no dynamic screener integration yet
 - No EUR/USD FX conversion — all risk calculations in USD
+- IV Rank requires the IBKR historical-volatility market data entitlement; falls back to "unknown" regime when unavailable (gate warns, does not block)
 
 ## Session Log
 
 - [2026-04-18] Initial build: complete v1 of automated trading bot. Created all 4 packages (common, trader, api, ui), 10 DB tables, IBKR client, indicators, sentiment (RSS + mock), swing strategy with regime filter, risk engine, debit spread execution, scheduler, FastAPI with 14 API endpoints, 8-page dashboard with dark theme and Chart.js charts, run_all script, README, and 18 passing tests. Fixed Starlette 1.0 TemplateResponse API and setuptools flat-layout discovery.
+- [2026-04-18] Greeks layer: added `trader/greeks.py` (fetching + IV Rank), `trader/strike_selector.py` (delta-based selection + IV-adjusted criteria + real-price `calculate_limit_price`), `trader/greeks_gate.py` (10-check gate), `trader/greeks_logger.py` (structured logs). Removed index-based strike heuristic and `spread_width * 0.4` placeholder from `execution.py`; now drives strike selection, pricing, and approval through live IBKR `modelGreeks`. All thresholds configurable via `GREEKS_*` env vars. 26 new tests (44 total, all passing).

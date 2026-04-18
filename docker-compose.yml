@@ -11,18 +11,99 @@ services:
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-market_ai}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
 
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: market-ai:latest
+    restart: unless-stopped
+    command: ["/usr/local/bin/entrypoint-api.sh"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://market_ai:market_ai_pass@postgres:5432/market_ai}
+      MODE: ${MODE:-PAPER}
+      APPROVE_MODE_DEFAULT: ${APPROVE_MODE_DEFAULT:-true}
+      # API doesn't connect to IB, but shares the image with trader so keep vars consistent.
+      IB_HOST: ${IB_HOST:-host.docker.internal}
+      IB_PORT: ${IB_PORT:-7497}
+      IB_CLIENT_ID: ${IB_CLIENT_ID:-1}
+    ports:
+      - "8000:8000"
+    # Bind-mount repo for fast Windows dev iteration. Comment out for a pure-image run.
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+  trader:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: market-ai:latest
+    restart: unless-stopped
+    command: ["/usr/local/bin/entrypoint-trader.sh"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://market_ai:market_ai_pass@postgres:5432/market_ai}
+      MODE: ${MODE:-PAPER}
+      # IB Gateway runs on the Windows host, outside Docker.
+      IB_HOST: ${IB_HOST:-host.docker.internal}
+      IB_PORT: ${IB_PORT:-7497}
+      IB_CLIENT_ID: ${IB_CLIENT_ID:-2}
+    extra_hosts:
+      # Ensure host.docker.internal resolves on Linux-based Docker engines too.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # Healthy when the scheduler has updated bot_state.last_heartbeat within
+      # the last ~2 minutes. The scheduler ticks every 10s, so two minutes of
+      # silence = trouble.
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - |
+          import os, sys
+          from datetime import datetime, timedelta, timezone
+          from sqlalchemy import create_engine, text
+          eng = create_engine(os.environ["DATABASE_URL"], pool_pre_ping=True)
+          with eng.connect() as c:
+              row = c.execute(text("SELECT last_heartbeat FROM bot_state WHERE id=1")).first()
+          if not row or row[0] is None:
+              sys.exit(1)
+          hb = row[0]
+          if hb.tzinfo is None:
+              hb = hb.replace(tzinfo=timezone.utc)
+          sys.exit(0 if (datetime.now(timezone.utc) - hb) < timedelta(minutes=2) else 1)
+      interval: 30s
+      timeout: 10s
+      retries: 4
+      start_period: 60s
+
+  # Dev-only DB inspector. Enable with: docker compose --profile debug up -d adminer
   adminer:
     image: adminer:latest
     restart: unless-stopped
+    profiles: ["debug"]
     ports:
       - "8081:8080"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
 volumes:
   pgdata:

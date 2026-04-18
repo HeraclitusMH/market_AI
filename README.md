@@ -13,7 +13,85 @@ Trades US stocks/ETFs via **debit spread** options strategies (defined risk only
 - **Dashboard** — full local web UI with charts, controls, and manual overrides
 - **Sentiment** — RSS-based headline scoring with sector tagging
 
-## Quick Start
+## Quick Start (Docker on Windows)
+
+The fastest path — you only need Docker Desktop and IB Gateway installed on the host.
+
+### 1. Start IB Gateway (paper) on the Windows host
+- Log in with your **paper** credentials.
+- Configure → API → Settings:
+  - Enable ActiveX and Socket Clients
+  - Socket port **7497** (TWS paper) or **4002** (Gateway paper)
+  - Uncheck "Read-Only API"
+  - Trusted IPs: add `127.0.0.1` and leave "Allow connections from localhost only" OFF so the container can reach it.
+- Make sure Windows Defender Firewall allows the TWS/Gateway binary on the private network.
+
+### 2. Configure env
+
+```powershell
+copy .env.example .env
+# optional: edit POSTGRES_PASSWORD, IB_PORT, IB_CLIENT_ID, MODE
+```
+
+All runtime knobs (`DATABASE_URL`, `MODE`, `IB_HOST`, `IB_PORT`, `IB_CLIENT_ID`, `APPROVE_MODE_DEFAULT`) override `config.yaml` when present. You do **not** need a `config.yaml` file in the container — defaults from `config.example.yaml` plus env vars are enough.
+
+### 3. Build & run
+
+```bash
+# First time (or after code changes to deps):
+docker compose up -d postgres
+docker compose up --build -d api trader
+
+# Subsequent runs:
+docker compose up -d
+```
+
+Open **http://localhost:8000**. API container auto-applies Alembic migrations and seeds `bot_state` on first boot.
+
+### 4. Verify
+
+```bash
+# API health
+curl http://localhost:8000/health           # -> {"status":"ok"}
+
+# Trader heartbeat (updated every 10s by the scheduler)
+docker compose exec postgres psql -U market_ai -d market_ai \
+  -c "SELECT last_heartbeat FROM bot_state;"
+
+# Container health states
+docker compose ps
+```
+
+The dashboard overview page (`/`) also shows the heartbeat.
+
+### 5. Optional — Adminer (DB inspector)
+
+```bash
+docker compose --profile debug up -d adminer
+# Browse http://localhost:8081  — system: PostgreSQL, server: postgres, user/db: market_ai
+```
+
+### Troubleshooting
+
+**Trader can't connect to IB Gateway**
+- Confirm IB Gateway / TWS is actually running and logged in on the Windows host.
+- Confirm API is enabled and listening on the port in `.env` (`IB_PORT`).
+- From the trader container, sanity-check the route: `docker compose exec trader python -c "import socket; print(socket.create_connection(('host.docker.internal', 7497), timeout=3))"`.
+- Windows Defender Firewall: allow inbound on the chosen port for the TWS/Gateway binary.
+- The trader will **not** crash-loop if IB is unreachable — it logs the error and stays up in offline mode, polling for reconnect on the next tick.
+
+**DB connection fails**
+- `docker compose ps postgres` — make sure state is `healthy`, not just `running`.
+- `docker compose logs postgres` for init errors.
+- Confirm `DATABASE_URL` in `.env` uses host `postgres` (the service name inside the compose network), not `localhost`.
+- If you changed `POSTGRES_PASSWORD` after the volume was created, either update `DATABASE_URL` to match or `docker compose down -v` to wipe and re-init (destroys data).
+
+**Rebuild after code-only changes**
+- With the bind mount `.:/app` in `docker-compose.yml`, Python reloads on file save in the API (uvicorn is run without `--reload` by default; restart the container or add `--reload` to the command if you want hot reload). For dependency changes, `docker compose build api` first.
+
+---
+
+## Bare-metal setup (no Docker)
 
 ### 1. Prerequisites
 

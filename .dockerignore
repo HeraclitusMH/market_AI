@@ -1,0 +1,65 @@
+# VCS
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.egg-info
+.eggs
+dist
+build
+
+# Virtualenvs
+.venv
+venv
+env
+ENV
+
+# Local DB / data
+*.db
+*.sqlite
+*.sqlite3
+pgdata
+
+# Secrets / local config
+.env
+.env.*
+config.yaml
+secrets.yaml
+credentials.json
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Logs / crash dumps
+*.log
+logs
+*.stackdump
+
+# Tests & coverage
+.pytest_cache
+.coverage
+htmlcov
+coverage.xml
+tests
+
+# Tooling / IDE
+.vscode
+.idea
+.claude
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Docs / scratch
+*.md
+!README.md
