@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Market AI - {% block title %}Dashboard{% endblock %}</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <nav class="sidebar">
+    <div class="logo">Market AI</div>
+    <a href="/" class="{% if page == 'overview' %}active{% endif %}">Overview</a>
+    <a href="/positions" class="{% if page == 'positions' %}active{% endif %}">Positions</a>
+    <a href="/orders" class="{% if page == 'orders' %}active{% endif %}">Orders</a>
+    <a href="/signals" class="{% if page == 'signals' %}active{% endif %}">Signals</a>
+    <a href="/sentiment" class="{% if page == 'sentiment' %}active{% endif %}">Sentiment</a>
+    <a href="/risk" class="{% if page == 'risk' %}active{% endif %}">Risk</a>
+    <a href="/controls" class="{% if page == 'controls' %}active{% endif %}">Controls</a>
+    <a href="/config" class="{% if page == 'config' %}active{% endif %}">Config</a>
+  </nav>
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+  <script src="/static/app.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

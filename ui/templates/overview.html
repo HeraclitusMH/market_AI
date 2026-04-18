@@ -1,0 +1,80 @@
+{% extends "layout.html" %}
+{% block title %}Overview{% endblock %}
+{% block content %}
+<h1>Overview</h1>
+
+<div class="cards">
+  <div class="card">
+    <h3>Bot Status</h3>
+    {% if bot %}
+    <p>Paused: <span class="badge {{ 'badge-red' if bot.paused else 'badge-green' }}">{{ bot.paused }}</span></p>
+    <p>Kill Switch: <span class="badge {{ 'badge-red' if bot.kill_switch else 'badge-green' }}">{{ bot.kill_switch }}</span></p>
+    <p>Options: <span class="badge {{ 'badge-green' if bot.options_enabled else 'badge-gray' }}">{{ bot.options_enabled }}</span></p>
+    <p>Approve Mode: <span class="badge {{ 'badge-yellow' if bot.approve_mode else 'badge-green' }}">{{ bot.approve_mode }}</span></p>
+    <p>Heartbeat: {{ bot.last_heartbeat or "N/A" }}</p>
+    {% else %}
+    <p>No bot state yet.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h3>Equity</h3>
+    {% if equity %}
+    <p>Net Liquidation: <strong>${{ "%.2f"|format(equity.net_liquidation) }}</strong></p>
+    <p>Cash: ${{ "%.2f"|format(equity.cash) }}</p>
+    <p>Unrealized P&L: ${{ "%.2f"|format(equity.unrealized_pnl) }}</p>
+    <p>Realized P&L: ${{ "%.2f"|format(equity.realized_pnl) }}</p>
+    <p>Drawdown: {{ "%.1f"|format(equity.drawdown_pct) }}%</p>
+    {% else %}
+    <p>No equity data yet.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h3>Positions</h3>
+    <p>Open: <strong>{{ positions|length }}</strong></p>
+    {% for p in positions[:5] %}
+    <p>{{ p.symbol }}: {{ p.quantity }} @ ${{ "%.2f"|format(p.market_price) }}
+      <span class="{{ 'text-green' if p.unrealized_pnl >= 0 else 'text-red' }}">
+        (${{ "%.2f"|format(p.unrealized_pnl) }})
+      </span>
+    </p>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="chart-container">
+  <h3>Equity Curve</h3>
+  <canvas id="equityChart"></canvas>
+</div>
+
+<div class="section">
+  <h3>Recent Events</h3>
+  <table>
+    <thead><tr><th>Time</th><th>Level</th><th>Type</th><th>Message</th></tr></thead>
+    <tbody>
+    {% for e in events %}
+    <tr>
+      <td>{{ e.timestamp }}</td>
+      <td><span class="badge badge-{{ 'red' if e.level == 'ERROR' else 'yellow' if e.level == 'WARNING' else 'gray' }}">{{ e.level }}</span></td>
+      <td>{{ e.type }}</td>
+      <td>{{ e.message[:120] }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const data = {{ equities|map(attribute='net_liquidation')|list|tojson }};
+  const labels = {{ equities|map(attribute='timestamp')|list|tojson }};
+  const dd = {{ equities|map(attribute='drawdown_pct')|list|tojson }};
+  if (data.length > 0) {
+    buildEquityChart('equityChart', labels, data, dd);
+  }
+})();
+</script>
+{% endblock %}

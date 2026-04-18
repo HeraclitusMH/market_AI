@@ -1,0 +1,65 @@
+mode: PAPER  # PAPER or LIVE
+
+ibkr:
+  host: "127.0.0.1"
+  port: 7497          # 7497 = TWS paper, 4002 = Gateway paper
+  client_id: 1
+  account: ""         # leave blank to auto-detect
+
+db:
+  # Postgres (recommended): set DATABASE_URL env var or uncomment url below.
+  # url: "postgresql+psycopg://market_ai:market_ai_pass@localhost:5432/market_ai"
+  # SQLite fallback (dev/test only):
+  path: "app.db"
+
+scheduling:
+  sentiment_refresh_minutes: 30
+  signal_eval_minutes: 15
+  rebalance_time_local: "09:45"   # HH:MM in local time
+
+universe:
+  min_mcap: 1_000_000_000        # $1B
+  min_dollar_volume: 10_000_000  # $10M avg daily
+  min_price: 5.0
+  exclude_leveraged_etfs: true
+  max_spread_pct: 0.5
+
+strategy:
+  weights:
+    trend: 0.35
+    momentum: 0.25
+    volatility: 0.15
+    sentiment: 0.25
+  regime:
+    vol_threshold: 25.0           # annualised vol %
+  timeframes:
+    - "1D"
+    - "1H"
+  max_holding_days: 20
+
+options:
+  enabled: true
+  dte_min: 7
+  dte_max: 21
+  min_open_interest: 100
+  max_option_spread_pct: 10.0
+  max_spread_width: 5            # max strike distance in $
+
+risk:
+  max_drawdown_pct: 50
+  max_risk_per_trade_pct: 5
+  max_positions: 5
+  require_positive_cash: true
+
+execution:
+  order_type: "LIMIT"
+  tif: "DAY"
+  fill_timeout_seconds: 120
+  requote_attempts: 2
+
+safety:
+  data_stale_minutes: 15
+  trade_when_stale: false
+
+features:
+  approve_mode_default: true      # start in approve mode for safety

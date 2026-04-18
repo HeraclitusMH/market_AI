@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual envs
+.venv/
+venv/
+env/
+ENV/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Credentials & secrets
+.env
+.env.local
+.env.*.local
+config.yaml
+secrets.yaml
+credentials.json
+*.key
+*.pem
+*.p12
+*.pfx
+
+# IBKR / broker credentials
+ibkr_credentials*
+tws_credentials*
+
+# API keys
+*.secret
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Crash dumps
+*.stackdump
+
+# Claude local settings (personal, not project-wide)
+.claude/settings.local.json

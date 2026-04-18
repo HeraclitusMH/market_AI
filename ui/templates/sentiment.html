@@ -1,0 +1,40 @@
+{% extends "layout.html" %}
+{% block title %}Sentiment{% endblock %}
+{% block content %}
+<h1>Sentiment</h1>
+
+<div class="chart-container">
+  <canvas id="sentimentChart"></canvas>
+</div>
+
+<table>
+  <thead>
+    <tr><th>Time</th><th>Scope</th><th>Key</th><th>Score</th><th>Summary</th></tr>
+  </thead>
+  <tbody>
+  {% for s in sentiments %}
+    <tr>
+      <td>{{ s.timestamp }}</td>
+      <td>{{ s.scope }}</td>
+      <td>{{ s.key }}</td>
+      <td><span class="badge badge-{{ 'green' if s.score > 0.2 else 'red' if s.score < -0.2 else 'gray' }}">{{ "%.2f"|format(s.score) }}</span></td>
+      <td>{{ s.summary[:100] }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5">No sentiment data yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const market = {{ sentiments|selectattr("scope","equalto","market")|map(attribute="score")|list|tojson }};
+  const labels = {{ sentiments|selectattr("scope","equalto","market")|map(attribute="timestamp")|list|tojson }};
+  if (market.length > 0) {
+    buildSentimentChart('sentimentChart', labels.reverse(), market.reverse());
+  }
+})();
+</script>
+{% endblock %}
