@@ -140,6 +140,29 @@ class SentimentClaudeConfig(BaseModel):
     max_tokens_per_item_estimate: int = 300
 
 
+class RankingConfig(BaseModel):
+    # Sentiment weights per component
+    w_market: float = 0.20
+    w_sector: float = 0.30
+    w_ticker: float = 0.50
+    # Selection thresholds
+    enter_threshold: float = 0.25
+    max_candidates_total: int = 3
+    fallback_trade_broad_etf: bool = False
+    # Cadence controls
+    cooldown_hours: int = 6
+    max_trades_per_day: int = 3
+    # Liquidity (used when live data unavailable; primary filter is Universe.active)
+    min_dollar_volume: float = 20_000_000
+    # IBKR contract verification cache TTL
+    contract_cache_hours: int = 24
+    # Options DTE for new planner (separate from legacy options.dte_min/max)
+    dte_min: int = 21
+    dte_max: int = 45
+    dte_target: int = 30
+    dte_fallback_min: int = 14
+
+
 class SentimentConfig(BaseModel):
     provider: str = "rss_lexicon"  # rss_lexicon | claude_llm
     refresh_minutes: int = 60
@@ -170,6 +193,8 @@ class AppConfig(BaseModel):
     safety: SafetyConfig = SafetyConfig()
     features: FeaturesConfig = FeaturesConfig()
     sentiment: SentimentConfig = SentimentConfig()
+    ranking: RankingConfig = RankingConfig()
+    dry_run: bool = False
 
     @field_validator("mode")
     @classmethod

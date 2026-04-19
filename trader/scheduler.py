@@ -15,6 +15,14 @@ from common.time import utcnow
 log = get_logger(__name__)
 
 
+def _pricing_field(plan, key: str, default: float = 0.0) -> float:
+    import json
+    try:
+        return json.loads(plan.pricing_json or "{}").get(key, default)
+    except Exception:
+        return default
+
+
 class Scheduler:
     """Simple time-based scheduler for the trading loop."""
 
@@ -25,6 +33,7 @@ class Scheduler:
 
         self._last_sentiment = datetime.min
         self._last_signal = datetime.min
+        self._last_ranking = datetime.min
         self._last_rebalance: Optional[str] = None  # date string
         self._last_sync = datetime.min
 
@@ -61,12 +70,21 @@ class Scheduler:
     def _should_sync(self) -> bool:
         return (datetime.now() - self._last_sync).total_seconds() > 30
 
+    def _should_rank(self) -> bool:
+        # Run ranking after each sentiment refresh (same interval)
+        interval = getattr(self.cfg.sentiment, "refresh_minutes", None) \
+            or self.cfg.scheduling.sentiment_refresh_minutes
+        return (datetime.now() - self._last_ranking).total_seconds() > interval * 60
+
     def run_once(self) -> None:
         """Single iteration of the scheduler loop."""
         from trader.sync import full_sync
         from trader.sentiment.factory import refresh_and_store
         from trader.strategy import generate_signals
         from trader.execution import execute_signal
+        from trader.universe import get_verified_universe
+        from trader.ranking import rank_symbols, select_candidates
+        from trader.options_planner import plan_trade
 
         self._heartbeat()
 
@@ -91,7 +109,45 @@ class Scheduler:
             except Exception as e:
                 log.error("Sentiment refresh failed: %s", e)
 
-        # Evaluate signals
+        # Ranking + trade planning (runs after sentiment refresh)
+        if self._should_rank():
+            try:
+                universe = get_verified_universe(self.client)
+                ranked = rank_symbols(universe)
+                candidates = select_candidates(ranked)
+                self._last_ranking = datetime.now()
+                log.info("Ranking done: %d ranked, %d candidates.", len(ranked), len(candidates))
+
+                # Generate trade plans for each candidate
+                dry_run = self.cfg.dry_run
+                approve_mode = self._is_approve_mode()
+
+                for candidate in candidates:
+                    try:
+                        plan = plan_trade(candidate, self.client)
+                        if plan is None or plan.status == "skipped":
+                            continue
+
+                        if dry_run:
+                            log.info(
+                                "Dry-run: would trade %s (%s) max_loss=$%.0f",
+                                plan.symbol, plan.strategy,
+                                _pricing_field(plan, "max_loss_total"),
+                            )
+                        elif not approve_mode:
+                            # Build a SignalIntent from plan and execute
+                            self._execute_plan(plan, execute_signal)
+                        else:
+                            log.info(
+                                "Approve mode: %s plan saved (status=%s)",
+                                plan.symbol, plan.status,
+                            )
+                    except Exception as e:
+                        log.error("Planning failed for %s: %s", candidate.symbol, e)
+            except Exception as e:
+                log.error("Ranking/planning failed: %s", e)
+
+        # Evaluate legacy signals
         if self._should_eval_signals():
             try:
                 signals = generate_signals(self.client)
@@ -113,6 +169,38 @@ class Scheduler:
                 self._last_rebalance = datetime.now().strftime("%Y-%m-%d")
             except Exception as e:
                 log.error("Rebalance failed: %s", e)
+
+    def _is_approve_mode(self) -> bool:
+        with get_db() as db:
+            from common.models import BotState
+            state = db.query(BotState).first()
+            return state.approve_mode if state else True
+
+    def _execute_plan(self, plan, execute_signal_fn) -> None:
+        """Convert an approved TradePlan into a SignalIntent and execute."""
+        from trader.strategy import SignalIntent
+        import json
+        try:
+            pricing = json.loads(plan.pricing_json or "{}")
+            rationale = json.loads(plan.rationale_json or "{}")
+            intent = SignalIntent(
+                symbol=plan.symbol,
+                direction="long" if plan.bias == "bullish" else "bearish",
+                instrument=plan.strategy,
+                score=rationale.get("score_total", 0.0),
+                max_risk_usd=pricing.get("max_loss_total", 0.0),
+                explanation=f"From trade plan id={plan.id}",
+                components=rationale.get("components", {}),
+                regime="risk_on" if plan.bias == "bullish" else "risk_off",
+            )
+            result = execute_signal_fn(intent, self.client)
+            if result:
+                with get_db() as db:
+                    p = db.query(type(plan)).filter(type(plan).id == plan.id).first()
+                    if p:
+                        p.status = "submitted"
+        except Exception as e:
+            log.error("Failed to execute plan %s for %s: %s", plan.id, plan.symbol, e)
 
     def run(self) -> None:
         """Main loop — runs until stopped."""

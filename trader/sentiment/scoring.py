@@ -7,7 +7,9 @@ config.
 """
 from __future__ import annotations
 
-from typing import List
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import List, Optional
 
 from common.db import get_db
 from common.logging import get_logger
@@ -19,6 +21,14 @@ from trader.sentiment.factory import (
 )
 
 log = get_logger(__name__)
+
+
+@dataclass
+class RecentTickerScore:
+    symbol: str
+    last_seen_at: datetime
+    latest_score: float
+    mentions_count: int
 
 
 def get_provider(use_mock: bool = False) -> SentimentProvider:
@@ -62,3 +72,64 @@ def get_latest_sector_score(sector: str) -> float:
             .first()
         )
     return row.score if row else 0.0
+
+
+def get_latest_ticker_score(symbol: str) -> Optional[SentimentSnapshot]:
+    """Return the most recent ticker sentiment snapshot for a symbol, or None."""
+    with get_db() as db:
+        row = (
+            db.query(SentimentSnapshot)
+            .filter(
+                SentimentSnapshot.scope == "ticker",
+                SentimentSnapshot.key == symbol.upper(),
+            )
+            .order_by(SentimentSnapshot.id.desc())
+            .first()
+        )
+    return row
+
+
+def get_recent_ticker_scores(hours: int = 72, limit: int = 200) -> List[RecentTickerScore]:
+    """Return distinct tickers mentioned in sentiment within the last `hours` hours.
+
+    Used to inject RSS-discovered symbols into the tradeable universe.
+    """
+    from datetime import timedelta
+    from sqlalchemy import func
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+
+    with get_db() as db:
+        # For each distinct ticker key: latest row id, count of rows in window
+        subq = (
+            db.query(
+                SentimentSnapshot.key,
+                func.max(SentimentSnapshot.id).label("max_id"),
+                func.count(SentimentSnapshot.id).label("cnt"),
+            )
+            .filter(
+                SentimentSnapshot.scope == "ticker",
+                SentimentSnapshot.timestamp >= cutoff.replace(tzinfo=None),
+            )
+            .group_by(SentimentSnapshot.key)
+            .order_by(func.max(SentimentSnapshot.id).desc())
+            .limit(limit)
+            .all()
+        )
+
+        results: List[RecentTickerScore] = []
+        for key, max_id, cnt in subq:
+            snap = db.query(SentimentSnapshot).filter(SentimentSnapshot.id == max_id).first()
+            if snap is None:
+                continue
+            ts = snap.timestamp
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            results.append(RecentTickerScore(
+                symbol=key,
+                last_seen_at=ts,
+                latest_score=snap.score,
+                mentions_count=cnt,
+            ))
+
+    return results

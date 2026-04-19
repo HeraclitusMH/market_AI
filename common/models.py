@@ -56,11 +56,15 @@ class SentimentSnapshot(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     timestamp = Column(DateTime, default=utcnow, nullable=False, index=True)
-    scope = Column(String(20), nullable=False)   # market / sector
-    key = Column(String(50), nullable=False)       # e.g. "market" or "Technology"
+    scope = Column(String(20), nullable=False)   # market / sector / ticker
+    key = Column(String(50), nullable=False)       # e.g. "US", "Technology", "AAPL"
     score = Column(Float, nullable=False)
     summary = Column(Text, default="")
     sources_json = Column(Text, default="[]")
+
+    __table_args__ = (
+        Index("ix_sentiment_snapshots_scope_key_ts", "scope", "key", "timestamp"),
+    )
 
 
 class SignalSnapshot(Base):
@@ -149,6 +153,49 @@ class EventLog(Base):
     type = Column(String(50), default="")
     message = Column(Text, default="")
     payload_json = Column(Text, default="{}")
+
+
+class ContractVerificationCache(Base):
+    """IBKR contract verification cache — prevents repeated lookups and ticker hallucination."""
+    __tablename__ = "contract_verification_cache"
+
+    symbol = Column(String(20), primary_key=True)
+    verified = Column(Boolean, default=False, nullable=False)
+    checked_at = Column(DateTime, default=utcnow, nullable=False, index=True)
+    reason = Column(Text, nullable=True)
+    contract_conid = Column(Integer, nullable=True)
+    primary_exchange = Column(String(20), nullable=True)
+
+
+class SymbolRanking(Base):
+    """Per-cycle sentiment+eligibility ranking for all universe symbols."""
+    __tablename__ = "symbol_rankings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ts = Column(DateTime, default=utcnow, nullable=False, index=True)
+    symbol = Column(String(20), nullable=False, index=True)
+    score_total = Column(Float, nullable=False)
+    components_json = Column(Text, default="{}")  # market/sector/ticker weights + ages
+    eligible = Column(Boolean, default=True)
+    reasons_json = Column(Text, default="[]")
+
+
+class TradePlan(Base):
+    """Options trade plan produced by planner; may or may not become an order."""
+    __tablename__ = "trade_plans"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ts = Column(DateTime, default=utcnow, nullable=False, index=True)
+    symbol = Column(String(20), nullable=False, index=True)
+    bias = Column(String(10), nullable=False)         # bullish / bearish
+    strategy = Column(String(30), nullable=False)     # bull_call_debit_spread / bear_put_debit_spread
+    expiry = Column(String(8), nullable=True)         # YYYYMMDD
+    dte = Column(Integer, nullable=True)
+    legs_json = Column(Text, default="{}")
+    pricing_json = Column(Text, default="{}")
+    rationale_json = Column(Text, default="{}")
+    status = Column(String(20), default="proposed")   # proposed|approved|submitted|skipped
+    skip_reason = Column(Text, nullable=True)
 
 
 class SentimentLlmItem(Base):

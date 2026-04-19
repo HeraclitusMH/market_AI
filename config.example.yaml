@@ -64,6 +64,30 @@ safety:
 features:
   approve_mode_default: true      # start in approve mode for safety
 
+dry_run: false                     # true = generate plans but never submit orders (overrides approve_mode)
+
+ranking:
+  # Sentiment component weights (must sum to 1.0 when all present)
+  w_market: 0.20
+  w_sector: 0.30
+  w_ticker: 0.50
+  # Selection thresholds
+  enter_threshold: 0.25            # |score| >= this to generate a trade plan
+  max_candidates_total: 3          # max 1-3 candidates per cycle
+  fallback_trade_broad_etf: false  # if no symbol crosses threshold, use SPY/QQQ
+  # Cadence controls
+  cooldown_hours: 6                # per-symbol minimum hours between plans
+  max_trades_per_day: 3            # absolute daily cap on submitted trades
+  # Liquidity floor (USD avg daily dollar volume)
+  min_dollar_volume: 20_000_000
+  # IBKR contract verification cache TTL
+  contract_cache_hours: 24
+  # Options DTE for trade planning (separate from legacy options.dte_min/max)
+  dte_min: 21
+  dte_max: 45
+  dte_target: 30                   # aim for this DTE when selecting expiry
+  dte_fallback_min: 14             # fallback if nothing in [dte_min, dte_max]
+
 sentiment:
   provider: "rss_lexicon"         # rss_lexicon | claude_llm
   refresh_minutes: 60

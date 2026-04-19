@@ -9,9 +9,9 @@ from fastapi.templating import Jinja2Templates
 
 from common.config import load_config
 from common.db import create_tables, get_db
-from common.models import BotState, EquitySnapshot, Position, SignalSnapshot, SentimentSnapshot, Order, Fill, EventLog
+from common.models import BotState, EquitySnapshot, Position, SignalSnapshot, SentimentSnapshot, Order, Fill, EventLog, SymbolRanking, TradePlan
 
-from api.routes import health, state, controls, signals, sentiment, trades
+from api.routes import health, state, controls, signals, sentiment, trades, rankings as rankings_route
 
 UI_DIR = Path(__file__).resolve().parent.parent / "ui"
 
@@ -24,6 +24,7 @@ app.include_router(controls.router)
 app.include_router(signals.router)
 app.include_router(sentiment.router)
 app.include_router(trades.router)
+app.include_router(rankings_route.router)
 
 # --- Static files & templates ---
 app.mount("/static", StaticFiles(directory=str(UI_DIR / "static")), name="static")
@@ -165,4 +166,52 @@ def page_config(request: Request):
     cfg = load_config()
     return templates.TemplateResponse(request, "config.html", {
         "cfg": cfg, "page": "config",
+    })
+
+
+@app.get("/rankings", include_in_schema=False)
+def page_rankings(request: Request):
+    import json as _json
+    from sqlalchemy import func
+    with get_db() as db:
+        max_ts = db.query(func.max(SymbolRanking.ts)).scalar()
+        ranking_rows = []
+        if max_ts is not None:
+            ranking_rows = (
+                db.query(SymbolRanking)
+                .filter(SymbolRanking.ts == max_ts)
+                .order_by(SymbolRanking.score_total.desc())
+                .all()
+            )
+        plans = (
+            db.query(TradePlan)
+            .order_by(TradePlan.id.desc())
+            .limit(30)
+            .all()
+        )
+
+    def _parse(s, default=None):
+        try:
+            return _json.loads(s) if s else (default or {})
+        except Exception:
+            return default or {}
+
+    for r in ranking_rows:
+        r._components = _parse(r.components_json)
+        r._reasons = _parse(r.reasons_json, [])
+    for p in plans:
+        p._pricing = _parse(p.pricing_json)
+        p._rationale = _parse(p.rationale_json)
+        p._legs = _parse(p.legs_json)
+
+    bullish = [r for r in ranking_rows if r.eligible and r.score_total > 0]
+    bearish = [r for r in ranking_rows if r.eligible and r.score_total < 0]
+
+    return templates.TemplateResponse(request, "rankings.html", {
+        "ranking_rows": ranking_rows,
+        "bullish": bullish,
+        "bearish": sorted(bearish, key=lambda r: r.score_total),
+        "plans": plans,
+        "last_ts": max_ts,
+        "page": "rankings",
     })
