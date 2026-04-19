@@ -1,7 +1,7 @@
 # Market AI — Automated Swing Trading Bot
 
-Paper-trading-first automated trading system for Interactive Brokers.  
-Runs two independent bots that share sentiment data and scoring, but trade different instruments:
+Automated swing trading system for Interactive Brokers — supports both paper and live trading modes.  
+Runs two independent bots powered by **LLM-driven sentiment analysis** (Claude AI), sharing market intelligence while trading different instruments:
 
 | Bot | Trades | Strategy |
 |-----|--------|----------|
@@ -21,7 +21,7 @@ Both bots can run together or independently. Each has its own position namespace
 - **Approve mode** — signals and trade plans saved to DB but no orders submitted until toggled OFF (default ON)
 - **Risk engine** — drawdown stop, per-bot position limits, cash reservation, kill switch
 - **Greeks gate** — 10-check filter before any options order (IV rank, delta range, theta/delta ratio, vega, gamma-near-expiry, liquidity, pricing ROC, composite score)
-- **Sentiment** — pluggable: RSS lexicon (free) or Claude LLM (per-item sentiment + sector/ticker tagging + strict €10/month budget cap)
+- **LLM-powered sentiment** — Claude AI scores each news item with per-item sentiment, sector/ticker tagging, and a strict €10/month budget cap; RSS lexicon available as a lightweight fallback
 - **Dashboard** — full local web UI with charts, controls, and manual overrides
 - **Unified CLI** — `python cli.py run [options_swing|equity_swing|all]`
 
