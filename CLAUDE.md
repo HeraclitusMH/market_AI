@@ -2,100 +2,146 @@
 
 ## Project Overview
 
-Automated swing trading bot for Interactive Brokers (IBKR) targeting US stocks/ETFs via **debit spread** options strategies only (defined risk). Paper-trading-first. Tech stack: Python 3.12, ib_insync, FastAPI, SQLAlchemy 2.0, SQLite, Jinja2+HTMX+Chart.js dashboard. User's base currency is EUR; IBKR account is a cash account (no margin, no debt).
+Automated swing trading bot for Interactive Brokers (IBKR) targeting US stocks/ETFs. Supports two instrument types: **debit spread options** (`OptionsSwingBot`) and **equity shares** (`EquitySwingBot`), runnable independently or together. Paper-trading-first. Tech stack: Python 3.12, ib_insync, FastAPI, SQLAlchemy 2.0, SQLite/Postgres, Jinja2+HTMX+Chart.js dashboard, Click CLI. User's base currency is EUR; IBKR account is a cash account (no margin, no debt).
 
 ## Architecture & Key Decisions
 
 ### Structure
 
-Four top-level packages (`common/`, `trader/`, `api/`, `ui/`) — flat layout, no `src/` directory. Installed as editable package via `pyproject.toml`.
+Six top-level packages plus data and scripts — flat layout, no `src/` directory. Installed as editable package via `pyproject.toml`.
 
 - **`common/`** — shared config, DB engine, ORM models, Pydantic schemas, logging, time utils
-- **`trader/`** — trading engine: IBKR client, market data, indicators, sentiment, strategy, risk, execution, scheduler, Greeks (greeks/strike_selector/greeks_gate/greeks_logger)
+- **`trader/`** — trading engine: IBKR client, market data, indicators, sentiment, strategy, risk, execution, scheduler, Greeks sub-package
+- **`bots/`** — bot plugin layer: `BaseBot` ABC + `OptionsSwingBot` + `EquitySwingBot`
+- **`execution/`** — order routing: `equity_execution.py` (STK orders) + `options_execution.py` (shim to existing pipeline)
 - **`api/`** — FastAPI app with API routes + server-rendered UI pages
 - **`ui/`** — Jinja2 templates + static CSS/JS
 - **`scripts/`** — `init_db.py` (DB setup), `run_all.py` (starts API + trader as subprocesses)
+- **`data/`** — `sp500.csv` (~180 S&P 500 stocks with symbol/name/sector)
+- **`cli.py`** — unified Click CLI entry point
 
 ### Key Design Decisions
 
-- **Debit spreads only** — bull call spreads (long) and bear put spreads (bearish). No naked shorts, credit spreads, or undefined risk. Max loss = net debit paid.
+- **Debit spreads only (OptionsSwingBot)** — bull call spreads + bear put spreads. No naked shorts. Max loss = net debit paid.
+- **EquitySwingBot long-only (v1)** — buys stock shares; no shorting unless `long_only: false` in config.
+- **ATR-based equity sizing** — `stop = entry - atr_stop_multiplier × ATR(14)`; `shares = floor(nav × risk_per_trade_pct% / stop_distance)`. Capped to available cash and sector concentration limit.
+- **Portfolio isolation via `portfolio_id`** — `Order`, `Position`, `Trade` rows carry `portfolio_id` ("options_swing" or "equity_swing"). Each bot's risk/position checks filter by its own portfolio_id. Migration: `alembic/versions/0004_portfolio_id.py`.
+- **Bot plugin pattern** — `BaseBot` ABC defines `build_candidates / score_candidate / select_trades / execute_intent`. `run()` orchestrates the full cycle (regime → universe → score → select → execute). Both bots share universe, regime check, and `score_symbol()` scoring.
 - **Cash reservation** — before placing any order, cash equal to max loss is reserved; trade blocked if insufficient.
-- **Approve mode defaults ON** — signals are generated and saved to DB but orders are not submitted until user disables approve mode from the dashboard.
-- **Starlette 1.0 TemplateResponse API** — uses `TemplateResponse(request, name, context)` signature (not the old dict-with-request style).
-- **Sentiment** — pluggable provider interface (`SentimentProvider` ABC). RSS provider does lexicon scoring with recency weighting. Mock provider for testing.
-- **No paid APIs** — universe is seeded from an embedded list of 40 liquid US tickers/ETFs, filtered by IBKR historical bar data.
+- **Approve mode defaults ON** — signals saved to DB as `pending_approval`; orders not submitted until disabled.
+- **Starlette 1.0 TemplateResponse API** — uses `TemplateResponse(request, name, context)` signature.
+- **Sentiment** — pluggable `SentimentProvider` ABC. Providers: `rss_lexicon`, `claude_llm`, `mock`. Shared by both bots.
+- **No paid APIs** — core universe seeded from embedded SEED_TICKERS (~50 tickers) + RSS-discovered tickers (verified via IBKR). `data/sp500.csv` exists as reference but is not yet auto-ingested into the universe builder.
 
 ### Patterns & Conventions
 
-- Config loaded from `config.yaml` (falls back to `config.example.yaml`), validated by Pydantic models in `common/config.py`. Cached after first load.
-- DB access via `common/db.get_db()` context manager (yields SQLAlchemy session, auto-commits on success, rollbacks on exception).
+- Config loaded from `config.yaml` → `config.example.yaml` → all-defaults. Pydantic-validated. Cached as `common.config._cached`. Reset with `load_config(reload=True)`.
+- DB access via `common/db.get_db()` context manager (auto-commit on success, rollback on exception). Engine cached globally — tests must reset `common.db._engine = None` via `monkeypatch`.
 - `intent_id` on orders prevents duplicate submissions on restart — format: `{symbol}_{direction}_{date}_{uuid8}`.
-- Event logging to `events_log` table for audit trail of all trade decisions and order submissions.
-- Risk checks in `trader/risk.py` return `(bool, str)` tuples — `(allowed, reason)`.
+- Event logging to `events_log` table for audit trail.
+- Risk checks return `(bool, str)` tuples — `(allowed, reason)`.
+- Greeks modules live in `trader/greeks/` sub-package; all re-exported from `trader/greeks/__init__.py`. Do NOT use the old flat aliases (`trader.greeks_gate`, `trader.greeks_logger`, `trader.strike_selector`) — they no longer exist as files.
 
 ## Where to Find Things
 
-- **Config schema & loader** → `common/config.py` (Pydantic models for all YAML sections)
-- **DB models (10 tables)** → `common/models.py` (BotState, EquitySnapshot, Universe, SentimentSnapshot, SignalSnapshot, Order, Fill, Position, Trade, EventLog)
+### Config & DB
+- **Config schema & loader** → `common/config.py` (all Pydantic models incl. `BotsConfig`, `EquityBotConfig`, `OptionsBotConfig`)
+- **DB models (15 tables)** → `common/models.py` (BotState, EquitySnapshot, Universe, SentimentSnapshot, SignalSnapshot, Order, Fill, Position, Trade, EventLog, ContractVerificationCache, SymbolRanking, TradePlan, SentimentLlmItem, SentimentLlmUsage)
 - **API response schemas** → `common/schema.py`
+
+### Core Trading
 - **IBKR connection** → `trader/ibkr_client.py` (singleton via `get_ibkr_client()`)
 - **Technical indicators** → `trader/indicators.py` (EMA, SMA, RSI, MACD, ATR + `compute_indicators()`)
-- **Strategy & scoring** → `trader/strategy.py` (`check_regime()` for SPY-based regime, `score_symbol()` per ticker, `generate_signals()` main entry)
-- **Risk engine** → `trader/risk.py` (`check_can_trade()`, `compute_max_risk_for_trade()`, `record_equity_snapshot()`)
-- **Order construction** → `trader/execution.py` (debit spread spec building, IBKR BAG combo orders, `execute_signal()` main entry — runs GreeksService → StrikeSelector → GreeksGate)
-- **Greeks fetching & IV Rank** → `trader/greeks.py` (`GreeksSnapshot`, `OptionChainGreeks`, `GreeksService`)
-- **Delta-based strike selection** → `trader/strike_selector.py` (`StrikeSelector`, `StrikeSelectionCriteria`, `SpreadSelection`, IV-adjusted criteria, `calculate_limit_price()`)
-- **Greeks trade gate** → `trader/greeks_gate.py` (`GreeksGate`, `GateResult` — 10 checks incl. IV rank, delta range, theta/delta ratio, vega, gamma-near-expiry, liquidity, pricing, buffer)
-- **Greeks logging** → `trader/greeks_logger.py` (structured JSON for chain fetches, strike selections, gate results, entry snapshots)
-- **Scheduler loop** → `trader/scheduler.py` (heartbeat 10s, sentiment refresh, signal eval, daily rebalance, IBKR sync)
+- **Market data** → `trader/market_data.py` (`fetch_bars()`, `get_latest_bars()`, in-memory cache)
+- **Strategy & scoring** → `trader/strategy.py` (`check_regime()` SPY-based regime, `score_symbol()` per ticker, `generate_signals()` legacy entry)
+- **Risk engine** → `trader/risk.py` (`check_can_trade()`, `compute_max_risk_for_trade()`, `record_equity_snapshot()`, `log_event()`)
+- **Options order construction** → `trader/execution.py` (debit spread spec, IBKR BAG combo orders, `execute_signal()`)
+- **Options trade planner** → `trader/options_planner.py` (`plan_trade()` — pure planning, no submission, writes TradePlan rows)
+- **Universe** → `trader/universe.py` (`seed_universe()`, `get_verified_universe()`, `verify_contract()`, `SEED_TICKERS`)
+- **Symbol ranking** → `trader/ranking.py` (`rank_symbols()`, `select_candidates()`, `RankedSymbol`)
+- **Scheduler** → `trader/scheduler.py` (10s heartbeat, sentiment + ranking + signal eval + rebalance + IBKR sync)
 - **Trader entry point** → `trader/main.py`
-- **FastAPI app + UI routes** → `api/main.py` (both API routers and all 8 UI page handlers)
-- **API route modules** → `api/routes/` (health, state, controls, signals, sentiment, trades)
+
+### Greeks (all in `trader/greeks/` sub-package)
+- **Greeks fetching & IV Rank** → `trader/greeks/service.py` (`GreeksService`, `OptionChainGreeks`, `GreeksSnapshot`)
+- **Delta-based strike selection** → `trader/greeks/strike_selector.py` (`StrikeSelector`, `StrikeSelectionCriteria`, `SpreadSelection`, `calculate_limit_price()`)
+- **Greeks trade gate** → `trader/greeks/gate.py` (`GreeksGate`, `GateResult` — 10 checks)
+- **Greeks logging** → `trader/greeks/logger.py` (`GreeksLogger`)
+- **Re-exports** → `trader/greeks/__init__.py` (import everything from here)
+
+### Bot Layer
+- **Bot plugin interface** → `bots/base_bot.py` (`BaseBot` ABC, `Candidate`, `ScoreBreakdown`, `TradeIntent`, `BotContext`, `BotRunResult`)
+- **Options bot** → `bots/options_swing_bot.py` (wraps `plan_trade()` + `execute_signal()` pipeline)
+- **Equity bot** → `bots/equity_swing_bot.py` (ATR sizing, sector cap, `_size_equity_trade()`, `_count_equity_positions()`)
+- **Equity execution** → `execution/equity_execution.py` (`place_equity_order()`, portfolio_id="equity_swing")
+- **Options execution shim** → `execution/options_execution.py` (`execute_options_intent()` — `TradeIntent` → `SignalIntent`)
+
+### Sentiment
+- **Factory + refresh** → `trader/sentiment/factory.py` (`refresh_and_store()`, serialised by lock)
+- **Scoring getters** → `trader/sentiment/scoring.py` (`get_latest_market_score()`, `get_latest_sector_score()`, `get_latest_ticker_score()`)
+- **Providers** → `trader/sentiment/rss_provider.py`, `claude_provider.py`, `mock_provider.py`
+- **Budget cap** → `trader/sentiment/budget.py` (hard €10/mo cap; failures must NOT fall back to lexicon)
+
+### API & UI
+- **FastAPI app + UI routes** → `api/main.py` (API routers + 8 UI page handlers)
+- **API route modules** → `api/routes/` (health, state, controls, signals, sentiment, trades, rankings)
 - **Dashboard templates** → `ui/templates/` (layout.html + 8 page templates)
 - **Static assets** → `ui/static/app.css` (dark theme), `ui/static/app.js` (Chart.js helpers, `postControl()`)
-- **Tests** → `tests/` (test_indicators, test_risk, test_strategy — 18 tests total)
+
+### Entry Points & Data
+- **Unified CLI** → `cli.py` (Click; commands below)
+- **SP500 reference** → `data/sp500.csv` (~180 stocks, `symbol,name,sector`)
+- **Alembic migrations** → `alembic/versions/` (0001–0004)
+- **Tests** → `tests/` (138 tests, all passing)
 
 ## Commands
 
 ```bash
-pip install -e ".[dev]"          # Install with dev deps
+pip install -e ".[dev]"          # Install with dev deps (includes click)
 python scripts/init_db.py        # Create/seed DB
-python scripts/run_all.py        # Start API (port 8000) + trader worker
-python -m pytest tests/ -v       # Run tests (18 tests)
+alembic upgrade head             # Run all migrations (Postgres / fresh SQLite)
+python scripts/run_all.py        # Start API (port 8000) + trader worker (legacy)
+python -m pytest tests/ -v       # Run tests (138 tests)
 uvicorn api.main:app --reload    # API only (no trader)
-python trader/main.py            # Trader only (no API)
+python trader/main.py            # Trader only (no API, continuous)
+
+# Unified CLI (new)
+python cli.py sentiment refresh [--source rss_lexicon|claude_llm] [--dry-run]
+python cli.py run options_swing --mode paper --dry-run
+python cli.py run equity_swing  --mode paper --approve
+python cli.py run all           --mode live  --once        # single cycle + exit
+python cli.py report last-run   --bot equity_swing [--json-out]
 ```
 
 ## Current State & Known Issues
 
 ### Working
-- Full config system with YAML + Pydantic validation
-- SQLite DB with 10 tables, init script, bot_state seeding
-- FastAPI with 6 API route groups (14 endpoints) — all returning 200
-- 8 dashboard pages with dark theme, Chart.js charts, manual control buttons
-- Indicator calculations (EMA, SMA, RSI, MACD, ATR) — tested and deterministic
-- Risk engine with drawdown stop, position limits, cash reservation, kill switch, approve mode — tested
-- Sentiment system (RSS + mock providers) with DB persistence
-- Strategy scoring with SPY regime filter and weighted multi-factor model
-- Debit spread order construction (bull call / bear put) with IBKR BAG combos, delta-based strike selection, real bid/ask midpoint pricing
-- Live Greeks fetching via IBKR `modelGreeks` with `lastGreeks`/`bidGreeks-askGreeks` fallbacks, IBKR -1.0 sentinel sanitation, 30s cache TTL
-- IV Rank computed from `OPTION_IMPLIED_VOLATILITY` historical bars (252-day lookback) with IV-adjusted delta targets across 4 regimes (low/moderate/elevated/extreme)
-- 10-check Greeks gate (IV rank, delta range, theta, theta/delta ratio, vega, gamma-near-expiry, liquidity, pricing ROC, buffer, composite risk score)
-- Scheduler with configurable intervals
-- 44 pytest tests all passing (18 existing + 26 Greeks)
+- Full config system with YAML + Pydantic validation (`BotsConfig` + per-bot configs)
+- SQLite DB with 15 tables; Postgres-ready via alembic
+- FastAPI with 6 API route groups (14 endpoints) + 8 dashboard pages
+- Indicator calculations (EMA, SMA, RSI, MACD, ATR) — deterministic, tested
+- Risk engine: drawdown stop, position limits, cash reservation, kill switch, approve mode
+- Sentiment: RSS lexicon + Claude LLM + mock providers, DB persistence, recency weighting
+- Strategy: SPY regime filter, weighted 4-factor scoring (`score_symbol()`), signal generation
+- OptionsSwingBot: full debit spread pipeline (Greeks → gate → pricing → approve/submit)
+- EquitySwingBot: ATR-based sizing, sector concentration cap, risk-off cash/defensive modes, portfolio isolation
+- Unified CLI with continuous and single-cycle modes
+- 138 pytest tests all passing
 
 ### Not Yet Tested End-to-End
 - Live IBKR connection (requires TWS/Gateway running)
-- Actual option chain fetching and combo order placement
-- Position sync from IBKR
-- The `close_all` control currently just activates the kill switch; actual position closing via IBKR not yet wired
+- EquitySwingBot live order placement and fill tracking
+- `close_all` control only activates kill switch; actual IBKR position closing not wired
+- `data/sp500.csv` exists but is not yet auto-ingested — universe still seeded from `SEED_TICKERS`
 
 ### Known Limitations
-- Universe is static (embedded 40 tickers); no dynamic screener integration yet
 - No EUR/USD FX conversion — all risk calculations in USD
-- IV Rank requires the IBKR historical-volatility market data entitlement; falls back to "unknown" regime when unavailable (gate warns, does not block)
+- EquitySwingBot long-only in v1 (`long_only: true` in config)
+- IV Rank requires IBKR historical-volatility entitlement; falls back to "unknown" (gate warns, does not block)
+- Position exit logic (trailing stop, max_holding_days) is config-specified but not yet automated — manual via dashboard
 
 ## Session Log
 
 - [2026-04-18] Initial build: complete v1 of automated trading bot. Created all 4 packages (common, trader, api, ui), 10 DB tables, IBKR client, indicators, sentiment (RSS + mock), swing strategy with regime filter, risk engine, debit spread execution, scheduler, FastAPI with 14 API endpoints, 8-page dashboard with dark theme and Chart.js charts, run_all script, README, and 18 passing tests. Fixed Starlette 1.0 TemplateResponse API and setuptools flat-layout discovery.
-- [2026-04-18] Greeks layer: added `trader/greeks.py` (fetching + IV Rank), `trader/strike_selector.py` (delta-based selection + IV-adjusted criteria + real-price `calculate_limit_price`), `trader/greeks_gate.py` (10-check gate), `trader/greeks_logger.py` (structured logs). Removed index-based strike heuristic and `spread_width * 0.4` placeholder from `execution.py`; now drives strike selection, pricing, and approval through live IBKR `modelGreeks`. All thresholds configurable via `GREEKS_*` env vars. 26 new tests (44 total, all passing).
+- [2026-04-18] Greeks layer: added `trader/greeks/` sub-package (service, gate, strike_selector, logger). Removed stale flat-module aliases. Delta-based strike selection, IV-adjusted criteria, real bid/ask pricing, 10-check GreeksGate. 26 new tests (44 total).
+- [2026-04-19] Multi-bot refactor: `bots/` plugin package (`BaseBot`, `OptionsSwingBot`, `EquitySwingBot`); `execution/` package (`equity_execution.py` with ATR sizing + portfolio isolation, `options_execution.py` shim); unified `cli.py` (Click: sentiment refresh, run, report); `data/sp500.csv`; alembic migration 0004 (`portfolio_id` on orders/positions/trades); `BotsConfig`/`EquityBotConfig`/`OptionsBotConfig` in config; fixed broken greeks flat-module imports in `trader/execution.py`. 94 new tests (138 total, all passing).

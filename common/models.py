@@ -89,6 +89,7 @@ class Order(Base):
     symbol = Column(String(20), nullable=False)
     direction = Column(String(10), nullable=False)       # long / bearish
     instrument = Column(String(30), default="stock")     # stock / debit_spread
+    portfolio_id = Column(String(30), default="", nullable=False, index=True)
     quantity = Column(Integer, default=1)
     order_type = Column(String(10), default="LIMIT")
     limit_price = Column(Float, nullable=True)
@@ -123,6 +124,7 @@ class Position(Base):
     market_value = Column(Float, default=0.0)
     unrealized_pnl = Column(Float, default=0.0)
     instrument = Column(String(30), default="stock")
+    portfolio_id = Column(String(30), default="", nullable=False, index=True)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
 
@@ -134,6 +136,7 @@ class Trade(Base):
     symbol = Column(String(20), nullable=False, index=True)
     direction = Column(String(10), nullable=False)
     instrument = Column(String(30), default="stock")
+    portfolio_id = Column(String(30), default="", nullable=False, index=True)
     entry_time = Column(DateTime, nullable=True)
     exit_time = Column(DateTime, nullable=True)
     entry_price = Column(Float, nullable=True)

@@ -163,6 +163,34 @@ class RankingConfig(BaseModel):
     dte_fallback_min: int = 14
 
 
+class OptionsBotConfig(BaseModel):
+    enabled: bool = True
+
+
+class EquityBotConfig(BaseModel):
+    enabled: bool = True
+    long_only: bool = True                   # v1: no shorting
+    long_entry_threshold: float = 0.55       # score >= this → enter long
+    exit_threshold: float = 0.45            # score < this → exit
+    max_positions: int = 5
+    risk_per_trade_pct: float = 1.0          # % of equity to risk per position
+    atr_stop_multiplier: float = 2.0         # stop = entry - k * ATR(14)
+    atr_period: int = 14
+    max_holding_days: int = 20
+    min_avg_daily_volume: float = 1_000_000
+    max_sector_concentration: float = 0.30  # max 30% portfolio in one sector
+    entry_order_type: str = "LIMIT"          # LIMIT or MARKET
+    risk_off_mode: str = "cash"              # "cash" | "defensive"
+    defensive_sectors: List[str] = Field(
+        default_factory=lambda: ["Utilities", "Consumer Staples"]
+    )
+
+
+class BotsConfig(BaseModel):
+    options_swing: OptionsBotConfig = OptionsBotConfig()
+    equity_swing: EquityBotConfig = EquityBotConfig()
+
+
 class SentimentConfig(BaseModel):
     provider: str = "rss_lexicon"  # rss_lexicon | claude_llm
     refresh_minutes: int = 60
@@ -194,6 +222,7 @@ class AppConfig(BaseModel):
     features: FeaturesConfig = FeaturesConfig()
     sentiment: SentimentConfig = SentimentConfig()
     ranking: RankingConfig = RankingConfig()
+    bots: BotsConfig = BotsConfig()
     dry_run: bool = False
 
     @field_validator("mode")

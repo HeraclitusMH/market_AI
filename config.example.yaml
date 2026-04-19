@@ -66,6 +66,28 @@ features:
 
 dry_run: false                     # true = generate plans but never submit orders (overrides approve_mode)
 
+bots:
+  options_swing:
+    enabled: true                  # set false to disable the options bot entirely
+
+  equity_swing:
+    enabled: true                  # set false to disable the equity bot entirely
+    long_only: true                # v1: no shorting
+    long_entry_threshold: 0.55     # swing score >= this to enter a long
+    exit_threshold: 0.45           # score drops below this → exit signal
+    max_positions: 5               # equity_swing portfolio cap (independent of options)
+    risk_per_trade_pct: 1.0        # % of NAV risked per equity position
+    atr_stop_multiplier: 2.0       # stop = entry - atr_stop_multiplier * ATR(14)
+    atr_period: 14
+    max_holding_days: 20
+    min_avg_daily_volume: 1_000_000
+    max_sector_concentration: 0.30 # max 30% of NAV in any single GICS sector
+    entry_order_type: "LIMIT"      # LIMIT or MARKET
+    risk_off_mode: "cash"          # "cash" = no new longs | "defensive" = utilities/staples only
+    defensive_sectors:
+      - "Utilities"
+      - "Consumer Staples"
+
 ranking:
   # Sentiment component weights (must sum to 1.0 when all present)
   w_market: 0.20

@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["common*", "trader*", "api*", "scripts*"]
+include = ["common*", "trader*", "api*", "scripts*", "bots*", "execution*"]
 
 [project]
 name = "market-ai"
@@ -26,6 +26,7 @@ dependencies = [
     "pandas>=2.2",
     "psycopg[binary]>=3.1",
     "alembic>=1.13",
+    "click>=8.1",
 ]
 
 [project.optional-dependencies]

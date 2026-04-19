@@ -1,44 +1,59 @@
 # Market AI — Automated Swing Trading Bot
 
-Paper-trading-first automated trading system for Interactive Brokers.
-Trades US stocks/ETFs via **debit spread** options strategies (defined risk only).
+Paper-trading-first automated trading system for Interactive Brokers.  
+Runs two independent bots that share sentiment data and scoring, but trade different instruments:
+
+| Bot | Trades | Strategy |
+|-----|--------|----------|
+| **OptionsSwingBot** | Debit spread options (bull call / bear put) | Greek-gated, delta-based strike selection |
+| **EquitySwingBot** | Stock shares (long-only v1) | ATR-based stop sizing, sector concentration cap |
+
+Both bots can run together or independently. Each has its own position namespace — they never share portfolio state.
+
+---
 
 ## Features
 
-- **Swing strategy** (2-20 day holds) using technical analysis + market/sector sentiment
-- **Debit spreads only** — bull call spreads & bear put spreads (no naked shorts, no credit spreads)
-- **No-debt guarantee** — cash reserved for max loss before every trade
-- **Risk engine** — drawdown stop, position limits, per-trade risk caps
-- **Approve mode** — signals generated but orders require manual approval (default ON)
+- **Swing strategy** (2–20 day holds) — technical analysis (EMA, SMA, RSI, MACD, ATR) + market/sector/ticker sentiment
+- **Defined risk only** — options bot trades debit spreads exclusively (max loss = net debit paid)
+- **ATR-based equity sizing** — `shares = floor(nav × risk% / (atr × multiplier))`; automatically caps to available cash and sector concentration limit
+- **Portfolio isolation** — `portfolio_id` on all orders/positions/trades; each bot enforces its own limits
+- **Approve mode** — signals and trade plans saved to DB but no orders submitted until toggled OFF (default ON)
+- **Risk engine** — drawdown stop, per-bot position limits, cash reservation, kill switch
+- **Greeks gate** — 10-check filter before any options order (IV rank, delta range, theta/delta ratio, vega, gamma-near-expiry, liquidity, pricing ROC, composite score)
+- **Sentiment** — pluggable: RSS lexicon (free) or Claude LLM (per-item sentiment + sector/ticker tagging + strict €10/month budget cap)
 - **Dashboard** — full local web UI with charts, controls, and manual overrides
-- **Sentiment** — pluggable: RSS lexicon (free) or Claude LLM extractor (per-item sentiment + sector/ticker tagging + strict €10/month budget cap)
+- **Unified CLI** — `python cli.py run [options_swing|equity_swing|all]`
+
+---
 
 ## Quick Start (Docker on Windows)
 
 The fastest path — you only need Docker Desktop and IB Gateway installed on the host.
 
 ### 1. Start IB Gateway (paper) on the Windows host
+
 - Log in with your **paper** credentials.
 - Configure → API → Settings:
   - Enable ActiveX and Socket Clients
   - Socket port **7497** (TWS paper) or **4002** (Gateway paper)
   - Uncheck "Read-Only API"
-  - Trusted IPs: add `127.0.0.1` and leave "Allow connections from localhost only" OFF so the container can reach it.
-- Make sure Windows Defender Firewall allows the TWS/Gateway binary on the private network.
+  - Trusted IPs: add `127.0.0.1`; leave "Allow connections from localhost only" OFF so the container can reach it
+- Allow the TWS/Gateway binary through Windows Defender Firewall (private network).
 
 ### 2. Configure env
 
 ```powershell
 copy .env.example .env
-# optional: edit POSTGRES_PASSWORD, IB_PORT, IB_CLIENT_ID, MODE
+# Optional: edit POSTGRES_PASSWORD, IB_PORT, IB_CLIENT_ID, MODE
 ```
 
-All runtime knobs (`DATABASE_URL`, `MODE`, `IB_HOST`, `IB_PORT`, `IB_CLIENT_ID`, `APPROVE_MODE_DEFAULT`) override `config.yaml` when present. You do **not** need a `config.yaml` file in the container — defaults from `config.example.yaml` plus env vars are enough.
+All runtime knobs (`DATABASE_URL`, `MODE`, `IB_HOST`, `IB_PORT`, `IB_CLIENT_ID`, `APPROVE_MODE_DEFAULT`, `SENTIMENT_PROVIDER`) override `config.yaml` when set. A `config.yaml` file is optional — defaults from `config.example.yaml` plus env vars are sufficient.
 
 ### 3. Build & run
 
 ```bash
-# First time (or after code changes to deps):
+# First time (or after dependency changes):
 docker compose up -d postgres
 docker compose up --build -d api trader
 
@@ -46,57 +61,46 @@ docker compose up --build -d api trader
 docker compose up -d
 ```
 
-Open **http://localhost:8000**. API container auto-applies Alembic migrations and seeds `bot_state` on first boot.
+Open **http://localhost:8000**. The API container auto-applies Alembic migrations and seeds `bot_state` on first boot.
 
 ### 4. Verify
 
 ```bash
-# API health
-curl http://localhost:8000/health           # -> {"status":"ok"}
+curl http://localhost:8000/health          # -> {"status":"ok"}
 
-# Trader heartbeat (updated every 10s by the scheduler)
 docker compose exec postgres psql -U market_ai -d market_ai \
   -c "SELECT last_heartbeat FROM bot_state;"
 
-# Container health states
 docker compose ps
 ```
-
-The dashboard overview page (`/`) also shows the heartbeat.
 
 ### 5. Optional — Adminer (DB inspector)
 
 ```bash
 docker compose --profile debug up -d adminer
-# Browse http://localhost:8081  — system: PostgreSQL, server: postgres, user/db: market_ai
+# http://localhost:8081 — system: PostgreSQL, server: postgres, user/db: market_ai
 ```
 
 ### Troubleshooting
 
 **Trader can't connect to IB Gateway**
-- Confirm IB Gateway / TWS is actually running and logged in on the Windows host.
-- Confirm API is enabled and listening on the port in `.env` (`IB_PORT`).
-- From the trader container, sanity-check the route: `docker compose exec trader python -c "import socket; print(socket.create_connection(('host.docker.internal', 7497), timeout=3))"`.
-- Windows Defender Firewall: allow inbound on the chosen port for the TWS/Gateway binary.
-- The trader will **not** crash-loop if IB is unreachable — it logs the error and stays up in offline mode, polling for reconnect on the next tick.
+- Confirm IB Gateway is running and logged in.
+- From the container: `docker compose exec trader python -c "import socket; print(socket.create_connection(('host.docker.internal', 7497), timeout=3))"`.
+- The trader does **not** crash if IB is unreachable — it runs in offline mode (sentiment + ranking still run; order submission is skipped).
 
 **DB connection fails**
-- `docker compose ps postgres` — make sure state is `healthy`, not just `running`.
-- `docker compose logs postgres` for init errors.
-- Confirm `DATABASE_URL` in `.env` uses host `postgres` (the service name inside the compose network), not `localhost`.
-- If you changed `POSTGRES_PASSWORD` after the volume was created, either update `DATABASE_URL` to match or `docker compose down -v` to wipe and re-init (destroys data).
-
-**Rebuild after code-only changes**
-- With the bind mount `.:/app` in `docker-compose.yml`, Python reloads on file save in the API (uvicorn is run without `--reload` by default; restart the container or add `--reload` to the command if you want hot reload). For dependency changes, `docker compose build api` first.
+- `docker compose ps postgres` — state must be `healthy`.
+- Confirm `DATABASE_URL` uses host `postgres` (the compose service name), not `localhost`.
+- If you changed `POSTGRES_PASSWORD` after the volume was created: `docker compose down -v` (destroys data) then re-up.
 
 ---
 
-## Bare-metal setup (no Docker)
+## Bare-metal Setup (no Docker)
 
 ### 1. Prerequisites
 
 - Python 3.11+
-- Docker (for PostgreSQL) **or** a running PostgreSQL 16 instance
+- PostgreSQL 16+ **or** SQLite (dev/test only)
 - Interactive Brokers TWS or IB Gateway running
 
 ### 2. Install
@@ -105,112 +109,220 @@ docker compose --profile debug up -d adminer
 pip install -e ".[dev]"
 ```
 
-### 3. Start PostgreSQL
-
-```bash
-# Copy env template and (optionally) customise credentials
-cp .env.example .env
-
-# Start Postgres (and Adminer on :8081)
-docker compose up -d postgres
-
-# Verify it is healthy
-docker compose ps
-```
-
-### 4. Configure
+### 3. Configure
 
 ```bash
 cp config.example.yaml config.yaml
-# Edit config.yaml with your IBKR settings.
-# Set DATABASE_URL in .env — the app reads it at startup.
+# Edit IBKR host/port, DB path/URL, enable/disable bots
+cp .env.example .env
+# Set DATABASE_URL (or leave blank for SQLite fallback)
 ```
 
-The DB URL is resolved in this order (first wins):
-
+DB URL resolution order (first wins):
 1. `DATABASE_URL` environment variable
 2. `db.url` in `config.yaml`
-3. SQLite fallback via `db.path` in `config.yaml` (dev/test only)
-
-### 5. Apply schema migrations
-
-```bash
-# With DATABASE_URL exported (or .env loaded):
-export $(grep -v '^#' .env | xargs)   # Linux/macOS
-alembic upgrade head
-```
-
-Or let `init_db.py` do it for you (see next step).
+3. SQLite via `db.path` in `config.yaml` (dev/test only, default `app.db`)
 
 ### 4. IBKR Paper Trading Setup
 
-#### Using TWS (Trader Workstation)
-1. Download TWS from [Interactive Brokers](https://www.interactivebrokers.com/en/trading/tws.php)
-2. Log in with your **paper trading** credentials (username ends with a number, e.g. `DU12345`)
-3. Go to **Edit > Global Configuration > API > Settings**:
-   - Check "Enable ActiveX and Socket Clients"
-   - Set Socket port to **7497** (paper) or **7496** (live)
-   - Check "Allow connections from localhost only"
+**TWS (Trader Workstation):**
+1. Log in with paper credentials (username like `DU12345`)
+2. Edit → Global Configuration → API → Settings:
+   - Enable ActiveX and Socket Clients
+   - Socket port: **7497** (paper) or **7496** (live)
    - Uncheck "Read-Only API"
-4. Click Apply/OK
 
-#### Using IB Gateway (headless, recommended for servers)
-1. Download IB Gateway from the same IBKR page
-2. Log in with paper credentials
-3. Default paper port is **4002** (live is 4001)
-4. Update `config.yaml`:
-   ```yaml
-   ibkr:
-     port: 4002
-   ```
+**IB Gateway (headless, recommended):**
+- Default paper port: **4002** (live: 4001)
+- Update `config.yaml`: `ibkr.port: 4002`
 
-#### Setting Paper Mode
-In `config.yaml`:
+### 5. Apply schema & run
+
+```bash
+export $(grep -v '^#' .env | xargs)   # load DATABASE_URL (Linux/macOS)
+
+python scripts/init_db.py              # runs alembic upgrade head + seeds bot_state
+
+# Start everything
+python scripts/run_all.py              # API on :8000 + trader worker
+
+# Or separately:
+uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload   # Terminal 1
+python trader/main.py                                         # Terminal 2
+```
+
+---
+
+## CLI Reference
+
+The unified CLI (`cli.py`) is the recommended entry point for bot operations:
+
+```bash
+# Refresh sentiment data
+python cli.py sentiment refresh
+python cli.py sentiment refresh --source claude_llm --dry-run
+
+# Run a single bot (continuous, Ctrl-C to stop)
+python cli.py run options_swing --mode paper --approve
+python cli.py run equity_swing  --mode paper --dry-run
+
+# Run both bots together
+python cli.py run all --mode paper --dry-run
+
+# Single cycle then exit (useful for cron / scripted runs)
+python cli.py run all --mode paper --once
+
+# Live mode (real orders — use with caution)
+python cli.py run options_swing --mode live --no-approve
+
+# Reports
+python cli.py report last-run --bot equity_swing
+python cli.py report last-run --bot all --json-out
+```
+
+Key flags:
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--mode paper\|live` | `paper` | IBKR trading mode |
+| `--dry-run` | off | Plan trades, log actions, never submit orders |
+| `--approve / --no-approve` | `--approve` | Queue orders for manual approval vs auto-submit |
+| `--once` | off | Run one cycle and exit (vs continuous loop) |
+| `--refresh-sentiment / --no-refresh-sentiment` | on | Refresh sentiment before each cycle |
+
+The continuous mode runs at the interval set by `scheduling.signal_eval_minutes` (default: 15 min).
+
+---
+
+## Configuration
+
+All settings live in `config.yaml` (or `config.example.yaml` as the reference). Key sections:
+
 ```yaml
-mode: PAPER
-ibkr:
-  host: "127.0.0.1"
-  port: 7497        # TWS paper
-  client_id: 1
-  account: ""       # auto-detect
+mode: PAPER          # PAPER or LIVE
+
+bots:
+  options_swing:
+    enabled: true
+
+  equity_swing:
+    enabled: true
+    long_only: true              # v1: no shorting
+    long_entry_threshold: 0.55   # enter long when score >= this
+    exit_threshold: 0.45         # exit when score drops below this
+    max_positions: 5             # equity_swing portfolio cap
+    risk_per_trade_pct: 1.0      # % of NAV risked per position
+    atr_stop_multiplier: 2.0     # stop = entry - k * ATR(14)
+    max_sector_concentration: 0.30
+    risk_off_mode: "cash"        # "cash" or "defensive"
+
+risk:
+  max_drawdown_pct: 50
+  max_risk_per_trade_pct: 5      # used by options bot
+  max_positions: 5               # options bot position cap
+  require_positive_cash: true
+
+sentiment:
+  provider: "rss_lexicon"        # or "claude_llm"
+  refresh_minutes: 60
+
+dry_run: false                   # true = never submit orders (global override)
 ```
 
-### 6. Initialize & Run
+Full reference: `config.example.yaml`.
 
-```bash
-# Runs `alembic upgrade head` then seeds bot_state
-export $(grep -v '^#' .env | xargs)   # Linux/macOS — loads DATABASE_URL
-python scripts/init_db.py
+---
 
-# Start everything (API + trader)
-python scripts/run_all.py
+## Architecture
+
+```
+cli.py  ──────────────────────────────────────────────────────────┐
+                                                                   │
+scripts/run_all.py (legacy launcher)                               │
+  ├── uvicorn api.main:app   (FastAPI + dashboard, port 8000)     │
+  └── trader/main.py         (scheduler, continuous)              │
+                                                                   ▼
+                     ┌──────────────────────────────────────────────┐
+                     │              Shared Core (trader/)           │
+                     │  check_regime() · get_verified_universe()   │
+                     │  rank_symbols()  · score_symbol()           │
+                     │  sentiment pipeline · risk engine           │
+                     └────────────┬─────────────────┬─────────────┘
+                                  │                 │
+                     ┌────────────▼───┐   ┌─────────▼──────────┐
+                     │ OptionsSwingBot│   │  EquitySwingBot     │
+                     │ bots/options_  │   │  bots/equity_swing_ │
+                     │ swing_bot.py   │   │  bot.py             │
+                     └────────┬───────┘   └──────────┬──────────┘
+                              │                      │
+                     ┌────────▼───────┐   ┌──────────▼──────────┐
+                     │options_execution│  │ equity_execution.py  │
+                     │ plan_trade()   │   │  place_equity_order()│
+                     │ execute_signal()│  │  portfolio_id=       │
+                     │ (BAG combo)    │   │  "equity_swing"      │
+                     └────────────────┘   └─────────────────────┘
 ```
 
-Or start components separately:
-```bash
-# Terminal 1: API server (DATABASE_URL must be exported)
-uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+### Package Layout
 
-# Terminal 2: Trader worker
-python trader/main.py
+```
+market_AI/
+  cli.py                  # Unified Click CLI entry point
+  config.example.yaml     # Full configuration reference
+  data/
+    sp500.csv             # ~180 S&P 500 symbols with sectors
+  common/                 # Shared: config, DB engine, ORM models, schemas, logging
+  trader/
+    greeks/               # Greek fetching, IV rank, strike selection, gate, logger
+    sentiment/            # RSS lexicon + Claude LLM + mock providers
+    ibkr_client.py        # IBKR connection (singleton)
+    market_data.py        # Historical bars with in-memory cache
+    indicators.py         # EMA, SMA, RSI, MACD, ATR
+    universe.py           # Ticker universe: seed, verify, get_verified_universe()
+    ranking.py            # Sentiment-based symbol ranking
+    strategy.py           # Regime check, score_symbol(), generate_signals()
+    risk.py               # Risk engine: drawdown, position limits, cash reservation
+    execution.py          # Debit spread order construction + submit
+    options_planner.py    # Options trade planning (no submission)
+    scheduler.py          # Main trading loop (heartbeat 10s)
+    sync.py               # IBKR → DB account/position/order sync
+  bots/
+    base_bot.py           # BaseBot ABC + Candidate/ScoreBreakdown/TradeIntent dataclasses
+    options_swing_bot.py  # OptionsSwingBot plugin
+    equity_swing_bot.py   # EquitySwingBot plugin (ATR sizing, sector cap)
+  execution/
+    equity_execution.py   # Stock order placement (portfolio_id="equity_swing")
+    options_execution.py  # Shim: TradeIntent → SignalIntent → execute_signal()
+  api/
+    main.py               # FastAPI app + 8 UI page handlers
+    routes/               # health, state, controls, signals, sentiment, trades, rankings
+  ui/
+    templates/            # Jinja2 (layout + 8 pages)
+    static/               # app.css (dark theme), app.js (Chart.js helpers)
+  scripts/
+    init_db.py            # Run alembic + seed bot_state
+    run_all.py            # Launch API + trader as subprocesses
+  tests/                  # 138 pytest tests
+  alembic/versions/       # DB migrations (0001–0004)
 ```
 
-### 6. Open Dashboard
+---
 
-Navigate to **http://localhost:8000**
-
-## Dashboard Pages
+## Dashboard
 
 | Page | Description |
 |------|-------------|
-| `/` | Overview — equity, positions, bot status, events |
+| `/` | Overview — equity, positions, bot status, recent events |
 | `/positions` | Open positions with P&L |
 | `/orders` | Order history and fills |
-| `/signals` | Latest trading signals with scores |
-| `/sentiment` | Market & sector sentiment timeline |
-| `/risk` | Risk dashboard with drawdown chart |
+| `/signals` | Latest trading signals with score breakdowns |
+| `/sentiment` | Market & sector sentiment timeline + LLM budget status |
+| `/risk` | Drawdown chart + risk metrics |
 | `/controls` | Manual overrides — pause, kill switch, approve mode |
 | `/config` | Current configuration (read-only) |
+| `/rankings` | Latest symbol rankings with sentiment components |
+
+---
 
 ## API Endpoints
 
@@ -222,7 +334,7 @@ Navigate to **http://localhost:8000**
 | POST | `/controls/resume` | Resume trading |
 | POST | `/controls/kill/on` | Activate kill switch |
 | POST | `/controls/kill/off` | Deactivate kill switch |
-| POST | `/controls/close_all` | Close all positions |
+| POST | `/controls/close_all` | Close all positions (sets kill switch) |
 | POST | `/controls/options/enable` | Enable options trading |
 | POST | `/controls/options/disable` | Disable options trading |
 | POST | `/controls/approve_mode/on` | Require manual approval |
@@ -233,155 +345,91 @@ Navigate to **http://localhost:8000**
 | GET | `/orders` | Order history |
 | GET | `/fills` | Fill history |
 | GET | `/positions` | Current positions |
+| GET | `/rankings` | Latest symbol rankings |
 
-Full API docs at **http://localhost:8000/docs**
+Full interactive docs: **http://localhost:8000/docs**
 
-## Architecture
-
-```
-scripts/run_all.py
-  |
-  +-- uvicorn api.main:app     (FastAPI + dashboard)
-  |
-  +-- trader/main.py           (trading worker)
-        |
-        +-- Scheduler
-              |-- heartbeat (10s)
-              |-- sentiment refresh (30min)
-              |-- signal evaluation (15min)
-              |-- daily rebalance (09:45 local)
-              +-- IBKR sync (30s)
-```
+---
 
 ## Safety Features
 
-- **Approve mode** enabled by default — signals shown but no orders placed
-- **Kill switch** — immediately stops all new orders
-- **Drawdown stop** — halts trading at 50% drawdown (configurable)
-- **Cash reservation** — checks available cash before every order
-- **Duplicate prevention** — intent IDs prevent double-ordering on restart
-- **Stale data check** — refuses to trade on old market data
-- **Defined risk only** — only debit spreads allowed (max loss = debit paid)
-- **No shorting** — bear exposure only via bear put spreads
+- **Approve mode ON by default** — trade plans saved but no orders submitted until toggled OFF
+- **Kill switch** — immediately stops all new order submissions
+- **Drawdown stop** — halts trading when account drawdown exceeds limit (default 50%)
+- **Cash reservation** — verifies available cash before every order; reserves max-loss amount
+- **Per-bot position caps** — `OptionsSwingBot` and `EquitySwingBot` each enforce their own `max_positions` independently
+- **Sector concentration cap** — equity bot blocks trades that would push any GICS sector above 30% of NAV
+- **Duplicate prevention** — `intent_id` format prevents double-ordering on restart
+- **Stale data guard** — refuses to trade on market data older than `safety.data_stale_minutes`
+- **Defined risk only** — options bot only places debit spreads (max loss = debit paid, never more)
+- **Verified tickers only** — discovered tickers require IBKR contract lookup before trading (cached 24h)
 
-## Sentiment: RSS lexicon vs Claude LLM
+---
 
-The bot ships with two sentiment providers, selected via `config.yaml`:
+## Sentiment: RSS Lexicon vs Claude LLM
 
 ```yaml
 sentiment:
-  provider: "rss_lexicon"   # default — offline, free
-  # provider: "claude_llm"  # headlines → Anthropic Claude → per-item sentiment
+  provider: "rss_lexicon"   # default — no API key needed, free
+  # provider: "claude_llm"  # headlines → Claude → per-item sentiment + sector/ticker tagging
   refresh_minutes: 60
 ```
 
-You can override at runtime with `SENTIMENT_PROVIDER=claude_llm`.
+Override at runtime: `SENTIMENT_PROVIDER=claude_llm`.
 
 ### Enabling the Claude LLM provider
 
-1. **Create an Anthropic API key.**
-   Go to [console.anthropic.com](https://console.anthropic.com/) → *Settings* → *API Keys* → *Create Key*.
+1. Get an Anthropic API key from [console.anthropic.com](https://console.anthropic.com/) → Settings → API Keys.  
+   ⚠ A Claude Pro subscription is **not** API access — the API is billed separately.
 
-   ⚠ Important: a Claude Pro / claude.ai chat subscription is **not** API access.
-   The API is metered separately and requires a key from the Anthropic Console.
+2. Set the key: `ANTHROPIC_API_KEY=sk-ant-...` in `.env` (never in `config.yaml`).
 
-2. **Set the key in your environment.**
-   The bot reads it from `ANTHROPIC_API_KEY` (configurable per-run via
-   `sentiment.claude.api_key_env`). It is never read from `config.yaml`.
+3. Set `sentiment.provider: "claude_llm"` in `config.yaml` and restart.
 
+4. Force an immediate refresh:
    ```bash
-   # .env (bare-metal or docker-compose)
-   ANTHROPIC_API_KEY=sk-ant-...
-   ```
-
-3. **Flip the provider in `config.yaml`:**
-   ```yaml
-   sentiment:
-     provider: "claude_llm"
-   ```
-
-4. **Restart the trader.** The next scheduler tick (≤60 min) will run the LLM
-   extractor. You can also force an immediate refresh with:
-   ```bash
-   python -c "from trader.sentiment.factory import refresh_and_store; print(refresh_and_store())"
+   python cli.py sentiment refresh --source claude_llm
    ```
 
 ### What the Claude provider does (per refresh)
 
-1. Fetches headlines + snippets from the RSS feeds in
-   `sentiment.rss.feeds` (no full-page scraping).
-2. Deduplicates against `sentiment_llm_items` (default window: 14 days).
-3. Consults the sentiment-only budget table (`sentiment_llm_usage`). If the
-   month or day cap is exhausted, the refresh is **skipped** — no API call.
-4. Otherwise sends up to `max_items_per_run` items to Claude (default: 40)
-   with a strict JSON schema.
-5. Validates output. Items missing the required market entity are dropped;
-   if **all** items are invalid the run is treated as a failure and **no
-   snapshots are overwritten** (prior data is kept).
-6. Aggregates per-item entities into market / sector / ticker snapshots using
-   `weight = confidence * recency_decay(half-life 72h)`.
+1. Fetches headlines + snippets from the configured RSS feeds (no full-page scraping).
+2. Deduplicates against `sentiment_llm_items` (14-day window by default).
+3. Checks the budget table — if the monthly or daily cap is exhausted, the refresh is **skipped** with no API call.
+4. Sends up to `max_items_per_run` items (default 40) to Claude with a strict JSON output schema.
+5. Validates output — items with missing required fields are dropped; if **all** items fail, no snapshots are overwritten (previous data kept intact).
+6. Aggregates per-item results into market / sector / ticker snapshots with `weight = confidence × recency_decay(half-life 72h)`.
 
-On any API error the bot does **not** silently fall back to the RSS lexicon.
-It logs the failure to `events_log` (`sentiment_refresh_failed`) and leaves
-the previous snapshots in place.
+On any API error the bot does **not** fall back to the RSS lexicon. It logs the failure to `events_log` and leaves existing snapshots untouched.
 
-### Budget cap (€10/month by default)
+### Budget cap (€10/month default)
 
-Costs are estimated from Anthropic-reported token counts when available, else
-from a conservative character-based heuristic. Spend is recorded to
-`sentiment_llm_usage` on every call (success or failure).
-
-Defaults (in `sentiment.claude`):
-
-| Knob | Default | Meaning |
-|------|---------|---------|
+| Config key | Default | Meaning |
+|------------|---------|---------|
 | `monthly_budget_eur` | `10.0` | Hard ceiling for sentiment LLM calls per calendar month |
-| `daily_budget_fraction` | `0.12` | Per-day cap = monthly × fraction |
-| `hard_stop_on_budget` | `true` | If false, the provider only warns and keeps calling |
-| `eur_usd_rate` | `1.08` | Used to convert cost estimates to EUR |
+| `daily_budget_fraction` | `0.12` | Per-day cap = monthly × fraction (≈€1.20/day) |
+| `hard_stop_on_budget` | `true` | `false` = warn only, keep calling |
+| `eur_usd_rate` | `1.08` | Used to convert Anthropic USD costs to EUR |
 
-When a cap is hit, the dashboard's `/sentiment` page shows a red **STOPPED**
-badge and `/state` exposes the spend totals. There is no UI reset button —
-usage resets naturally at the month boundary.
+The dashboard `/sentiment` page shows a red **STOPPED** badge when a cap is hit. Usage resets naturally at month boundary.
 
-> Set a matching **spend limit in the Anthropic Console** (Billing →
-> Usage limits) for a true hard stop. This in-process cap is a best-effort
-> safety net, not a substitute for provider-side enforcement.
+> Also set a matching spend limit in the **Anthropic Console** (Billing → Usage limits) for a true hard stop — the in-process cap is best-effort.
 
-### Sentiment-related tables
-
-- `sentiment_snapshots` — final per-scope scores (used by the strategy).
-- `sentiment_llm_items` — dedup ledger (hash id + processed_at).
-- `sentiment_llm_usage` — per-call token + cost audit (USD + EUR estimates).
-
-Apply the new migration with `alembic upgrade head` (or let `init_db.py` do
-it on next startup). Existing `sentiment_snapshots` rows are untouched.
+---
 
 ## Running Tests
 
 ```bash
-python -m pytest tests/ -v
+python -m pytest tests/ -v    # 138 tests
 ```
 
-## Project Structure
+---
 
-```
-market_AI/
-  common/           # Shared: config, DB, models, schemas, logging
-  trader/           # Trading engine
-    sentiment/      # RSS + mock sentiment providers
-    ibkr_client.py  # IBKR connection wrapper
-    market_data.py  # Historical bar fetching
-    indicators.py   # EMA, SMA, RSI, MACD, ATR
-    universe.py     # Ticker universe management
-    strategy.py     # Swing strategy + signal generation
-    risk.py         # Risk engine + checks
-    execution.py    # Debit spread order construction
-    scheduler.py    # Main trading loop
-    sync.py         # IBKR -> DB sync
-  api/              # FastAPI backend
-    routes/         # API endpoints
-  ui/               # Dashboard templates + static assets
-  scripts/          # Init DB, run all
-  tests/            # pytest tests
-```
+## Known Limitations
+
+- **EquitySwingBot long-only in v1** — set `bots.equity_swing.long_only: false` to enable shorting (not yet validated end-to-end).
+- **No automated exits** — the exit threshold (`exit_threshold`) and `max_holding_days` are tracked in config but position exit orders are not yet submitted automatically. Manual close via dashboard or IBKR.
+- **No EUR/USD FX conversion** — all risk calculations are in USD.
+- **IV Rank** requires the IBKR historical-volatility market data entitlement; falls back to "unknown" regime when unavailable (gate warns, does not block).
+- **`data/sp500.csv`** exists as a reference file (~180 stocks with sectors) but is not yet auto-ingested — the live universe is still seeded from the embedded `SEED_TICKERS` list in `trader/universe.py`.
+- **`close_all` control** currently activates the kill switch only; actual IBKR position-closing orders are not yet wired.
