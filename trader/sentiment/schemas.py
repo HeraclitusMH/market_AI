@@ -48,6 +48,7 @@ class SentimentEntity(BaseModel):
 class LlmSentimentItem(BaseModel):
     id: str = Field(..., min_length=1)
     entities: List[SentimentEntity]
+    mentioned_companies: List[str] = []   # company names for deterministic ticker matching
     reasons: List[str] = []
     key_phrases: List[str] = []
 
@@ -65,6 +66,12 @@ class LlmSentimentItem(BaseModel):
     def _cap_phrases(cls, v: List[str]) -> List[str]:
         cleaned = [str(p).strip()[:80] for p in v if str(p).strip()]
         return cleaned[:10]
+
+    @field_validator("mentioned_companies")
+    @classmethod
+    def _cap_companies(cls, v: List[str]) -> List[str]:
+        cleaned = [str(c).strip()[:120] for c in v if str(c).strip()]
+        return cleaned[:20]
 
     @field_validator("entities")
     @classmethod

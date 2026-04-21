@@ -368,5 +368,225 @@ def _report_last_run(bot: str, json_out: bool) -> None:
         )
 
 
+# ── securities ───────────────────────────────────────────────────────────────
+
+
+@cli.group()
+def securities():
+    """Security master management commands."""
+
+
+@securities.command("import")
+@click.option(
+    "--file", "csv_file",
+    default=None,
+    help="Path to CSV file (default: config.securities.master_csv_path).",
+)
+@click.option("--verify-ibkr", is_flag=True, help="Verify each symbol via IBKR after import.")
+@click.option("--refresh-aliases", is_flag=True, default=True, show_default=True,
+              help="Regenerate aliases for every symbol.")
+@click.option("--load-overrides", is_flag=True, default=True, show_default=True,
+              help="Load manual_alias_overrides.csv after import.")
+def securities_import(csv_file: Optional[str], verify_ibkr: bool, refresh_aliases: bool, load_overrides: bool) -> None:
+    """Import/update the security master from a CSV file."""
+    _setup()
+    from trader.securities.master import import_csv, load_manual_overrides
+
+    cfg = get_config().securities
+    path = csv_file or cfg.master_csv_path
+    client = _connect_ibkr("paper") if verify_ibkr else None
+
+    click.echo(f"Importing security master from {path} …")
+    try:
+        summary = import_csv(path, verify_ibkr=verify_ibkr, refresh_aliases=refresh_aliases, client=client)
+        click.echo(
+            f"Done: added={summary['added']} updated={summary['updated']} "
+            f"skipped={summary['skipped']} aliases={summary['aliases_written']}"
+        )
+    except Exception as e:
+        click.echo(f"ERROR: {e}", err=True)
+        sys.exit(1)
+
+    if load_overrides:
+        from trader.securities.master import load_manual_overrides
+        ov = load_manual_overrides(cfg.alias_overrides_path)
+        click.echo(f"Manual overrides loaded: {ov['loaded']}")
+
+
+@securities.command("verify")
+@click.option("--all", "verify_all", is_flag=True, help="Verify all active securities via IBKR.")
+@click.option("--symbol", default=None, help="Verify a single symbol.")
+@click.option("--options-check", is_flag=True, help="Also check options eligibility.")
+def securities_verify(verify_all: bool, symbol: Optional[str], options_check: bool) -> None:
+    """Verify securities via IBKR contract lookup."""
+    _setup()
+    from trader.securities.master import verify_security, check_options_eligibility
+    from common.db import get_db
+    from common.models import SecurityMaster
+
+    client = _connect_ibkr("paper")
+    if client is None:
+        click.echo("ERROR: IBKR connection required for verification.", err=True)
+        sys.exit(1)
+
+    if symbol:
+        symbols = [symbol.upper()]
+    elif verify_all:
+        with get_db() as db:
+            rows = db.query(SecurityMaster.symbol).filter(SecurityMaster.active == True).all()
+        symbols = [r.symbol for r in rows]
+    else:
+        click.echo("Specify --symbol SYMBOL or --all.", err=True)
+        sys.exit(1)
+
+    click.echo(f"Verifying {len(symbols)} symbol(s)…")
+    for sym in symbols:
+        result = verify_security(sym, client)
+        status = "OK" if result["verified"] else "FAIL"
+        line = f"  [{status}] {sym:10s} exchange={result.get('exchange','?'):8s} reason={result['reason']}"
+        if options_check and result["verified"]:
+            eligible = check_options_eligibility(sym, client)
+            line += f" options={'YES' if eligible else 'NO'}"
+        click.echo(line)
+
+
+@securities.command("liquidity-refresh")
+@click.option("--lookback", default=20, show_default=True, help="Trading days to average.")
+@click.option("--symbol", default=None, help="Refresh a single symbol (default: all active).")
+def securities_liquidity(lookback: int, symbol: Optional[str]) -> None:
+    """Refresh avg_dollar_volume_20d for securities via IBKR market data."""
+    _setup()
+    from trader.securities.master import refresh_liquidity
+    from common.db import get_db
+    from common.models import SecurityMaster
+
+    client = _connect_ibkr("paper")
+    if client is None:
+        click.echo("ERROR: IBKR connection required for liquidity refresh.", err=True)
+        sys.exit(1)
+
+    if symbol:
+        symbols = [symbol.upper()]
+    else:
+        with get_db() as db:
+            rows = db.query(SecurityMaster.symbol).filter(SecurityMaster.active == True).all()
+        symbols = [r.symbol for r in rows]
+
+    click.echo(f"Refreshing liquidity for {len(symbols)} symbol(s)…")
+    updated = 0
+    for sym in symbols:
+        adv = refresh_liquidity(sym, client, lookback=lookback)
+        if adv is not None:
+            click.echo(f"  {sym:10s} avg_dollar_vol={adv:,.0f}")
+            updated += 1
+    click.echo(f"Updated {updated}/{len(symbols)} symbols.")
+
+
+# ── match-company ─────────────────────────────────────────────────────────────
+
+
+@cli.command("match-company")
+@click.option("--text", default=None, help="Free-form text to extract companies from.")
+@click.option("--companies", default=None,
+              help="Comma-separated company names to match directly (skips LLM extraction).")
+@click.option("--article-id", default="debug", show_default=True, help="Article ID for audit rows.")
+@click.option("--no-audit", is_flag=True, help="Skip writing audit rows to rss_entity_matches.")
+def match_company_cmd(
+    text: Optional[str],
+    companies: Optional[str],
+    article_id: str,
+    no_audit: bool,
+) -> None:
+    """Debug company-name → ticker matching.
+
+    Provide --text to simulate LLM extraction, or --companies to test specific names.
+
+    Examples:
+      python cli.py match-company --text "Today Molina Healthcare made 5 billion in revenue"
+      python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
+    """
+    _setup()
+    from trader.securities.matcher import match_companies_to_symbols
+    from trader.securities.normalize import normalize_company_name
+
+    if companies:
+        company_list = [c.strip() for c in companies.split(",") if c.strip()]
+    elif text:
+        # Use the LLM to extract company names from free text
+        try:
+            company_list = _extract_companies_from_text(text)
+            click.echo(f"LLM-extracted companies: {company_list}")
+        except Exception as e:
+            click.echo(f"LLM extraction failed ({e}). Tip: use --companies instead.", err=True)
+            sys.exit(1)
+    else:
+        click.echo("Provide --text or --companies.", err=True)
+        sys.exit(1)
+
+    if not company_list:
+        click.echo("No companies to match.")
+        return
+
+    click.echo(f"\nMatching {len(company_list)} company name(s):\n")
+    results = match_companies_to_symbols(
+        company_list,
+        article_id=article_id,
+        write_audit=not no_audit,
+    )
+
+    matched = skipped = 0
+    for r in results:
+        norm = normalize_company_name(r.company_input)
+        if r.symbol:
+            matched += 1
+            click.echo(
+                f"  {r.company_input!r:40s}  → {r.symbol:6s}  "
+                f"[{r.match_type}  score={r.match_score:.2f}]"
+            )
+        else:
+            skipped += 1
+            click.echo(
+                f"  {r.company_input!r:40s}  → (skip)  "
+                f"[{r.match_type}  reason={r.reason}]"
+            )
+        click.echo(f"    normalized: '{norm}'")
+
+    click.echo(f"\nMatched: {matched}  Skipped: {skipped}")
+    if not no_audit:
+        click.echo(f"Audit rows written to rss_entity_matches (article_id={article_id!r})")
+
+
+def _extract_companies_from_text(text: str) -> list:
+    """Call Claude to extract company names from free text (debug helper only)."""
+    import os
+    import anthropic as _anthropic
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY not set")
+
+    client = _anthropic.Anthropic(api_key=api_key)
+    msg = client.messages.create(
+        model="claude-3-5-haiku-latest",
+        max_tokens=256,
+        messages=[{
+            "role": "user",
+            "content": (
+                "Extract all publicly traded company names from this text. "
+                "Return ONLY a JSON array of strings (company names, not tickers). "
+                f"Text: {text!r}"
+            ),
+        }],
+    )
+    import json as _json
+    raw = msg.content[0].text.strip()
+    # Strip code fences if present
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    return _json.loads(raw.strip())
+
+
 if __name__ == "__main__":
     cli()

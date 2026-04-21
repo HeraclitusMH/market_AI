@@ -1,0 +1,240 @@
+symbol,name,exchange,security_type
+AAPL,Apple Inc,NASDAQ,STK
+MSFT,Microsoft Corporation,NASDAQ,STK
+AMZN,Amazon.com Inc,NASDAQ,STK
+GOOGL,Alphabet Inc,NASDAQ,STK
+GOOG,Alphabet Inc,NASDAQ,STK
+META,Meta Platforms Inc,NASDAQ,STK
+NVDA,NVIDIA Corporation,NASDAQ,STK
+TSLA,Tesla Inc,NASDAQ,STK
+LLY,Eli Lilly and Company,NYSE,STK
+JPM,JPMorgan Chase & Co,NYSE,STK
+V,Visa Inc,NYSE,STK
+XOM,Exxon Mobil Corporation,NYSE,STK
+UNH,UnitedHealth Group Inc,NYSE,STK
+MA,Mastercard Inc,NYSE,STK
+AVGO,Broadcom Inc,NASDAQ,STK
+PG,Procter & Gamble Co,NYSE,STK
+JNJ,Johnson & Johnson,NYSE,STK
+HD,Home Depot Inc,NYSE,STK
+MRK,Merck & Co Inc,NYSE,STK
+COST,Costco Wholesale Corporation,NASDAQ,STK
+ABBV,AbbVie Inc,NYSE,STK
+CRM,Salesforce Inc,NYSE,STK
+CVX,Chevron Corporation,NYSE,STK
+BAC,Bank of America Corporation,NYSE,STK
+NFLX,Netflix Inc,NASDAQ,STK
+KO,Coca-Cola Co,NYSE,STK
+PEP,PepsiCo Inc,NASDAQ,STK
+TMO,Thermo Fisher Scientific Inc,NYSE,STK
+WMT,Walmart Inc,NYSE,STK
+ACN,Accenture plc,NYSE,STK
+MCD,McDonald's Corporation,NYSE,STK
+LIN,Linde plc,NYSE,STK
+AMD,Advanced Micro Devices Inc,NASDAQ,STK
+INTC,Intel Corporation,NASDAQ,STK
+ABT,Abbott Laboratories,NYSE,STK
+DHR,Danaher Corporation,NYSE,STK
+CMCSA,Comcast Corporation,NASDAQ,STK
+DIS,Walt Disney Co,NYSE,STK
+ADBE,Adobe Inc,NASDAQ,STK
+TXN,Texas Instruments Inc,NASDAQ,STK
+ORCL,Oracle Corporation,NYSE,STK
+CSCO,Cisco Systems Inc,NASDAQ,STK
+VZ,Verizon Communications Inc,NYSE,STK
+NKE,Nike Inc,NYSE,STK
+T,AT&T Inc,NYSE,STK
+PM,Philip Morris International Inc,NYSE,STK
+NEE,NextEra Energy Inc,NYSE,STK
+RTX,RTX Corporation,NYSE,STK
+HON,Honeywell International Inc,NASDAQ,STK
+AMGN,Amgen Inc,NASDAQ,STK
+INTU,Intuit Inc,NASDAQ,STK
+LOW,Lowe's Companies Inc,NYSE,STK
+BMY,Bristol-Myers Squibb Co,NYSE,STK
+SPGI,S&P Global Inc,NYSE,STK
+SBUX,Starbucks Corporation,NASDAQ,STK
+MDT,Medtronic plc,NYSE,STK
+GE,GE Aerospace,NYSE,STK
+GILD,Gilead Sciences Inc,NASDAQ,STK
+UPS,United Parcel Service Inc,NYSE,STK
+ADP,Automatic Data Processing Inc,NASDAQ,STK
+QCOM,Qualcomm Inc,NASDAQ,STK
+MS,Morgan Stanley,NYSE,STK
+BLK,BlackRock Inc,NYSE,STK
+DE,Deere & Company,NYSE,STK
+ISRG,Intuitive Surgical Inc,NASDAQ,STK
+SYK,Stryker Corporation,NYSE,STK
+CVS,CVS Health Corporation,NYSE,STK
+CI,Cigna Group,NYSE,STK
+HUM,Humana Inc,NYSE,STK
+ELV,Elevance Health Inc,NYSE,STK
+MOH,Molina Healthcare Inc,NYSE,STK
+CNC,Centene Corporation,NYSE,STK
+WFC,Wells Fargo & Co,NYSE,STK
+GS,Goldman Sachs Group Inc,NYSE,STK
+C,Citigroup Inc,NYSE,STK
+USB,US Bancorp,NYSE,STK
+PNC,PNC Financial Services Group Inc,NYSE,STK
+SCHW,Charles Schwab Corporation,NYSE,STK
+AXP,American Express Co,NYSE,STK
+TRV,Travelers Companies Inc,NYSE,STK
+CB,Chubb Limited,NYSE,STK
+AFL,Aflac Inc,NYSE,STK
+MET,MetLife Inc,NYSE,STK
+PRU,Prudential Financial Inc,NYSE,STK
+PFE,Pfizer Inc,NYSE,STK
+BIIB,Biogen Inc,NASDAQ,STK
+REGN,Regeneron Pharmaceuticals Inc,NASDAQ,STK
+VRTX,Vertex Pharmaceuticals Inc,NASDAQ,STK
+MRNA,Moderna Inc,NASDAQ,STK
+ZTS,Zoetis Inc,NYSE,STK
+IDXX,IDEXX Laboratories Inc,NASDAQ,STK
+BDX,Becton Dickinson and Co,NYSE,STK
+EW,Edwards Lifesciences Corporation,NYSE,STK
+BSX,Boston Scientific Corporation,NYSE,STK
+CL,Colgate-Palmolive Co,NYSE,STK
+GIS,General Mills Inc,NYSE,STK
+HSY,Hershey Co,NYSE,STK
+MDLZ,Mondelez International Inc,NASDAQ,STK
+TSN,Tyson Foods Inc,NYSE,STK
+STZ,Constellation Brands Inc,NYSE,STK
+MO,Altria Group Inc,NYSE,STK
+LMT,Lockheed Martin Corporation,NYSE,STK
+NOC,Northrop Grumman Corporation,NYSE,STK
+GD,General Dynamics Corporation,NYSE,STK
+BA,Boeing Company,NYSE,STK
+LHX,L3Harris Technologies Inc,NYSE,STK
+TDG,TransDigm Group Inc,NYSE,STK
+CAT,Caterpillar Inc,NYSE,STK
+MMM,3M Company,NYSE,STK
+EMR,Emerson Electric Co,NYSE,STK
+ETN,Eaton Corporation plc,NYSE,STK
+ROK,Rockwell Automation Inc,NYSE,STK
+PH,Parker-Hannifin Corporation,NYSE,STK
+ITW,Illinois Tool Works Inc,NYSE,STK
+PCAR,PACCAR Inc,NASDAQ,STK
+CMI,Cummins Inc,NYSE,STK
+IR,Ingersoll Rand Inc,NYSE,STK
+AME,AMETEK Inc,NYSE,STK
+FDX,FedEx Corporation,NYSE,STK
+DAL,Delta Air Lines Inc,NYSE,STK
+UAL,United Airlines Holdings Inc,NASDAQ,STK
+AAL,American Airlines Group Inc,NASDAQ,STK
+LUV,Southwest Airlines Co,NYSE,STK
+UNP,Union Pacific Corporation,NYSE,STK
+NSC,Norfolk Southern Corporation,NYSE,STK
+CSX,CSX Corporation,NASDAQ,STK
+AMT,American Tower Corporation,NYSE,STK
+PLD,Prologis Inc,NYSE,STK
+CCI,Crown Castle Inc,NYSE,STK
+EQIX,Equinix Inc,NASDAQ,STK
+PSA,Public Storage,NYSE,STK
+D,Dominion Energy Inc,NYSE,STK
+SO,Southern Company,NYSE,STK
+DUK,Duke Energy Corporation,NYSE,STK
+AEP,American Electric Power Co Inc,NASDAQ,STK
+EXC,Exelon Corporation,NASDAQ,STK
+SRE,Sempra,NYSE,STK
+PCG,PG&E Corporation,NYSE,STK
+ED,Consolidated Edison Inc,NYSE,STK
+OKE,ONEOK Inc,NYSE,STK
+WMB,Williams Companies Inc,NYSE,STK
+KMI,Kinder Morgan Inc,NYSE,STK
+MPC,Marathon Petroleum Corporation,NYSE,STK
+VLO,Valero Energy Corporation,NYSE,STK
+PSX,Phillips 66,NYSE,STK
+SLB,Schlumberger Limited,NYSE,STK
+HAL,Halliburton Company,NYSE,STK
+BKR,Baker Hughes Co,NASDAQ,STK
+DVN,Devon Energy Corporation,NYSE,STK
+EOG,EOG Resources Inc,NYSE,STK
+COP,ConocoPhillips,NYSE,STK
+OXY,Occidental Petroleum Corporation,NYSE,STK
+HES,Hess Corporation,NYSE,STK
+MRO,Marathon Oil Corporation,NYSE,STK
+FCX,Freeport-McMoRan Inc,NYSE,STK
+NEM,Newmont Corporation,NYSE,STK
+APD,Air Products and Chemicals Inc,NYSE,STK
+ECL,Ecolab Inc,NYSE,STK
+SHW,Sherwin-Williams Company,NYSE,STK
+PPG,PPG Industries Inc,NYSE,STK
+CF,CF Industries Holdings Inc,NYSE,STK
+NUE,Nucor Corporation,NYSE,STK
+STLD,Steel Dynamics Inc,NASDAQ,STK
+APH,Amphenol Corporation,NYSE,STK
+TEL,TE Connectivity Ltd,NYSE,STK
+MSI,Motorola Solutions Inc,NYSE,STK
+KEYS,Keysight Technologies Inc,NYSE,STK
+A,Agilent Technologies Inc,NYSE,STK
+FTNT,Fortinet Inc,NASDAQ,STK
+PANW,Palo Alto Networks Inc,NASDAQ,STK
+CRWD,CrowdStrike Holdings Inc,NASDAQ,STK
+ZS,Zscaler Inc,NASDAQ,STK
+SNPS,Synopsys Inc,NASDAQ,STK
+CDNS,Cadence Design Systems Inc,NASDAQ,STK
+KLAC,KLA Corporation,NASDAQ,STK
+LRCX,Lam Research Corporation,NASDAQ,STK
+AMAT,Applied Materials Inc,NASDAQ,STK
+MU,Micron Technology Inc,NASDAQ,STK
+MRVL,Marvell Technology Inc,NASDAQ,STK
+ON,ON Semiconductor Corporation,NASDAQ,STK
+NOW,ServiceNow Inc,NYSE,STK
+WDAY,Workday Inc,NASDAQ,STK
+SNOW,Snowflake Inc,NYSE,STK
+DDOG,Datadog Inc,NASDAQ,STK
+MDB,MongoDB Inc,NASDAQ,STK
+PLTR,Palantir Technologies Inc,NYSE,STK
+UBER,Uber Technologies Inc,NYSE,STK
+ABNB,Airbnb Inc,NASDAQ,STK
+DASH,DoorDash Inc,NYSE,STK
+COIN,Coinbase Global Inc,NASDAQ,STK
+PYPL,PayPal Holdings Inc,NASDAQ,STK
+SQ,Block Inc,NYSE,STK
+SHOP,Shopify Inc,NYSE,STK
+NET,Cloudflare Inc,NYSE,STK
+OKTA,Okta Inc,NASDAQ,STK
+ADSK,Autodesk Inc,NASDAQ,STK
+ANSS,ANSYS Inc,NASDAQ,STK
+PTC,PTC Inc,NASDAQ,STK
+EPAM,EPAM Systems Inc,NYSE,STK
+CTSH,Cognizant Technology Solutions Corporation,NASDAQ,STK
+FISV,Fiserv Inc,NASDAQ,STK
+FIS,Fidelity National Information Services Inc,NYSE,STK
+GPN,Global Payments Inc,NYSE,STK
+JKHY,Jack Henry & Associates Inc,NASDAQ,STK
+BR,Broadridge Financial Solutions Inc,NYSE,STK
+NTAP,NetApp Inc,NASDAQ,STK
+STX,Seagate Technology Holdings plc,NASDAQ,STK
+WDC,Western Digital Corporation,NASDAQ,STK
+HPQ,HP Inc,NYSE,STK
+HPE,Hewlett Packard Enterprise Co,NYSE,STK
+DELL,Dell Technologies Inc,NYSE,STK
+CDW,CDW Corporation,NASDAQ,STK
+ANET,Arista Networks Inc,NYSE,STK
+ZBRA,Zebra Technologies Corporation,NASDAQ,STK
+TER,Teradyne Inc,NASDAQ,STK
+ENPH,Enphase Energy Inc,NASDAQ,STK
+SEDG,SolarEdge Technologies Inc,NASDAQ,STK
+FSLR,First Solar Inc,NASDAQ,STK
+RUN,Sunrun Inc,NASDAQ,STK
+BX,Blackstone Inc,NYSE,STK
+KKR,KKR & Co Inc,NYSE,STK
+APO,Apollo Global Management Inc,NYSE,STK
+CG,Carlyle Group Inc,NASDAQ,STK
+ARES,Ares Management Corporation,NYSE,STK
+IVZ,Invesco Ltd,NYSE,STK
+TROW,T. Rowe Price Group Inc,NASDAQ,STK
+BEN,Franklin Resources Inc,NYSE,STK
+LNC,Lincoln National Corporation,NYSE,STK
+GL,Globe Life Inc,NYSE,STK
+FNF,Fidelity National Financial Inc,NYSE,STK
+LPLA,LPL Financial Holdings Inc,NASDAQ,STK
+SSNC,SS&C Technologies Holdings Inc,NASDAQ,STK
+ICE,Intercontinental Exchange Inc,NYSE,STK
+CME,CME Group Inc,NASDAQ,STK
+CBOE,Cboe Global Markets Inc,NASDAQ,STK
+NDAQ,Nasdaq Inc,NASDAQ,STK
+MCO,Moody's Corporation,NYSE,STK
+MSCI,MSCI Inc,NYSE,STK
+VRSK,Verisk Analytics Inc,NASDAQ,STK

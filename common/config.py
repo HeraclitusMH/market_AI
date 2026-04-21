@@ -191,6 +191,16 @@ class BotsConfig(BaseModel):
     equity_swing: EquityBotConfig = EquityBotConfig()
 
 
+class SecuritiesConfig(BaseModel):
+    allowed_exchanges: List[str] = ["NYSE", "NASDAQ", "AMEX"]
+    min_price: float = 5.0
+    min_avg_dollar_volume_20d: float = 10_000_000
+    ibkr_verify_enabled: bool = True
+    master_csv_path: str = "data/us_listed_master.csv"
+    alias_overrides_path: str = "data/manual_alias_overrides.csv"
+    verification_cache_hours: int = 24
+
+
 class SentimentConfig(BaseModel):
     provider: str = "rss_lexicon"  # rss_lexicon | claude_llm
     refresh_minutes: int = 60
@@ -223,6 +233,7 @@ class AppConfig(BaseModel):
     sentiment: SentimentConfig = SentimentConfig()
     ranking: RankingConfig = RankingConfig()
     bots: BotsConfig = BotsConfig()
+    securities: SecuritiesConfig = SecuritiesConfig()
     dry_run: bool = False
 
     @field_validator("mode")

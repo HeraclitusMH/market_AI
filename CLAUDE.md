@@ -17,7 +17,7 @@ Six top-level packages plus data and scripts — flat layout, no `src/` director
 - **`api/`** — FastAPI app with API routes + server-rendered UI pages
 - **`ui/`** — Jinja2 templates + static CSS/JS
 - **`scripts/`** — `init_db.py` (DB setup), `run_all.py` (starts API + trader as subprocesses)
-- **`data/`** — `sp500.csv` (~180 S&P 500 stocks with symbol/name/sector)
+- **`data/`** — `sp500.csv` (~180 S&P 500 stocks with symbol/name/sector); `us_listed_master.csv` (~220 major US stocks seed for security master); `manual_alias_overrides.csv` (manual priority-1 aliases)
 - **`cli.py`** — unified Click CLI entry point
 
 ### Key Design Decisions
@@ -46,7 +46,7 @@ Six top-level packages plus data and scripts — flat layout, no `src/` director
 
 ### Config & DB
 - **Config schema & loader** → `common/config.py` (all Pydantic models incl. `BotsConfig`, `EquityBotConfig`, `OptionsBotConfig`)
-- **DB models (15 tables)** → `common/models.py` (BotState, EquitySnapshot, Universe, SentimentSnapshot, SignalSnapshot, Order, Fill, Position, Trade, EventLog, ContractVerificationCache, SymbolRanking, TradePlan, SentimentLlmItem, SentimentLlmUsage)
+- **DB models (18 tables)** → `common/models.py` (BotState, EquitySnapshot, Universe, SentimentSnapshot, SignalSnapshot, Order, Fill, Position, Trade, EventLog, ContractVerificationCache, SymbolRanking, TradePlan, SentimentLlmItem, SentimentLlmUsage, SecurityMaster, SecurityAlias, RssEntityMatch)
 - **API response schemas** → `common/schema.py`
 
 ### Core Trading
@@ -82,6 +82,16 @@ Six top-level packages plus data and scripts — flat layout, no `src/` director
 - **Providers** → `trader/sentiment/rss_provider.py`, `claude_provider.py`, `mock_provider.py`
 - **Budget cap** → `trader/sentiment/budget.py` (hard €10/mo cap; failures must NOT fall back to lexicon)
 
+### Security Master (company-name → ticker)
+- **Normalization** → `trader/securities/normalize.py` (`normalize_company_name()`, `generate_aliases()`)
+- **Import pipeline + IBKR verification** → `trader/securities/master.py` (`import_csv()`, `verify_security()`, `check_options_eligibility()`, `refresh_liquidity()`, `load_manual_overrides()`)
+- **Matcher** → `trader/securities/matcher.py` (`match_companies_to_symbols()`, `MatchResult`)
+- **DB tables** → `common/models.py`: `SecurityMaster`, `SecurityAlias`, `RssEntityMatch`
+- **Config** → `common/config.py`: `SecuritiesConfig` (allowed_exchanges, min_price, etc.)
+- **Seed data** → `data/us_listed_master.csv` (~220 major US-listed stocks), `data/manual_alias_overrides.csv`
+- **Alembic migration** → `alembic/versions/0005_security_master.py`
+- **Claude prompt** → `trader/sentiment/claude_provider.py` now requests `mentioned_companies` (company names) not ticker entities; `_build_ticker_results_from_companies()` runs the matcher post-LLM
+
 ### API & UI
 - **FastAPI app + UI routes** → `api/main.py` (API routers + 8 UI page handlers)
 - **API route modules** → `api/routes/` (health, state, controls, signals, sentiment, trades, rankings)
@@ -91,8 +101,8 @@ Six top-level packages plus data and scripts — flat layout, no `src/` director
 ### Entry Points & Data
 - **Unified CLI** → `cli.py` (Click; commands below)
 - **SP500 reference** → `data/sp500.csv` (~180 stocks, `symbol,name,sector`)
-- **Alembic migrations** → `alembic/versions/` (0001–0004)
-- **Tests** → `tests/` (138 tests, all passing)
+- **Alembic migrations** → `alembic/versions/` (0001–0005)
+- **Tests** → `tests/` (179 tests, all passing)
 
 ## Commands
 
@@ -101,7 +111,7 @@ pip install -e ".[dev]"          # Install with dev deps (includes click)
 python scripts/init_db.py        # Create/seed DB
 alembic upgrade head             # Run all migrations (Postgres / fresh SQLite)
 python scripts/run_all.py        # Start API (port 8000) + trader worker (legacy)
-python -m pytest tests/ -v       # Run tests (138 tests)
+python -m pytest tests/ -v       # Run tests (179 tests)
 uvicorn api.main:app --reload    # API only (no trader)
 python trader/main.py            # Trader only (no API, continuous)
 
@@ -111,13 +121,21 @@ python cli.py run options_swing --mode paper --dry-run
 python cli.py run equity_swing  --mode paper --approve
 python cli.py run all           --mode live  --once        # single cycle + exit
 python cli.py report last-run   --bot equity_swing [--json-out]
+
+# Security master
+python cli.py securities import [--file data/us_listed_master.csv] [--verify-ibkr] [--load-overrides]
+python cli.py securities verify  --symbol MOH --options-check
+python cli.py securities verify  --all
+python cli.py securities liquidity-refresh [--symbol AAPL] [--lookback 20]
+python cli.py match-company --text "Today Molina Healthcare made 5 billion in revenue"
+python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 ```
 
 ## Current State & Known Issues
 
 ### Working
 - Full config system with YAML + Pydantic validation (`BotsConfig` + per-bot configs)
-- SQLite DB with 15 tables; Postgres-ready via alembic
+- SQLite DB with 18 tables; Postgres-ready via alembic
 - FastAPI with 6 API route groups (14 endpoints) + 8 dashboard pages
 - Indicator calculations (EMA, SMA, RSI, MACD, ATR) — deterministic, tested
 - Risk engine: drawdown stop, position limits, cash reservation, kill switch, approve mode
@@ -126,7 +144,8 @@ python cli.py report last-run   --bot equity_swing [--json-out]
 - OptionsSwingBot: full debit spread pipeline (Greeks → gate → pricing → approve/submit)
 - EquitySwingBot: ATR-based sizing, sector concentration cap, risk-off cash/defensive modes, portfolio isolation
 - Unified CLI with continuous and single-cycle modes
-- 138 pytest tests all passing
+- **Security master** (`trader/securities/`): company-name→ticker deterministic matching via `security_master` + `security_alias` tables; Claude LLM now extracts `mentioned_companies` (not ticker guesses) and the matcher resolves them; audit log in `rss_entity_matches`
+- 179 pytest tests all passing
 
 ### Not Yet Tested End-to-End
 - Live IBKR connection (requires TWS/Gateway running)
@@ -145,3 +164,4 @@ python cli.py report last-run   --bot equity_swing [--json-out]
 - [2026-04-18] Initial build: complete v1 of automated trading bot. Created all 4 packages (common, trader, api, ui), 10 DB tables, IBKR client, indicators, sentiment (RSS + mock), swing strategy with regime filter, risk engine, debit spread execution, scheduler, FastAPI with 14 API endpoints, 8-page dashboard with dark theme and Chart.js charts, run_all script, README, and 18 passing tests. Fixed Starlette 1.0 TemplateResponse API and setuptools flat-layout discovery.
 - [2026-04-18] Greeks layer: added `trader/greeks/` sub-package (service, gate, strike_selector, logger). Removed stale flat-module aliases. Delta-based strike selection, IV-adjusted criteria, real bid/ask pricing, 10-check GreeksGate. 26 new tests (44 total).
 - [2026-04-19] Multi-bot refactor: `bots/` plugin package (`BaseBot`, `OptionsSwingBot`, `EquitySwingBot`); `execution/` package (`equity_execution.py` with ATR sizing + portfolio isolation, `options_execution.py` shim); unified `cli.py` (Click: sentiment refresh, run, report); `data/sp500.csv`; alembic migration 0004 (`portfolio_id` on orders/positions/trades); `BotsConfig`/`EquityBotConfig`/`OptionsBotConfig` in config; fixed broken greeks flat-module imports in `trader/execution.py`. 94 new tests (138 total, all passing).
+- [2026-04-21] Security master + deterministic company→ticker matching: `trader/securities/` package (normalize, master, matcher); 3 new DB tables (`security_master`, `security_alias`, `rss_entity_matches`) + alembic 0005; `SecuritiesConfig`; Claude LLM prompt updated to emit `mentioned_companies` instead of ticker entities; `_build_ticker_results_from_companies()` in claude_provider maps them to verified symbols post-LLM; `securities import/verify/liquidity-refresh` CLI commands; `match-company` debug command; ~220-row `data/us_listed_master.csv` seed + `data/manual_alias_overrides.csv`; 41 new tests (179 total, all passing).

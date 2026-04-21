@@ -59,7 +59,9 @@ def page_overview(request: Request):
     return templates.TemplateResponse(request, "overview.html", {
         "bot": bot, "equity": equity,
         "equities": equities, "positions": positions,
-        "events": recent_events, "page": "overview",
+        "events": recent_events,
+        "equity_labels": [str(e.timestamp) for e in equities],
+        "page": "overview",
     })
 
 
@@ -120,22 +122,31 @@ def page_sentiment(request: Request):
         key=lambda r: abs(r.score), reverse=True,
     )[:20]
 
-    # Parse breakdown JSON for display (defensive — legacy rows store plain strings).
-    def _parse(r):
+    # Parse market headlines for the accordion.
+    # New format: list of {"title": ..., "score": ...} dicts.
+    # Legacy format: list of plain strings — skip gracefully.
+    market_headlines = []
+    if market_rows and market_rows[0].sources_json:
         try:
-            return _json.loads(r.sources_json)[0] if r.sources_json else None
+            items = _json.loads(market_rows[0].sources_json)
+            if items and isinstance(items[0], dict):
+                market_headlines = items
         except Exception:
-            return None
-    breakdowns = {r.id: _parse(r) for r in list(market_rows) + list(sector_rows) + list(ticker_rows)}
+            pass
+
+    chart_scores = [r.score for r in rows if r.scope == "market"]
+    chart_labels = [str(r.timestamp) for r in rows if r.scope == "market"]
 
     return templates.TemplateResponse(request, "sentiment.html", {
         "sentiments": rows,
         "market_rows": market_rows,
         "sector_rows": sector_rows,
         "ticker_rows": ticker_rows,
-        "breakdowns": breakdowns,
+        "market_headlines": market_headlines,
         "provider": cfg.sentiment.provider,
         "budget": status.as_dict(),
+        "chart_scores": chart_scores,
+        "chart_labels": chart_labels,
         "page": "sentiment",
     })
 
@@ -148,7 +159,9 @@ def page_risk(request: Request):
     cfg = load_config()
     return templates.TemplateResponse(request, "risk.html", {
         "equities": equities, "bot": bot,
-        "risk_cfg": cfg.risk, "page": "risk",
+        "risk_cfg": cfg.risk,
+        "equity_labels": [str(e.timestamp) for e in equities],
+        "page": "risk",
     })
 
 

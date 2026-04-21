@@ -232,3 +232,51 @@ class SentimentLlmUsage(Base):
     status = Column(String(20), default="success")      # success | failed
     error_type = Column(String(60), nullable=True)
     error_message = Column(Text, nullable=True)
+
+
+class SecurityMaster(Base):
+    """Canonical registry of US-listed securities eligible for trading."""
+    __tablename__ = "security_master"
+
+    symbol = Column(String(20), primary_key=True)
+    name = Column(Text, nullable=False)
+    exchange = Column(String(20), nullable=False)
+    security_type = Column(String(10), nullable=False, default="STK")
+    currency = Column(String(10), nullable=False, default="USD")
+    active = Column(Boolean, nullable=False, default=True)
+    market_cap = Column(Float, nullable=True)
+    avg_dollar_volume_20d = Column(Float, nullable=True)
+    options_eligible = Column(Boolean, nullable=False, default=False)
+    ibkr_conid = Column(Integer, nullable=True)
+    updated_at = Column(DateTime, nullable=False, default=utcnow)
+
+    __table_args__ = (
+        Index("ix_security_master_exchange_active", "exchange", "active"),
+        Index("ix_security_master_options_eligible", "options_eligible"),
+    )
+
+
+class SecurityAlias(Base):
+    """Normalized name aliases that map company mentions to symbols."""
+    __tablename__ = "security_alias"
+
+    alias = Column(String(200), primary_key=True)       # normalized key (lowercase)
+    symbol = Column(String(20), nullable=False, index=True)
+    alias_type = Column(String(30), nullable=False)     # canonical|normalized_name|short_name|symbol|manual
+    priority = Column(Integer, nullable=False, default=100)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+
+
+class RssEntityMatch(Base):
+    """Audit log: every company mention from RSS that was run through the matcher."""
+    __tablename__ = "rss_entity_matches"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    article_id = Column(String(64), nullable=False, index=True)
+    company_input = Column(Text, nullable=False)
+    normalized_input = Column(Text, nullable=True)
+    symbol = Column(String(20), nullable=True)
+    match_type = Column(String(30), nullable=True)      # exact_alias|fuzzy|unmatched|ambiguous
+    match_score = Column(Float, nullable=True)
+    reason = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)

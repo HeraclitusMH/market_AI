@@ -178,6 +178,18 @@ python cli.py run options_swing --mode live --no-approve
 # Reports
 python cli.py report last-run --bot equity_swing
 python cli.py report last-run --bot all --json-out
+
+# Security master (company → ticker matching)
+python cli.py securities import                              # import CSV + generate aliases
+python cli.py securities import --verify-ibkr               # also verify each symbol with IBKR
+python cli.py securities import --load-overrides            # load manual_alias_overrides.csv
+python cli.py securities verify --symbol MOH --options-check
+python cli.py securities verify --all                       # verify all active securities
+python cli.py securities liquidity-refresh --symbol AAPL    # refresh avg_dollar_volume_20d
+
+# Debug: resolve a company name or text to a ticker
+python cli.py match-company --text "Molina Healthcare beat earnings"
+python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 ```
 
 Key flags:
@@ -270,11 +282,14 @@ market_AI/
   cli.py                  # Unified Click CLI entry point
   config.example.yaml     # Full configuration reference
   data/
-    sp500.csv             # ~180 S&P 500 symbols with sectors
+    sp500.csv                    # ~180 S&P 500 symbols with sectors (reference only)
+    us_listed_master.csv         # ~220 major US stocks — seed for security_master table
+    manual_alias_overrides.csv   # Priority-1 manual company→ticker aliases (~80 rows)
   common/                 # Shared: config, DB engine, ORM models, schemas, logging
   trader/
     greeks/               # Greek fetching, IV rank, strike selection, gate, logger
     sentiment/            # RSS lexicon + Claude LLM + mock providers
+    securities/           # Company→ticker matching: normalize, master import, alias matcher
     ibkr_client.py        # IBKR connection (singleton)
     market_data.py        # Historical bars with in-memory cache
     indicators.py         # EMA, SMA, RSI, MACD, ATR
@@ -302,8 +317,8 @@ market_AI/
   scripts/
     init_db.py            # Run alembic + seed bot_state
     run_all.py            # Launch API + trader as subprocesses
-  tests/                  # 138 pytest tests
-  alembic/versions/       # DB migrations (0001–0004)
+  tests/                  # 179 pytest tests
+  alembic/versions/       # DB migrations (0001–0005)
 ```
 
 ---
@@ -399,8 +414,17 @@ Override at runtime: `SENTIMENT_PROVIDER=claude_llm`.
 4. Sends up to `max_items_per_run` items (default 40) to Claude with a strict JSON output schema.
 5. Validates output — items with missing required fields are dropped; if **all** items fail, no snapshots are overwritten (previous data kept intact).
 6. Aggregates per-item results into market / sector / ticker snapshots with `weight = confidence × recency_decay(half-life 72h)`.
+7. After aggregation, resolves each `mentioned_companies` name to a ticker via the security master alias table (deterministic — no LLM guessing), producing additional `scope="ticker"` snapshots.
 
 On any API error the bot does **not** fall back to the RSS lexicon. It logs the failure to `events_log` and leaves existing snapshots untouched.
+
+### What the RSS lexicon provider does (per refresh)
+
+1. Fetches up to 50 entries from configured RSS feeds.
+2. Scores each headline with a positive/negative keyword lexicon, weighted by recency.
+3. Produces `scope=market` and `scope=sector` snapshots via keyword-based sector detection.
+4. Scans the same headlines for known company aliases from the `security_alias` table
+   (multi-word aliases + long single-word manual overrides), producing `scope=ticker` snapshots.
 
 ### Budget cap (€10/month default)
 
@@ -417,10 +441,41 @@ The dashboard `/sentiment` page shows a red **STOPPED** badge when a cap is hit.
 
 ---
 
+## Company → Ticker Matching
+
+Both sentiment providers produce `scope="ticker"` snapshots using a deterministic company-name resolver — no LLM ticker guessing.
+
+### How it works
+
+1. `data/us_listed_master.csv` (~220 major US stocks) is imported into `security_master` on first startup.
+2. For each security, aliases are generated automatically: normalised company name (suffixes stripped), symbol lowercase, short name. Manual overrides can be added in `data/manual_alias_overrides.csv`.
+3. **Claude LLM path**: the prompt asks Claude to emit `mentioned_companies` (company names as written in the text). After the LLM call, each name is normalised and looked up in `security_alias`. Exact matches resolve to a ticker; ambiguous matches (two different symbols) are skipped.
+4. **RSS lexicon path**: headlines are scanned with `\b{alias}\b` word-boundary regex against multi-word aliases and long single-word manual overrides. This avoids false positives from short words like "apple" or "meta" appearing in non-financial context.
+
+### Setting up the security master
+
+```bash
+# Import CSV + generate aliases (runs automatically on first init_db.py)
+python cli.py securities import
+
+# Load manual alias overrides (e.g. "molina" → MOH, "nvidia" → NVDA)
+python cli.py securities import --load-overrides
+
+# Verify IBKR contracts for all securities (requires IB Gateway running)
+python cli.py securities verify --all
+
+# Debug: check how a company name resolves
+python cli.py match-company --companies "Molina Healthcare,UnitedHealth Group"
+```
+
+The `security_master` table is auto-seeded from `data/us_listed_master.csv` whenever `create_tables()` finds the table empty (e.g., on fresh DB creation). You can re-import at any time without duplicates.
+
+---
+
 ## Running Tests
 
 ```bash
-python -m pytest tests/ -v    # 138 tests
+python -m pytest tests/ -v    # 179 tests
 ```
 
 ---
@@ -433,3 +488,8 @@ python -m pytest tests/ -v    # 138 tests
 - **IV Rank** requires the IBKR historical-volatility market data entitlement; falls back to "unknown" regime when unavailable (gate warns, does not block).
 - **`data/sp500.csv`** exists as a reference file (~180 stocks with sectors) but is not yet auto-ingested — the live universe is still seeded from the embedded `SEED_TICKERS` list in `trader/universe.py`.
 - **`close_all` control** currently activates the kill switch only; actual IBKR position-closing orders are not yet wired.
+- **Company→ticker matching coverage** — only securities in `security_master` (~220 major US stocks) are resolved. Smaller-cap names mentioned in news will not produce ticker snapshots unless manually added to the CSV and re-imported.
+
+## QUICK CMD:
+
+- ** uvicorn api.main:app --reload ** To observe the port

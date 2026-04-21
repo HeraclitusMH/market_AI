@@ -96,6 +96,11 @@ def refresh_and_store(provider: Optional[SentimentProvider] = None) -> dict:
             results.extend(provider.fetch_sector_sentiment())
         except Exception as e:
             log.error("Sector sentiment fetch failed: %s", e)
+        if hasattr(provider, "fetch_ticker_sentiment"):
+            try:
+                results.extend(provider.fetch_ticker_sentiment())
+            except Exception as e:
+                log.error("Ticker sentiment fetch failed: %s", e)
 
         _persist_snapshots(results)
         summary = {

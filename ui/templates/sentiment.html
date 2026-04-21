@@ -9,9 +9,10 @@
     {{ provider }}
   </span>
 
-  <button onclick="postControl('/sentiment/refresh')" style="margin-left: 1em; padding: 0.5em 1em; background: #4f8cff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em;">
+  <button id="refreshBtn" onclick="triggerSentimentRefresh()" style="margin-left: 1em; padding: 0.5em 1em; background: #4f8cff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em;">
     ↻ Refresh
   </button>
+  <span id="refreshStatus" style="margin-left: 0.75em; font-size: 0.9em;"></span>
 
   {% if provider == 'claude_llm' %}
     <span style="margin-left: 1em;"><strong>LLM spend (EUR):</strong></span>
@@ -49,6 +50,27 @@
   {% endfor %}
   </tbody>
 </table>
+
+{% if market_headlines %}
+<details style="margin: 0.75em 0 1.5em;">
+  <summary style="cursor: pointer; font-weight: bold; padding: 0.4em 0;">
+    Headlines analysed ({{ market_headlines | length }})
+  </summary>
+  <table style="margin-top: 0.5em;">
+    <thead>
+      <tr><th>Score</th><th>Headline</th></tr>
+    </thead>
+    <tbody>
+    {% for h in market_headlines %}
+      <tr>
+        <td><span class="badge badge-{{ 'green' if h.score > 0.2 else 'red' if h.score < -0.2 else 'gray' }}">{{ "%.2f"|format(h.score) }}</span></td>
+        <td>{{ h.title }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</details>
+{% endif %}
 
 <h2>Sectors</h2>
 <table>
@@ -109,9 +131,36 @@
 
 {% block scripts %}
 <script>
+async function triggerSentimentRefresh() {
+  const btn = document.getElementById('refreshBtn');
+  const status = document.getElementById('refreshStatus');
+  btn.disabled = true;
+  btn.textContent = 'Refreshing…';
+  status.textContent = '';
+  try {
+    const resp = await fetch('/sentiment/refresh', { method: 'POST' });
+    const data = await resp.json();
+    if (data.status === 'success') {
+      status.style.color = '#2ecc71';
+      status.textContent = `Refreshed — ${data.snapshots_written} snapshots written`;
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      btn.disabled = false;
+      btn.textContent = '↻ Refresh';
+      status.style.color = '#e74c3c';
+      status.textContent = data.reason || data.status;
+    }
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = '↻ Refresh';
+    status.style.color = '#e74c3c';
+    status.textContent = 'Request failed: ' + e.message;
+  }
+}
+
 (function() {
-  const market = {{ sentiments|selectattr("scope","equalto","market")|map(attribute="score")|list|tojson }};
-  const labels = {{ sentiments|selectattr("scope","equalto","market")|map(attribute="timestamp")|map("string")|list|tojson }};
+  const market = {{ chart_scores|tojson }};
+  const labels = {{ chart_labels|tojson }};
   if (market.length > 0) {
     buildSentimentChart('sentimentChart', labels.reverse(), market.reverse());
   }

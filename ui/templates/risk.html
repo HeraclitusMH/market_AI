@@ -33,7 +33,7 @@
 <script>
 (function() {
   const dd = {{ equities|map(attribute='drawdown_pct')|list|tojson }};
-  const labels = {{ equities|map(attribute='timestamp')|list|tojson }};
+  const labels = {{ equity_labels|tojson }};
   if (dd.length > 0) {
     const ctx = document.getElementById('drawdownChart').getContext('2d');
     new Chart(ctx, {

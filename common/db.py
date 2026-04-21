@@ -59,6 +59,37 @@ def create_tables() -> None:
     """Create all tables directly — used for SQLite dev/test only.
     For Postgres, prefer running `alembic upgrade head`."""
     Base.metadata.create_all(get_engine())
+    _auto_seed_security_master()
+
+
+def _auto_seed_security_master() -> None:
+    """Import us_listed_master.csv + manual overrides on first startup if the
+    security_master table is empty.  Idempotent: skips when rows already exist."""
+    try:
+        from common.models import SecurityMaster
+        with get_db() as db:
+            if db.query(SecurityMaster.symbol).limit(1).first() is not None:
+                return  # already seeded
+        # Table is empty — import now
+        from common.config import get_config
+        from trader.securities.master import import_csv, load_manual_overrides
+        import logging
+        _log = logging.getLogger(__name__)
+        cfg = get_config()
+        csv_path = cfg.securities.master_csv_path
+        _log.info("Security master is empty — auto-seeding from %s", csv_path)
+        summary = import_csv(csv_path, verify_ibkr=False, refresh_aliases=True)
+        _log.info(
+            "Security master auto-seed done: added=%d aliases=%d",
+            summary["added"], summary["aliases_written"],
+        )
+        ov = load_manual_overrides(cfg.securities.alias_overrides_path)
+        _log.info("Manual alias overrides loaded: %d", ov["loaded"])
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Security master auto-seed failed (non-fatal): %s", exc
+        )
 
 
 @contextmanager

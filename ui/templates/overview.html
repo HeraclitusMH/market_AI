@@ -70,7 +70,7 @@
 <script>
 (function() {
   const data = {{ equities|map(attribute='net_liquidation')|list|tojson }};
-  const labels = {{ equities|map(attribute='timestamp')|list|tojson }};
+  const labels = {{ equity_labels|tojson }};
   const dd = {{ equities|map(attribute='drawdown_pct')|list|tojson }};
   if (data.length > 0) {
     buildEquityChart('equityChart', labels, data, dd);

@@ -20,7 +20,7 @@ import json
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple  # noqa: F401 (Tuple used in _build_ticker_results)
 
 import feedparser
 from pydantic import ValidationError
@@ -67,11 +67,12 @@ Schema (TypeScript-ish):
     {
       "id": string,           // MUST echo one of the input ids exactly
       "entities": [
-        { "type": "market" | "sector" | "ticker",
+        { "type": "market" | "sector",
           "key": string,
           "sentiment": number,      // -1.0 to 1.0
           "confidence": number }    //  0.0 to 1.0
       ],
+      "mentioned_companies": [string],  // company names as written in the text, NOT tickers
       "reasons": [string],    // 1-5 short bullets grounded in the text
       "key_phrases": [string] // optional; 0-10 short phrases
     }
@@ -83,8 +84,11 @@ Rules:
 - Every item MUST include exactly one market entity with key "US".
 - Include a sector entity only if the headline clearly indicates one
   (e.g. "semiconductors", "banks", "energy"). Do not guess.
-- Include a ticker entity only if the ticker is explicit or extremely obvious
-  (e.g. "Apple" -> AAPL, "Nvidia" -> NVDA). Otherwise omit; never hallucinate.
+- Do NOT include ticker entities. Use mentioned_companies instead.
+- mentioned_companies: list every publicly traded company mentioned in the text,
+  using the company name exactly as it appears (or the most recognisable form).
+  Do NOT guess or invent tickers. Examples: "Molina Healthcare", "Apple", "JPMorgan Chase".
+  Omit if no specific company is clearly mentioned.
 - If the headline is ambiguous or not market-relevant, return a market entity
   with sentiment near 0 and a low confidence — do not skip the item.
 - Multi-language: interpret the headline/snippet in its original language.
@@ -400,9 +404,28 @@ class ClaudeLlmSentimentProvider(SentimentProvider):
                 min_confidence=self.claude_cfg.min_confidence_to_use,
                 now=now,
             )
-
             run.status = "success"
-            return run
+            # Keep a reference so step 8b can use them after the DB block closes.
+            _items_for_ticker = items_for_llm
+            _valid_for_ticker = valid_items
+
+        # 8b. Deterministic company→ticker mapping — runs in its OWN DB session,
+        # AFTER the main session commits, to avoid SQLite write-lock contention.
+        if run.status == "success":
+            try:
+                ticker_results = _build_ticker_results_from_companies(
+                    items_for_llm=_items_for_ticker,
+                    llm_items=_valid_for_ticker,
+                    now=now,
+                )
+                run.results.extend(ticker_results)
+                log.info(
+                    "Company→ticker: added %d ticker sentiment snapshot(s)", len(ticker_results)
+                )
+            except Exception as exc:
+                log.warning("Company→ticker matching failed (non-fatal): %s", exc)
+
+        return run
 
     # ---------- internals ----------
 
@@ -419,6 +442,89 @@ class ClaudeLlmSentimentProvider(SentimentProvider):
         except Exception:
             # Never let event logging mask a real error.
             log.exception("Failed to write event log: %s", etype)
+
+
+def _build_ticker_results_from_companies(
+    *,
+    items_for_llm: List,
+    llm_items: List,
+    now,
+) -> List:
+    """Match mentioned_companies in each LLM item to symbols, return ticker SentimentResults.
+
+    For each successfully matched symbol, the per-article market-entity sentiment
+    is used as the ticker score (proxy: article-level bullishness/bearishness).
+    Results are aggregated across articles so one symbol can appear in many.
+    """
+    from trader.sentiment.base import SentimentResult
+    from trader.sentiment.aggregate import recency_weight
+    from trader.securities.matcher import match_companies_to_symbols
+    from common.models import SecurityAlias
+
+    # Guard: warn early if the alias table is empty so the user knows why nothing matches.
+    with get_db() as _chk:
+        has_aliases = _chk.query(SecurityAlias.alias).limit(1).first() is not None
+    if not has_aliases:
+        log.warning(
+            "security_alias table is empty — no company→ticker matches possible. "
+            "Run: python cli.py securities import"
+        )
+        return []
+
+    news_by_id = {it.id: it for it in items_for_llm}
+
+    # Build per-symbol contributions: {symbol: [(sentiment, weight)]}
+    contributions: Dict[str, List[Tuple[float, float]]] = {}
+
+    for llm_item in llm_items:
+        companies = getattr(llm_item, "mentioned_companies", [])
+        if not companies:
+            continue
+
+        # Use the market entity's sentiment as the proxy score for all companies
+        # mentioned in this article.
+        market_sentiment: Optional[float] = None
+        market_confidence: float = 0.0
+        for ent in llm_item.entities:
+            if ent.type == "market" and ent.key.strip().upper() == "US":
+                market_sentiment = float(ent.sentiment)
+                market_confidence = float(ent.confidence)
+                break
+
+        if market_sentiment is None or market_confidence < 0.2:
+            continue
+
+        src = news_by_id.get(llm_item.id)
+        recency = recency_weight(src.published_at if src else None, now)
+        weight = market_confidence * recency
+
+        matches = match_companies_to_symbols(
+            companies,
+            article_id=llm_item.id,
+            write_audit=True,
+        )
+        for m in matches:
+            if m.symbol:
+                contributions.setdefault(m.symbol, []).append((market_sentiment, weight))
+
+    # Aggregate contributions per symbol → one SentimentResult each
+    results = []
+    for symbol, contribs in contributions.items():
+        total_w = sum(w for _, w in contribs)
+        if total_w <= 0:
+            continue
+        score = sum(s * w for s, w in contribs) / total_w
+        score = max(-1.0, min(1.0, score))
+        results.append(SentimentResult(
+            scope="ticker",
+            key=symbol,
+            score=round(score, 4),
+            summary=f"{len(contribs)} article(s) via company-name matching",
+            sources=[],
+        ))
+        log.debug("Ticker sentiment from company match: %s score=%.4f n=%d", symbol, score, len(contribs))
+
+    return results
 
 
 def _cost_from_response(
