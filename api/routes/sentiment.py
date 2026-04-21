@@ -11,6 +11,7 @@ from common.config import get_config
 from common.models import SentimentSnapshot
 from common.schema import SentimentLlmBudgetOut, SentimentOut
 from trader.sentiment import budget as budget_mod
+from trader.sentiment.factory import refresh_and_store
 
 router = APIRouter(tags=["sentiment"])
 
@@ -49,3 +50,13 @@ def llm_budget(db: Session = Depends(get_db)):
         budget_stopped=status.budget_stopped,
         reason=status.reason,
     )
+
+
+@router.post("/sentiment/refresh")
+def trigger_refresh():
+    result = refresh_and_store()
+    return {
+        "status": result.get("status", "unknown"),
+        "snapshots_written": result.get("snapshots_written", 0),
+        "reason": result.get("reason", ""),
+    }

@@ -9,6 +9,10 @@
     {{ provider }}
   </span>
 
+  <button onclick="postControl('/sentiment/refresh')" style="margin-left: 1em; padding: 0.5em 1em; background: #4f8cff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em;">
+    ↻ Refresh
+  </button>
+
   {% if provider == 'claude_llm' %}
     <span style="margin-left: 1em;"><strong>LLM spend (EUR):</strong></span>
     <span>today {{ "%.4f"|format(budget.today_eur) }} / {{ "%.2f"|format(budget.daily_cap_eur) }}</span>
@@ -107,7 +111,7 @@
 <script>
 (function() {
   const market = {{ sentiments|selectattr("scope","equalto","market")|map(attribute="score")|list|tojson }};
-  const labels = {{ sentiments|selectattr("scope","equalto","market")|map(attribute="timestamp")|list|tojson }};
+  const labels = {{ sentiments|selectattr("scope","equalto","market")|map(attribute="timestamp")|map("string")|list|tojson }};
   if (market.length > 0) {
     buildSentimentChart('sentimentChart', labels.reverse(), market.reverse());
   }
