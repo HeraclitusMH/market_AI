@@ -69,13 +69,20 @@ class OptionsSwingBot(BaseBot):
             log.info("[options_swing] Bot is disabled — no trades selected.")
             return []
 
-        # Use the ranking pipeline's candidate selection
+        # Use the ranking pipeline's candidate selection then filter by options_eligible
         candidates_from_ranking = select_candidates(context.ranked)
         scored_map = {c.symbol: bd for c, bd in ranked}
 
         intents: List[TradeIntent] = []
         for rs in candidates_from_ranking:
             if not rs.eligible or rs.bias is None:
+                continue
+            if not rs.options_eligible:
+                log.debug(
+                    "[options_swing] %s skipped: options_eligible=False (%s)",
+                    rs.symbol,
+                    rs.components.get("optionability", {}).get("reasons", []),
+                )
                 continue
             bd = scored_map.get(rs.symbol)
             if bd is None:

@@ -14,6 +14,8 @@ Both bots can run together or independently. Each has its own position namespace
 
 ## Features
 
+- **Multi-factor composite scoring** — 5-factor [0,1] score per symbol: sentiment (30%), momentum/trend (25%), risk (20%), liquidity (15%), fundamentals (10%). Missing factors redistribute weight; both bots gate on the same composite score.
+- **Eligibility gates** — `equity_eligible` (liquidity + IBKR-verified contract) and `options_eligible` (from `SecurityMaster`; safe-by-default=False). Each bot hard-blocks symbols that fail its gate.
 - **Swing strategy** (2–20 day holds) — technical analysis (EMA, SMA, RSI, MACD, ATR) + market/sector/ticker sentiment
 - **Defined risk only** — options bot trades debit spreads exclusively (max loss = net debit paid)
 - **ATR-based equity sizing** — `shares = floor(nav × risk% / (atr × multiplier))`; automatically caps to available cash and sector concentration limit
@@ -22,7 +24,7 @@ Both bots can run together or independently. Each has its own position namespace
 - **Risk engine** — drawdown stop, per-bot position limits, cash reservation, kill switch
 - **Greeks gate** — 10-check filter before any options order (IV rank, delta range, theta/delta ratio, vega, gamma-near-expiry, liquidity, pricing ROC, composite score)
 - **LLM-powered sentiment** — Claude AI scores each news item with per-item sentiment, sector/ticker tagging, and a strict €10/month budget cap; RSS lexicon available as a lightweight fallback
-- **Dashboard** — full local web UI with charts, controls, and manual overrides
+- **Dashboard** — full local web UI with charts, controls, expandable per-symbol factor breakdowns, and manual overrides
 - **Unified CLI** — `python cli.py run [options_swing|equity_swing|all]`
 
 ---
@@ -228,6 +230,17 @@ bots:
     max_sector_concentration: 0.30
     risk_off_mode: "cash"        # "cash" or "defensive"
 
+ranking:
+  # Composite factor weights (missing factors redistribute weight proportionally)
+  w_sentiment: 0.30
+  w_momentum_trend: 0.25
+  w_risk: 0.20
+  w_liquidity: 0.15
+  w_fundamentals: 0.10
+  # Score threshold: >= enter_threshold → bullish; <= (1-enter_threshold) → bearish
+  enter_threshold: 0.55
+  min_dollar_volume: 20_000_000  # liquidity gate for equity_eligible
+
 risk:
   max_drawdown_pct: 50
   max_risk_per_trade_pct: 5      # used by options bot
@@ -294,7 +307,8 @@ market_AI/
     market_data.py        # Historical bars with in-memory cache
     indicators.py         # EMA, SMA, RSI, MACD, ATR
     universe.py           # Ticker universe: seed, verify, get_verified_universe()
-    ranking.py            # Sentiment-based symbol ranking
+    scoring.py            # Multi-factor scoring: compute_composite(), liquidity/momentum/risk/sentiment/optionability factors
+    ranking.py            # rank_symbols() — runs factor pipeline per symbol, sets equity_eligible/options_eligible
     strategy.py           # Regime check, score_symbol(), generate_signals()
     risk.py               # Risk engine: drawdown, position limits, cash reservation
     execution.py          # Debit spread order construction + submit
@@ -317,7 +331,7 @@ market_AI/
   scripts/
     init_db.py            # Run alembic + seed bot_state
     run_all.py            # Launch API + trader as subprocesses
-  tests/                  # 179 pytest tests
+  tests/                  # 205 pytest tests
   alembic/versions/       # DB migrations (0001–0005)
 ```
 
@@ -335,7 +349,7 @@ market_AI/
 | `/risk` | Drawdown chart + risk metrics |
 | `/controls` | Manual overrides — pause, kill switch, approve mode |
 | `/config` | Current configuration (read-only) |
-| `/rankings` | Latest symbol rankings with sentiment components |
+| `/rankings` | Latest symbol rankings with composite score + expandable per-factor breakdown (`<details>`) |
 
 ---
 
@@ -475,7 +489,7 @@ The `security_master` table is auto-seeded from `data/us_listed_master.csv` when
 ## Running Tests
 
 ```bash
-python -m pytest tests/ -v    # 179 tests
+python -m pytest tests/ -v    # 205 tests
 ```
 
 ---

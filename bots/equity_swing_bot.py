@@ -131,12 +131,21 @@ class EquitySwingBot(BaseBot):
 
         sector_values = _get_sector_values()
 
+        # Build a lookup: symbol → RankedSymbol for equity_eligible check
+        ranked_lookup = {rs.symbol: rs for rs in context.ranked}
+
         intents: List[TradeIntent] = []
         for candidate, breakdown in ranked:
             if len(intents) >= slots_available:
                 break
 
-            # Entry threshold filter
+            # Require equity_eligible flag from composite ranking
+            rs = ranked_lookup.get(candidate.symbol)
+            if rs is not None and not rs.equity_eligible:
+                log.debug("[equity_swing] %s skipped: equity_eligible=False", candidate.symbol)
+                continue
+
+            # Entry threshold filter (composite score in [0,1])
             if breakdown.final_score < equity_cfg.long_entry_threshold:
                 continue
 

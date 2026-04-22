@@ -217,8 +217,11 @@ def page_rankings(request: Request):
         p._rationale = _parse(p.rationale_json)
         p._legs = _parse(p.legs_json)
 
-    bullish = [r for r in ranking_rows if r.eligible and r.score_total > 0]
-    bearish = [r for r in ranking_rows if r.eligible and r.score_total < 0]
+    cfg = load_config()
+    enter_thr = cfg.ranking.enter_threshold
+    bearish_thr = 1.0 - enter_thr
+    bullish = [r for r in ranking_rows if r.eligible and r.score_total >= enter_thr]
+    bearish = [r for r in ranking_rows if r.eligible and r.score_total <= bearish_thr]
 
     return templates.TemplateResponse(request, "rankings.html", {
         "ranking_rows": ranking_rows,
@@ -226,5 +229,7 @@ def page_rankings(request: Request):
         "bearish": sorted(bearish, key=lambda r: r.score_total),
         "plans": plans,
         "last_ts": max_ts,
+        "enter_threshold": enter_thr,
+        "bearish_threshold": bearish_thr,
         "page": "rankings",
     })

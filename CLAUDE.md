@@ -26,11 +26,14 @@ Six top-level packages plus data and scripts — flat layout, no `src/` director
 - **EquitySwingBot long-only (v1)** — buys stock shares; no shorting unless `long_only: false` in config.
 - **ATR-based equity sizing** — `stop = entry - atr_stop_multiplier × ATR(14)`; `shares = floor(nav × risk_per_trade_pct% / stop_distance)`. Capped to available cash and sector concentration limit.
 - **Portfolio isolation via `portfolio_id`** — `Order`, `Position`, `Trade` rows carry `portfolio_id` ("options_swing" or "equity_swing"). Each bot's risk/position checks filter by its own portfolio_id. Migration: `alembic/versions/0004_portfolio_id.py`.
-- **Bot plugin pattern** — `BaseBot` ABC defines `build_candidates / score_candidate / select_trades / execute_intent`. `run()` orchestrates the full cycle (regime → universe → score → select → execute). Both bots share universe, regime check, and `score_symbol()` scoring.
+- **Bot plugin pattern** — `BaseBot` ABC defines `build_candidates / score_candidate / select_trades / execute_intent`. `run()` orchestrates the full cycle (regime → universe → rank → score → select → execute). Both bots share universe, regime check, and composite ranking score.
+- **Multi-factor composite scoring** — `rank_symbols()` computes a unified [0,1] score per symbol from 5 factors: sentiment (30%), momentum/trend (25%), risk (20%), liquidity (15%), fundamentals (10%). Missing factors redistribute weight. Score drives bias (≥0.55 → bullish, ≤0.45 → bearish) and both bot selection thresholds.
+- **Eligibility gates** — `equity_eligible` (liquidity + contract verified) and `options_eligible` (from `SecurityMaster.options_eligible`, safe-by-default=False). OptionsSwingBot hard-blocks `options_eligible=False`; EquitySwingBot hard-blocks `equity_eligible=False`.
+- **DTE config unification** — canonical planner DTE lives in `cfg.options.planner_dte_{min,max,target,fallback_min}`. `cfg.ranking.dte_*` kept for backward compat with deprecation comment.
 - **Cash reservation** — before placing any order, cash equal to max loss is reserved; trade blocked if insufficient.
 - **Approve mode defaults ON** — signals saved to DB as `pending_approval`; orders not submitted until disabled.
 - **Starlette 1.0 TemplateResponse API** — uses `TemplateResponse(request, name, context)` signature.
-- **Sentiment** — pluggable `SentimentProvider` ABC. Providers: `rss_lexicon`, `claude_llm`, `mock`. Shared by both bots.
+- **Sentiment** — pluggable `SentimentProvider` ABC. Providers: `rss_lexicon`, `claude_llm`, `mock`. Shared by both bots. Sentiment is one input to the composite score (not the only input).
 - **No paid APIs** — core universe seeded from embedded SEED_TICKERS (~50 tickers) + RSS-discovered tickers (verified via IBKR). `data/sp500.csv` exists as reference but is not yet auto-ingested into the universe builder.
 
 ### Patterns & Conventions
@@ -54,11 +57,12 @@ Six top-level packages plus data and scripts — flat layout, no `src/` director
 - **Technical indicators** → `trader/indicators.py` (EMA, SMA, RSI, MACD, ATR + `compute_indicators()`)
 - **Market data** → `trader/market_data.py` (`fetch_bars()`, `get_latest_bars()`, in-memory cache)
 - **Strategy & scoring** → `trader/strategy.py` (`check_regime()` SPY-based regime, `score_symbol()` per ticker, `generate_signals()` legacy entry)
+- **Multi-factor scoring** → `trader/scoring.py` (`compute_composite()`, `compute_sentiment_factor()`, `compute_liquidity_factor()`, `compute_momentum_trend_factor()`, `compute_risk_factor()`, `compute_optionability_factor()`, `compute_fundamentals_factor()`)
 - **Risk engine** → `trader/risk.py` (`check_can_trade()`, `compute_max_risk_for_trade()`, `record_equity_snapshot()`, `log_event()`)
 - **Options order construction** → `trader/execution.py` (debit spread spec, IBKR BAG combo orders, `execute_signal()`)
 - **Options trade planner** → `trader/options_planner.py` (`plan_trade()` — pure planning, no submission, writes TradePlan rows)
 - **Universe** → `trader/universe.py` (`seed_universe()`, `get_verified_universe()`, `verify_contract()`, `SEED_TICKERS`)
-- **Symbol ranking** → `trader/ranking.py` (`rank_symbols()`, `select_candidates()`, `RankedSymbol`)
+- **Symbol ranking** → `trader/ranking.py` (`rank_symbols()`, `select_candidates()`, `RankedSymbol` — re-exports sentiment internals from `trader/scoring.py`)
 - **Scheduler** → `trader/scheduler.py` (10s heartbeat, sentiment + ranking + signal eval + rebalance + IBKR sync)
 - **Trader entry point** → `trader/main.py`
 
@@ -102,7 +106,7 @@ Six top-level packages plus data and scripts — flat layout, no `src/` director
 - **Unified CLI** → `cli.py` (Click; commands below)
 - **SP500 reference** → `data/sp500.csv` (~180 stocks, `symbol,name,sector`)
 - **Alembic migrations** → `alembic/versions/` (0001–0005)
-- **Tests** → `tests/` (179 tests, all passing)
+- **Tests** → `tests/` (205 tests, all passing)
 
 ## Commands
 
@@ -111,7 +115,7 @@ pip install -e ".[dev]"          # Install with dev deps (includes click)
 python scripts/init_db.py        # Create/seed DB
 alembic upgrade head             # Run all migrations (Postgres / fresh SQLite)
 python scripts/run_all.py        # Start API (port 8000) + trader worker (legacy)
-python -m pytest tests/ -v       # Run tests (179 tests)
+python -m pytest tests/ -v       # Run tests (205 tests)
 uvicorn api.main:app --reload    # API only (no trader)
 python trader/main.py            # Trader only (no API, continuous)
 
@@ -134,18 +138,22 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 ## Current State & Known Issues
 
 ### Working
-- Full config system with YAML + Pydantic validation (`BotsConfig` + per-bot configs)
+- Full config system with YAML + Pydantic validation (`BotsConfig` + per-bot configs, `FundamentalsConfig`)
 - SQLite DB with 18 tables; Postgres-ready via alembic
 - FastAPI with 6 API route groups (14 endpoints) + 8 dashboard pages
 - Indicator calculations (EMA, SMA, RSI, MACD, ATR) — deterministic, tested
 - Risk engine: drawdown stop, position limits, cash reservation, kill switch, approve mode
 - Sentiment: RSS lexicon + Claude LLM + mock providers, DB persistence, recency weighting
-- Strategy: SPY regime filter, weighted 4-factor scoring (`score_symbol()`), signal generation
+- Strategy: SPY regime filter, legacy 4-factor `score_symbol()` (still used by equity bot `score_candidate`)
+- **Multi-factor composite scoring** (`trader/scoring.py`): 5-factor [0,1] score per symbol driving both bots; missing factors redistribute weight proportionally; expandable `/rankings` breakdown with `<details>` (no JS)
+- `equity_eligible` gate: passes when liquidity checks out and contract is verified in IBKR
+- `options_eligible` gate: safe-by-default=False; reads `SecurityMaster.options_eligible`
+- DTE config unified: canonical `cfg.options.planner_dte_*`; `cfg.ranking.dte_*` kept deprecated
 - OptionsSwingBot: full debit spread pipeline (Greeks → gate → pricing → approve/submit)
 - EquitySwingBot: ATR-based sizing, sector concentration cap, risk-off cash/defensive modes, portfolio isolation
 - Unified CLI with continuous and single-cycle modes
 - **Security master** (`trader/securities/`): company-name→ticker deterministic matching via `security_master` + `security_alias` tables; Claude LLM now extracts `mentioned_companies` (not ticker guesses) and the matcher resolves them; audit log in `rss_entity_matches`
-- 179 pytest tests all passing
+- 205 pytest tests all passing
 
 ### Not Yet Tested End-to-End
 - Live IBKR connection (requires TWS/Gateway running)
@@ -165,3 +173,4 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 - [2026-04-18] Greeks layer: added `trader/greeks/` sub-package (service, gate, strike_selector, logger). Removed stale flat-module aliases. Delta-based strike selection, IV-adjusted criteria, real bid/ask pricing, 10-check GreeksGate. 26 new tests (44 total).
 - [2026-04-19] Multi-bot refactor: `bots/` plugin package (`BaseBot`, `OptionsSwingBot`, `EquitySwingBot`); `execution/` package (`equity_execution.py` with ATR sizing + portfolio isolation, `options_execution.py` shim); unified `cli.py` (Click: sentiment refresh, run, report); `data/sp500.csv`; alembic migration 0004 (`portfolio_id` on orders/positions/trades); `BotsConfig`/`EquityBotConfig`/`OptionsBotConfig` in config; fixed broken greeks flat-module imports in `trader/execution.py`. 94 new tests (138 total, all passing).
 - [2026-04-21] Security master + deterministic company→ticker matching: `trader/securities/` package (normalize, master, matcher); 3 new DB tables (`security_master`, `security_alias`, `rss_entity_matches`) + alembic 0005; `SecuritiesConfig`; Claude LLM prompt updated to emit `mentioned_companies` instead of ticker entities; `_build_ticker_results_from_companies()` in claude_provider maps them to verified symbols post-LLM; `securities import/verify/liquidity-refresh` CLI commands; `match-company` debug command; ~220-row `data/us_listed_master.csv` seed + `data/manual_alias_overrides.csv`; 41 new tests (179 total, all passing).
+- [2026-04-22] Multi-factor composite scoring: new `trader/scoring.py` with 5 factor functions (sentiment, momentum/trend, risk, liquidity, optionability) + `compute_composite()` with proportional weight redistribution; `rank_symbols()` rewritten to run full factor pipeline per symbol; `RankedSymbol` gains `equity_eligible`/`options_eligible` flags; both bots hard-gate on their eligibility flag; DTE config unified under `cfg.options.planner_dte_*`; `/rankings` dashboard shows expandable `<details>` factor breakdowns; `FundamentalsConfig` added to config; `enter_threshold` default changed 0.25→0.55; 26 new tests in `tests/test_scoring.py` (205 total, all passing).

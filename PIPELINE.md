@@ -26,9 +26,12 @@
 - **Sentiment** is pluggable (`rss_lexicon` | `claude_llm` | `mock`). Claude has a
   hard €10/month budget cap and **must not fall back to lexicon** on failure. Output
   is three scopes — market / sector / ticker — persisted as `SentimentSnapshot`.
-- **Ranking** combines sentiment scopes with recency weighting (stale > 72h → 0; 24-72h → ×0.5),
-  redistributes weight when sources are missing, then labels each symbol bullish /
-  bearish / neutral using `enter_threshold`. Rows persisted as `SymbolRanking`.
+- **Ranking** runs a 5-factor composite scoring pipeline per symbol — sentiment (30%),
+  momentum/trend (25%), risk (20%), liquidity (15%), fundamentals (10%) — with
+  proportional weight redistribution for missing factors. Each symbol also gets
+  `equity_eligible` (liquidity gate + IBKR-verified) and `options_eligible` (from
+  `SecurityMaster`; safe-by-default=False) flags. Score drives bias labels
+  (`≥0.55 → bullish`; `≤0.45 → bearish`). Rows persisted as `SymbolRanking`.
 - **Options** score + plan produces a `TradePlan` (status `proposed` / `skipped`) via
   `trader/options_planner.py::plan_trade`. Execution picks delta-matched legs through
   `GreeksService → StrikeSelector → GreeksGate`, then builds an IBKR BAG combo order.
@@ -300,49 +303,66 @@ flowchart TD
 
 ---
 
-### Phase E — Ranking
+### Phase E — Ranking (multi-factor composite)
 
-- **Purpose.** Combine market/sector/ticker sentiment with recency weighting into
-  one composite score per universe symbol, with bullish / bearish bias labels.
+- **Purpose.** Compute a 5-factor composite [0,1] score per universe symbol, set
+  eligibility flags, and label each symbol bullish / bearish / neutral.
 - **Trigger / cadence.** Per bot cycle (via `BaseBot.run`). Scheduler also invokes
   it at the sentiment-refresh cadence.
 - **Upstream inputs.**
   - `List[UniverseItem]` from Phase C.
-  - Latest `SentimentSnapshot` per scope.
-  - `Universe.liquidity_metrics_json` (when refreshed via `refresh_universe()`).
-- **Core logic** (`trader/ranking.py::rank_symbols`):
-  1. For each symbol, pull latest market/sector/ticker snapshots.
-  2. Apply recency: `age>72h → 0 (stale)`; `24<age≤72 → ×0.5 (penalized)`.
-  3. Weight redistribution when sources are missing (e.g., ticker-only path →
-     `(market, sector, ticker) = (0.30, 0.0, 0.70)`).
-  4. `_check_eligibility` rejects unverified contracts and low-liquidity names
-     (using `cfg.ranking.min_dollar_volume`, `cfg.universe.min_price`).
-  5. Bias labels: `score ≥ enter_threshold → bullish`;
-     `score ≤ -enter_threshold → bearish`; else `None`.
-  6. Persist all rows to `symbol_rankings` keyed by `ts`.
-- **Key parameters/config.** `cfg.ranking.w_market/w_sector/w_ticker`,
-  `cfg.ranking.enter_threshold`, `cfg.ranking.min_dollar_volume`.
+  - Daily OHLCV bars (`market_data.get_latest_bars` or `fetch_bars` per symbol).
+  - Latest `SentimentSnapshot` rows (market + sector + ticker).
+  - `SecurityMaster.options_eligible` via `compute_optionability_factor`.
+- **Core logic** (`trader/ranking.py::rank_symbols` + `trader/scoring.py`):
+  1. For each symbol, fetch bars (try/except — missing bars → factor "missing").
+  2. Call `compute_sentiment_factor(market_snap, sector_snap, ticker_snap)` → `[0,1]`.
+     Internally applies recency weighting (`>72h → stale`; `24-72h → ×0.5`).
+  3. Call `compute_momentum_trend_factor(df)` — SMA200/EMA20/EMA50 trend subscore
+     + scaled 63d/126d returns. Requires ≥63 bars or returns `missing`.
+  4. Call `compute_risk_factor(df)` — 20d annualised vol + 252d max drawdown,
+     bucketed. Requires ≥20 bars or returns `missing`.
+  5. Call `compute_liquidity_factor(df, cfg)` — log-scale ADV$ + price score.
+     Sets `eligible=False` when price < min_price or ADV < min_dollar_volume.
+  6. Call `compute_optionability_factor(symbol)` — reads `SecurityMaster`.
+     `eligible=False` when no record (safe-by-default).
+  7. `compute_composite(factors, nominal_weights)` — proportional weight
+     redistribution for any `value_0_1=None` factor; returns `(score, weights_used)`.
+  8. `equity_eligible = liquidity.eligible AND symbol verified in IBKR`.
+  9. `options_eligible = optionability.eligible`.
+  10. Bias: `score ≥ enter_threshold → bullish`; `score ≤ 1-enter_threshold → bearish`.
+  11. Persist all rows to `symbol_rankings` with full `components_json`.
+- **Key parameters/config.**
+  - `cfg.ranking.{w_sentiment, w_momentum_trend, w_risk, w_liquidity, w_fundamentals}` — nominal weights.
+  - `cfg.ranking.{w_market, w_sector, w_ticker}` — sentiment sub-weights.
+  - `cfg.ranking.enter_threshold` (default 0.55), `cfg.ranking.min_dollar_volume`.
+  - `cfg.universe.min_price`.
 - **Outputs/artifacts.** `List[RankedSymbol]` — `(symbol, sector, score_total,
-  components{market,sector,ticker with raw/age/weight/contribution/status},
-  eligible, reasons, sources, bias)`.
-- **Downstream consumers.** `OptionsSwingBot.select_trades` (via
-  `select_candidates`), `/rankings` dashboard page, `cli.py report last-run`.
+  components{sentiment,momentum_trend,risk,liquidity,optionability,fundamentals},
+  equity_eligible, options_eligible, eligible, reasons, sources, bias)`.
+- **Downstream consumers.** `OptionsSwingBot.select_trades` (hard-gates on
+  `options_eligible`), `EquitySwingBot.select_trades` (hard-gates on
+  `equity_eligible`), `/rankings` dashboard (expandable factor cards via `<details>`),
+  `cli.py report last-run`.
 - **Decision gates.**
-  - `eligible=False` → never considered for trading, but row is persisted for audit.
-  - `select_candidates` caps at `cfg.ranking.max_candidates_total` and splits
-    bullish/bearish (prefer 2 bull + 1 bear).
-  - `cfg.ranking.fallback_trade_broad_etf` (default `False`) — if no candidates,
-    pick SPY (bullish) or QQQ (bearish) based on market score sign.
+  - `eligible=False` → never traded; row still persisted for audit.
+  - `options_eligible=False` → `OptionsSwingBot` skips the symbol.
+  - `equity_eligible=False` → `EquitySwingBot` skips the symbol.
+  - `select_candidates` caps at `cfg.ranking.max_candidates_total` (prefer 2 bull + 1 bear).
+  - `cfg.ranking.fallback_trade_broad_etf` (default `False`) — ETF fallback when no candidates.
 - **Logging/metrics.** `log.info("Ranked N symbols (E eligible, B with bias)")`.
-- **Failure modes.** Missing market snapshot → all market contributions go to 0
-  with status `missing`; composite score still computed from remaining sources.
+- **Failure modes.** Missing bars → factors return `missing` → weight redistributed;
+  all factors missing → composite = 0.5 (neutral placeholder, unlikely to exceed threshold).
 
 ---
 
-### Phase F — Per-Symbol Scoring (`score_symbol`)
+### Phase F — Per-Symbol Scoring (`score_symbol`) — Legacy / Secondary Path
 
 - **Purpose.** Produce a weighted 4-factor score (trend / momentum / volatility /
-  sentiment) and label `long` / `bearish` / skip for a single name.
+  sentiment) for a single symbol. Now used primarily by `EquitySwingBot.score_candidate`
+  and the legacy `generate_signals()` path. The composite ranking score from Phase E
+  is the primary driver of bot selection — Phase F refines the equity bot's per-candidate
+  `ScoreBreakdown` (adds ATR14, last_price for sizing).
 - **Trigger / cadence.** Called by `BaseBot.score_candidate` for each candidate
   in a cycle; also by the legacy `generate_signals()` path.
 - **Upstream inputs.** Daily bars (cached), `get_latest_market_score()`,
@@ -597,7 +617,7 @@ flowchart TD
 | `SentimentSnapshot` | ORM row `(scope, key, score∈[-1,1], summary, sources_json)` | `trader/sentiment/factory.py::_persist_snapshots` | ranking, strategy, UI | DB `sentiment_snapshots` | `scope ∈ {market, sector, ticker}` |
 | `SentimentLlmItem` | ORM `(id=sha256 prefix, processed_at, url)` | Claude provider | dedup inside provider | DB `sentiment_llm_items` | TTL = `dedup_cache_days` (default 14) |
 | `SentimentLlmUsage` | ORM `(prompt_tokens, completion_tokens, cost_usd_est, cost_eur_est, status)` | Claude provider | `trader/sentiment/budget.py` | DB `sentiment_llm_usage` | Source of truth for budget cap |
-| `RankedSymbol` | dataclass `(symbol, sector, score_total, components, eligible, reasons, sources, bias)` | `trader/ranking.py::rank_symbols` | `OptionsSwingBot.select_trades`, UI, planner | in-memory + `symbol_rankings` row per cycle | `bias ∈ {bullish, bearish, None}` |
+| `RankedSymbol` | dataclass `(symbol, sector, score_total, components{sentiment,momentum_trend,risk,liquidity,optionability,fundamentals}, equity_eligible, options_eligible, eligible, reasons, sources, bias)` | `trader/ranking.py::rank_symbols` | `OptionsSwingBot.select_trades` (gates on `options_eligible`), `EquitySwingBot.select_trades` (gates on `equity_eligible`), UI, planner | in-memory + `symbol_rankings` row per cycle | `bias ∈ {bullish, bearish, None}`; `equity_eligible` = liquidity gate + IBKR-verified; `options_eligible` = SecurityMaster safe-by-default |
 | `SignalIntent` | dataclass `(symbol, direction, instrument, score, max_risk_usd, explanation, components, regime)` | `score_symbol` / `_plan_to_signal` | `execute_signal`, `generate_signals` | `signal_snapshots` (for generate_signals only) | `direction ∈ {long, bearish}` |
 | `Candidate` | dataclass `(symbol, sector, source, verified)` | `BaseBot.build_candidates` | `score_candidate` | in-memory | |
 | `ScoreBreakdown` | dataclass `(trend, momentum, volatility, sentiment, final_score, direction, explanations, components, atr14?, last_price?)` | `BaseBot.score_candidate` | `select_trades` | in-memory | Equity bot fills `atr14` + `last_price` |
@@ -684,9 +704,9 @@ flowchart TD
 | 4 | IBKR contract verification (OTC/PINK rejection, currency) | `trader/universe.py::verify_contract` | C |
 | 5 | Market regime definition | `trader/strategy.py::check_regime` (+ `cfg.strategy.regime.vol_threshold`) | D |
 | 6 | 4-factor scoring (weights, RSI buckets, vol buckets) | `trader/strategy.py::score_symbol` (+ `cfg.strategy.weights`) | F |
-| 7 | Sentiment weight & recency penalty | `trader/ranking.py::_compute_score`, `_apply_recency` (+ `cfg.ranking.w_market/w_sector/w_ticker`) | E |
-| 8 | Bullish/bearish bias threshold | `cfg.ranking.enter_threshold` used in `rank_symbols`; `select_candidates` sizes the split | E |
-| 9 | Options DTE window + expiry target | `cfg.ranking.dte_min/max/target/fallback_min` (planner) and `cfg.options.dte_min/max` (legacy executor) | H / L |
+| 7 | Sentiment weight & recency penalty | `trader/scoring.py::_compute_score`, `_apply_recency` (+ `cfg.ranking.w_market/w_sector/w_ticker`); re-exported from `trader/ranking.py` | E |
+| 8 | Bullish/bearish bias threshold | `cfg.ranking.enter_threshold` (default 0.55); `≥threshold → bullish`, `≤1-threshold → bearish` in `rank_symbols`; `select_candidates` sizes the split | E |
+| 9 | Options DTE window + expiry target | Canonical: `cfg.options.{planner_dte_min, planner_dte_max, planner_dte_target, planner_dte_fallback_min}` (consumed by `options_planner._select_expiry`). `cfg.ranking.dte_*` kept for backward compat (deprecated). `cfg.options.dte_min/max` still used by legacy `trader.execution` path. | H / L |
 | 10 | Delta targets for strikes | `StrikeSelectionCriteria` defaults + `GREEKS_*` env vars in `trader/greeks/strike_selector.py` | H |
 | 11 | IV-adjusted criteria (low/high IV branch) | `StrikeSelector.adjust_delta_for_iv` | H |
 | 12 | Greeks gate thresholds (delta, theta, vega, gamma, liquidity, ROC, buffer) | `trader/greeks/gate.py::_default_config` and `GREEKS_*` env vars | I |
@@ -712,6 +732,12 @@ flowchart TD
 | 32 | Company→ticker matching logic (exact, ambiguity, audit) | `trader/securities/matcher.py::match_companies_to_symbols`; ambiguous = 2+ different symbols → skipped | B |
 | 33 | RSS ticker detection filter (which aliases are scanned in headlines) | `trader/sentiment/rss_provider.py::_load_ticker_aliases` — ≥2-word aliases or manual priority≤1 with len≥5; avoids short single-word false positives | B |
 | 34 | Allowed exchanges + liquidity thresholds for security master | `cfg.securities.{allowed_exchanges, min_price, min_avg_dollar_volume_20d}`; filters applied in `_load_ticker_aliases` JOIN | B |
+| 35 | Composite factor weights (5 factors, proportional redistribution) | `cfg.ranking.{w_sentiment, w_momentum_trend, w_risk, w_liquidity, w_fundamentals}`; `trader/scoring.py::compute_composite` | E |
+| 36 | Momentum/trend factor (SMA200, EMA trend, 63d/126d returns) | `trader/scoring.py::compute_momentum_trend_factor`; requires ≥63 bars | E |
+| 37 | Risk factor (vol buckets, drawdown buckets) | `trader/scoring.py::compute_risk_factor`; vol weight 0.6, drawdown weight 0.4 | E |
+| 38 | Liquidity factor + equity_eligible gate | `trader/scoring.py::compute_liquidity_factor`; log-scale ADV$ score; gate: price ≥ min_price AND ADV ≥ min_dollar_volume | E |
+| 39 | Options eligibility gate (safe-by-default) | `trader/scoring.py::compute_optionability_factor`; reads `SecurityMaster.options_eligible`; returns `eligible=False` when no DB record | E |
+| 40 | Fundamentals factor (stub) | `trader/scoring.py::compute_fundamentals_factor`; always returns `missing` until IBKR entitlement wired; `cfg.fundamentals.enabled` | E |
 
 ---
 
@@ -837,17 +863,17 @@ If the `/sentiment` dashboard shows market/sector rows but no ticker rows:
    - *How to verify:* `cfg.sentiment.claude.eur_usd_rate` is a static constant
      (1.08); all position/risk math is in USD.
 
-7. **Legacy vs new options DTE config.**
-   - `cfg.options.dte_min=7, dte_max=21` (used by `trader.execution.select_expiry`).
-   - `cfg.ranking.dte_min=21, dte_max=45` (used by `options_planner._select_expiry`).
-   - The planner and the executor disagree about which expiry to pick; whichever
-     runs last dictates the plan. Unify these into one config namespace.
+7. ~~**Legacy vs new options DTE config.**~~ **RESOLVED** — canonical DTE now lives
+   in `cfg.options.{planner_dte_min, planner_dte_max, planner_dte_target,
+   planner_dte_fallback_min}`; `options_planner._select_expiry` uses these via the
+   `_dte_param(obj, attr, fallback)` helper with `isinstance(v, int)` guard.
+   `cfg.ranking.dte_*` are kept with a deprecation comment; `cfg.options.dte_min/max`
+   still used by the legacy `trader.execution` executor path only.
 
-8. **`BaseBot.build_candidates` vs `ranked` decoupling.** Options bot runs
-   `score_candidate` for *all* verified symbols, then ignores the breakdown and
-   relies on `select_candidates(context.ranked)` (sentiment-only) to pick names.
-   - *Why it matters:* the 4-factor per-symbol score is computed but never
-     affects options selection; wasted work that hides the scoring's effect on
-     execution.
-   - *How to verify:* inspect `OptionsSwingBot.select_trades` — it only uses
-     `scored_map` to look up `components` for logging, not for filtering.
+8. ~~**`BaseBot.build_candidates` vs `ranked` decoupling.**~~ **RESOLVED** —
+   `OptionsSwingBot.select_trades` now hard-gates on `rs.options_eligible=False`
+   (skips the symbol) and uses the 5-factor composite `score_total` from `ranked`
+   for all selection logic. `EquitySwingBot.select_trades` similarly gates on
+   `rs.equity_eligible=False`. The composite score from Phase E is now the primary
+   selection driver for both bots; `score_candidate` (Phase F) provides the per-candidate
+   `ScoreBreakdown` with ATR14/last_price used for equity sizing, not filtering.

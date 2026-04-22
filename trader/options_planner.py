@@ -201,10 +201,19 @@ def plan_trade(candidate: RankedSymbol, client=None) -> Optional[TradePlan]:
                           skip_reason="no_option_chains",
                           rationale={"score": candidate.score_total})
 
-    expiry = _select_expiry(chains, rc.dte_min, rc.dte_max, rc.dte_target, rc.dte_fallback_min)
+    # Prefer cfg.options.planner_dte_* (canonical); fall back to cfg.ranking.dte_*
+    def _dte_param(obj, attr, fallback):
+        v = getattr(obj, attr, None)
+        return v if isinstance(v, int) else fallback
+
+    p_dte_min = _dte_param(cfg.options, "planner_dte_min", rc.dte_min)
+    p_dte_max = _dte_param(cfg.options, "planner_dte_max", rc.dte_max)
+    p_dte_target = _dte_param(cfg.options, "planner_dte_target", rc.dte_target)
+    p_dte_fallback = _dte_param(cfg.options, "planner_dte_fallback_min", rc.dte_fallback_min)
+    expiry = _select_expiry(chains, p_dte_min, p_dte_max, p_dte_target, p_dte_fallback)
     if not expiry:
         return _save_plan(symbol=sym, bias=bias, strategy=strategy, status="skipped",
-                          skip_reason=f"no_suitable_expiry_dte_{rc.dte_min}_{rc.dte_max}",
+                          skip_reason=f"no_suitable_expiry_dte_{p_dte_min}_{p_dte_max}",
                           rationale={"score": candidate.score_total})
 
     dte_val = _dte(expiry)

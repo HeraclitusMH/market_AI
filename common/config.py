@@ -66,6 +66,11 @@ class OptionsConfig(BaseModel):
     min_open_interest: int = 100
     max_option_spread_pct: float = 10.0
     max_spread_width: int = 5
+    # Planner DTE settings (canonical location; ranking.dte_* kept for backward compat)
+    planner_dte_min: int = 21
+    planner_dte_max: int = 45
+    planner_dte_target: int = 30
+    planner_dte_fallback_min: int = 14
 
 
 class RiskConfig(BaseModel):
@@ -141,22 +146,28 @@ class SentimentClaudeConfig(BaseModel):
 
 
 class RankingConfig(BaseModel):
-    # Sentiment weights per component
+    # Sentiment sub-weights (market/sector/ticker components)
     w_market: float = 0.20
     w_sector: float = 0.30
     w_ticker: float = 0.50
-    # Selection thresholds
-    enter_threshold: float = 0.25
+    # Composite factor weights (sum to 1.0; missing factors redistribute proportionally)
+    w_sentiment: float = 0.30
+    w_momentum_trend: float = 0.25
+    w_risk: float = 0.20
+    w_liquidity: float = 0.15
+    w_fundamentals: float = 0.10
+    # Selection thresholds (0..1 scale matching composite score range)
+    enter_threshold: float = 0.55      # score >= this → bullish bias
     max_candidates_total: int = 3
     fallback_trade_broad_etf: bool = False
     # Cadence controls
     cooldown_hours: int = 6
     max_trades_per_day: int = 3
-    # Liquidity (used when live data unavailable; primary filter is Universe.active)
+    # Liquidity floor (USD avg daily dollar volume)
     min_dollar_volume: float = 20_000_000
     # IBKR contract verification cache TTL
     contract_cache_hours: int = 24
-    # Options DTE for new planner (separate from legacy options.dte_min/max)
+    # Deprecated: planner DTE now lives in cfg.options.planner_dte_*; kept for backward compat
     dte_min: int = 21
     dte_max: int = 45
     dte_target: int = 30
@@ -201,6 +212,12 @@ class SecuritiesConfig(BaseModel):
     verification_cache_hours: int = 24
 
 
+class FundamentalsConfig(BaseModel):
+    enabled: bool = False
+    ttl_days: int = 7
+    min_coverage: float = 0.2  # fraction of universe that must have data for cross-sectional scoring
+
+
 class SentimentConfig(BaseModel):
     provider: str = "rss_lexicon"  # rss_lexicon | claude_llm
     refresh_minutes: int = 60
@@ -232,6 +249,7 @@ class AppConfig(BaseModel):
     features: FeaturesConfig = FeaturesConfig()
     sentiment: SentimentConfig = SentimentConfig()
     ranking: RankingConfig = RankingConfig()
+    fundamentals: FundamentalsConfig = FundamentalsConfig()
     bots: BotsConfig = BotsConfig()
     securities: SecuritiesConfig = SecuritiesConfig()
     dry_run: bool = False

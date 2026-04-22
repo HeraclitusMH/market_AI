@@ -1,4 +1,4 @@
-"""Symbol ranking: combine market + sector + ticker sentiment into ranked candidates."""
+"""Symbol ranking: multi-factor composite score (sentiment + technical + risk)."""
 from __future__ import annotations
 
 import json
@@ -14,6 +14,20 @@ from common.time import utcnow
 from trader.sentiment.scoring import get_latest_ticker_score
 from trader.universe import UniverseItem
 
+# Re-export internal helpers so existing tests can import them from here
+from trader.scoring import (
+    _compute_score,
+    _age_hours,
+    _apply_recency,
+    compute_sentiment_factor,
+    compute_liquidity_factor,
+    compute_optionability_factor,
+    compute_momentum_trend_factor,
+    compute_risk_factor,
+    compute_fundamentals_factor,
+    compute_composite,
+)
+
 log = get_logger(__name__)
 
 
@@ -22,32 +36,16 @@ class RankedSymbol:
     symbol: str
     sector: str
     score_total: float
-    components: Dict   # {market, sector, ticker} each with {raw, age_hours, weight, contribution, status}
-    eligible: bool
+    components: Dict   # full factor breakdown JSON
+    eligible: bool     # overall gate (contract verified + liquidity)
     reasons: List[str]
     sources: List[str]
-    bias: Optional[str] = None   # "bullish" | "bearish" | None (within threshold)
+    bias: Optional[str] = None          # "bullish" | "bearish" | None
+    equity_eligible: bool = True        # passes liquidity gate → can trade equity
+    options_eligible: bool = False      # passes options gate (safe-by-default: False)
 
 
-def _age_hours(snap: Optional[SentimentSnapshot]) -> Optional[float]:
-    if snap is None:
-        return None
-    ts = snap.timestamp
-    if ts.tzinfo is None:
-        ts = ts.replace(tzinfo=timezone.utc)
-    return (datetime.now(timezone.utc) - ts).total_seconds() / 3600
-
-
-def _apply_recency(score: float, age_h: Optional[float]) -> Tuple[float, str]:
-    """Apply recency penalty or mark as missing/stale."""
-    if age_h is None:
-        return 0.0, "missing"
-    if age_h > 72:
-        return 0.0, "stale"
-    if age_h > 24:
-        return score * 0.5, "penalized"
-    return score, "ok"
-
+# ── Sentiment snapshot helpers ────────────────────────────────────────────────
 
 def _get_market_snap() -> Optional[SentimentSnapshot]:
     with get_db() as db:
@@ -71,72 +69,7 @@ def _get_sector_snap(sector: str) -> Optional[SentimentSnapshot]:
         )
 
 
-def _compute_score(
-    market_snap: Optional[SentimentSnapshot],
-    sector_snap: Optional[SentimentSnapshot],
-    ticker_snap: Optional[SentimentSnapshot],
-    w_market: float,
-    w_sector: float,
-    w_ticker: float,
-) -> Tuple[float, Dict]:
-    mkt_age = _age_hours(market_snap)
-    sec_age = _age_hours(sector_snap)
-    tkr_age = _age_hours(ticker_snap)
-
-    mkt_raw = market_snap.score if market_snap else 0.0
-    sec_raw = sector_snap.score if sector_snap else 0.0
-    tkr_raw = ticker_snap.score if ticker_snap else 0.0
-
-    mkt_val, mkt_status = _apply_recency(mkt_raw, mkt_age)
-    sec_val, sec_status = _apply_recency(sec_raw, sec_age)
-    tkr_val, tkr_status = _apply_recency(tkr_raw, tkr_age)
-
-    have_market = mkt_status in ("ok", "penalized")
-    have_sector = sec_status in ("ok", "penalized")
-    have_ticker = tkr_status in ("ok", "penalized")
-
-    # Weight redistribution per spec
-    if not have_ticker and not have_sector:
-        w_m, w_s, w_t = 1.0, 0.0, 0.0
-    elif not have_ticker and have_sector:
-        w_m, w_s, w_t = 0.35, 0.65, 0.0
-    elif have_ticker and not have_sector:
-        w_m, w_s, w_t = 0.30, 0.0, 0.70
-    else:
-        w_m, w_s, w_t = w_market, w_sector, w_ticker
-
-    total = (
-        w_m * (mkt_val if have_market else 0.0)
-        + w_s * (sec_val if have_sector else 0.0)
-        + w_t * (tkr_val if have_ticker else 0.0)
-    )
-    total = max(-1.0, min(1.0, round(total, 4)))
-
-    components = {
-        "market": {
-            "raw": round(mkt_raw, 4) if market_snap else None,
-            "age_hours": round(mkt_age, 1) if mkt_age is not None else None,
-            "weight": round(w_m, 3),
-            "contribution": round(w_m * (mkt_val if have_market else 0.0), 4),
-            "status": mkt_status,
-        },
-        "sector": {
-            "raw": round(sec_raw, 4) if sector_snap else None,
-            "age_hours": round(sec_age, 1) if sec_age is not None else None,
-            "weight": round(w_s, 3),
-            "contribution": round(w_s * (sec_val if have_sector else 0.0), 4),
-            "status": sec_status,
-        },
-        "ticker": {
-            "raw": round(tkr_raw, 4) if ticker_snap else None,
-            "age_hours": round(tkr_age, 1) if tkr_age is not None else None,
-            "weight": round(w_t, 3),
-            "contribution": round(w_t * (tkr_val if have_ticker else 0.0), 4),
-            "status": tkr_status,
-        },
-    }
-    return total, components
-
+# ── Eligibility gate ──────────────────────────────────────────────────────────
 
 def _check_eligibility(item: UniverseItem) -> Tuple[bool, List[str]]:
     """Hard-reject filters before ranking. Returns (eligible, rejection_reasons)."""
@@ -145,7 +78,6 @@ def _check_eligibility(item: UniverseItem) -> Tuple[bool, List[str]]:
         reasons.append("contract_not_verified")
         return False, reasons
 
-    # Check cached liquidity from Universe table
     with get_db() as db:
         from common.models import Universe
         row = db.query(Universe).filter(Universe.symbol == item.symbol).first()
@@ -166,6 +98,8 @@ def _check_eligibility(item: UniverseItem) -> Tuple[bool, List[str]]:
     return True, reasons
 
 
+# ── Persistence ───────────────────────────────────────────────────────────────
+
 def _persist_rankings(results: List[RankedSymbol], now: datetime) -> None:
     with get_db() as db:
         for r in results:
@@ -179,14 +113,33 @@ def _persist_rankings(results: List[RankedSymbol], now: datetime) -> None:
             ))
 
 
+# ── Main ranking function ─────────────────────────────────────────────────────
+
 def rank_symbols(
     universe: List[UniverseItem],
     now: Optional[datetime] = None,
+    client=None,
 ) -> List[RankedSymbol]:
-    """Score and rank all verified universe symbols using sentiment components."""
+    """Score and rank all verified universe symbols using a composite of:
+
+    sentiment (30%) + momentum/trend (25%) + risk (20%) + liquidity (15%) + fundamentals (10%)
+
+    Weights redistribute proportionally when a factor is missing.
+    Score is in [0, 1]: >= enter_threshold → bullish, <= (1-enter_threshold) → bearish.
+    """
+    from trader.market_data import get_latest_bars
+
     cfg = get_config()
     rc = cfg.ranking
     now = now or datetime.now(timezone.utc)
+
+    nominal_weights = {
+        "sentiment":        rc.w_sentiment,
+        "momentum_trend":   rc.w_momentum_trend,
+        "risk":             rc.w_risk,
+        "liquidity":        rc.w_liquidity,
+        "fundamentals":     rc.w_fundamentals,
+    }
 
     market_snap = _get_market_snap()
 
@@ -195,39 +148,95 @@ def rank_symbols(
         sector_snap = _get_sector_snap(item.sector)
         ticker_snap = get_latest_ticker_score(item.symbol)
 
-        score, components = _compute_score(
+        # ── Sentiment factor ──────────────────────────────────────────────
+        sent_factor = compute_sentiment_factor(
             market_snap, sector_snap, ticker_snap,
             rc.w_market, rc.w_sector, rc.w_ticker,
         )
 
-        eligible, reasons = _check_eligibility(item)
+        # ── Bar-based factors (safe: empty df → factor missing) ───────────
+        try:
+            df = get_latest_bars(item.symbol, "1D", client)
+        except Exception:
+            df = __import__("pandas").DataFrame()
 
+        liq_factor = compute_liquidity_factor(df, cfg)
+        mt_factor = compute_momentum_trend_factor(df)
+        risk_factor = compute_risk_factor(df)
+
+        # ── Options eligibility ───────────────────────────────────────────
+        opt_factor = compute_optionability_factor(item.symbol, client)
+
+        # ── Fundamentals (stub) ───────────────────────────────────────────
+        fund_factor = compute_fundamentals_factor(item.symbol, cfg)
+
+        # ── Composite ─────────────────────────────────────────────────────
+        factors = {
+            "sentiment":      sent_factor,
+            "momentum_trend": mt_factor,
+            "risk":           risk_factor,
+            "liquidity":      liq_factor,
+            "fundamentals":   fund_factor,
+        }
+        total_score, weights_used = compute_composite(factors, nominal_weights)
+
+        # ── Eligibility gates ─────────────────────────────────────────────
+        eligible, reasons = _check_eligibility(item)
+        equity_eligible = eligible and liq_factor.get("eligible", True)
+        options_eligible = opt_factor.get("eligible", False)
+
+        # ── Bias ──────────────────────────────────────────────────────────
         bias: Optional[str] = None
+        bearish_threshold = 1.0 - rc.enter_threshold
         if eligible:
-            if score >= rc.enter_threshold:
+            if total_score >= rc.enter_threshold:
                 bias = "bullish"
-            elif score <= -rc.enter_threshold:
+            elif total_score <= bearish_threshold:
                 bias = "bearish"
+
+        # ── Full components blob ──────────────────────────────────────────
+        components = {
+            "sentiment":      sent_factor,
+            "liquidity":      liq_factor,
+            "optionability":  opt_factor,
+            "momentum_trend": mt_factor,
+            "risk":           risk_factor,
+            "fundamentals":   fund_factor,
+            "weights_used":   weights_used,
+            "total_score":    total_score,
+            "eligibility": {
+                "equity_eligible":   equity_eligible,
+                "options_eligible":  options_eligible,
+                "reasons":           reasons + liq_factor.get("reasons", []),
+            },
+        }
 
         results.append(RankedSymbol(
             symbol=item.symbol,
             sector=item.sector,
-            score_total=score,
+            score_total=total_score,
             components=components,
             eligible=eligible,
             reasons=reasons,
             sources=list(item.sources),
             bias=bias,
+            equity_eligible=equity_eligible,
+            options_eligible=options_eligible,
         ))
 
     results.sort(key=lambda r: r.score_total, reverse=True)
     _persist_rankings(results, now)
-    log.info("Ranked %d symbols (%d eligible, %d with bias).",
-             len(results),
-             sum(1 for r in results if r.eligible),
-             sum(1 for r in results if r.bias))
+    log.info(
+        "Ranked %d symbols (%d equity_eligible, %d options_eligible, %d with bias).",
+        len(results),
+        sum(1 for r in results if r.equity_eligible),
+        sum(1 for r in results if r.options_eligible),
+        sum(1 for r in results if r.bias),
+    )
     return results
 
+
+# ── Candidate selection ───────────────────────────────────────────────────────
 
 def select_candidates(
     ranked: List[RankedSymbol],
@@ -237,12 +246,12 @@ def select_candidates(
 ) -> List[RankedSymbol]:
     """Select up to max_total candidates split between bullish and bearish.
 
-    Applies threshold filter; optionally falls back to SPY/QQQ when no symbol qualifies.
+    Requires r.eligible and r.bias set. Options bot should additionally filter
+    by r.options_eligible after calling this function.
     """
     cfg = get_config()
     rc = cfg.ranking
     max_total = max_total if max_total is not None else rc.max_candidates_total
-    threshold = threshold if threshold is not None else rc.enter_threshold
     fallback = fallback_broad_etf if fallback_broad_etf is not None else rc.fallback_trade_broad_etf
 
     eligible = [r for r in ranked if r.eligible and r.bias is not None]
@@ -250,7 +259,6 @@ def select_candidates(
     bullish = [r for r in eligible if r.bias == "bullish"]
     bearish = [r for r in eligible if r.bias == "bearish"]
 
-    # Allocate: prefer 2 bullish + 1 bearish; adjust if supply is limited
     n_bull = min(len(bullish), max(1, max_total - 1))
     n_bear = min(len(bearish), max_total - n_bull)
     if n_bull + n_bear < max_total and len(bullish) > n_bull:
@@ -270,6 +278,8 @@ def select_candidates(
                     symbol=r.symbol, sector=r.sector, score_total=r.score_total,
                     components=r.components, eligible=True, reasons=["fallback_broad_etf"],
                     sources=r.sources, bias=fallback_bias,
+                    equity_eligible=r.equity_eligible,
+                    options_eligible=r.options_eligible,
                 )
                 selected = [r_copy]
                 log.info("No candidates above threshold — falling back to %s (%s)",

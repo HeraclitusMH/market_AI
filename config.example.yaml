@@ -44,6 +44,11 @@ options:
   min_open_interest: 100
   max_option_spread_pct: 10.0
   max_spread_width: 5            # max strike distance in $
+  # Planner expiry selection (canonical; ranking.dte_* kept for backward compat)
+  planner_dte_min: 21
+  planner_dte_max: 45
+  planner_dte_target: 30         # aim for this DTE
+  planner_dte_fallback_min: 14   # fallback floor when nothing in primary range
 
 risk:
   max_drawdown_pct: 50
@@ -89,26 +94,37 @@ bots:
       - "Consumer Staples"
 
 ranking:
-  # Sentiment component weights (must sum to 1.0 when all present)
+  # Sentiment sub-weights (market / sector / ticker components)
   w_market: 0.20
   w_sector: 0.30
   w_ticker: 0.50
-  # Selection thresholds
-  enter_threshold: 0.25            # |score| >= this to generate a trade plan
-  max_candidates_total: 3          # max 1-3 candidates per cycle
-  fallback_trade_broad_etf: false  # if no symbol crosses threshold, use SPY/QQQ
+  # Composite factor weights (redistribute proportionally when a factor is missing)
+  w_sentiment: 0.30
+  w_momentum_trend: 0.25
+  w_risk: 0.20
+  w_liquidity: 0.15
+  w_fundamentals: 0.10
+  # Selection thresholds (0..1 scale matching composite score)
+  enter_threshold: 0.55            # score >= this → bullish; (1-threshold) → bearish
+  max_candidates_total: 3
+  fallback_trade_broad_etf: false
   # Cadence controls
-  cooldown_hours: 6                # per-symbol minimum hours between plans
-  max_trades_per_day: 3            # absolute daily cap on submitted trades
+  cooldown_hours: 6
+  max_trades_per_day: 3
   # Liquidity floor (USD avg daily dollar volume)
   min_dollar_volume: 20_000_000
   # IBKR contract verification cache TTL
   contract_cache_hours: 24
-  # Options DTE for trade planning (separate from legacy options.dte_min/max)
+  # Deprecated: planner DTE now lives in options.planner_dte_*; kept for backward compat
   dte_min: 21
   dte_max: 45
-  dte_target: 30                   # aim for this DTE when selecting expiry
-  dte_fallback_min: 14             # fallback if nothing in [dte_min, dte_max]
+  dte_target: 30
+  dte_fallback_min: 14
+
+fundamentals:
+  enabled: false        # requires IBKR fundamental data entitlement
+  ttl_days: 7
+  min_coverage: 0.2     # min fraction of universe with data for cross-sectional scoring
 
 sentiment:
   provider: "rss_lexicon"         # rss_lexicon | claude_llm
