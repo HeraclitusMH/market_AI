@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -12,8 +13,10 @@ from common.db import create_tables, get_db
 from common.models import BotState, EquitySnapshot, Position, SignalSnapshot, SentimentSnapshot, Order, Fill, EventLog, SymbolRanking, TradePlan
 
 from api.routes import health, state, controls, signals, sentiment, trades, rankings as rankings_route
+from api.v1 import router as v1_router
 
 UI_DIR = Path(__file__).resolve().parent.parent / "ui"
+SPA_INDEX = UI_DIR / "static" / "dist" / "index.html"
 
 app = FastAPI(title="Market AI", version="0.1.0")
 
@@ -25,6 +28,7 @@ app.include_router(signals.router)
 app.include_router(sentiment.router)
 app.include_router(trades.router)
 app.include_router(rankings_route.router)
+app.include_router(v1_router)
 
 # --- Static files & templates ---
 app.mount("/static", StaticFiles(directory=str(UI_DIR / "static")), name="static")
@@ -180,6 +184,13 @@ def page_config(request: Request):
     return templates.TemplateResponse(request, "config.html", {
         "cfg": cfg, "page": "config",
     })
+
+
+@app.get("/app/{path:path}", include_in_schema=False)
+def spa_shell(path: str, request: Request):
+    if SPA_INDEX.exists():
+        return FileResponse(str(SPA_INDEX))
+    return templates.TemplateResponse(request, "app.html", {})
 
 
 @app.get("/rankings", include_in_schema=False)

@@ -24,7 +24,7 @@ Both bots can run together or independently. Each has its own position namespace
 - **Risk engine** — drawdown stop, per-bot position limits, cash reservation, kill switch
 - **Greeks gate** — 10-check filter before any options order (IV rank, delta range, theta/delta ratio, vega, gamma-near-expiry, liquidity, pricing ROC, composite score)
 - **LLM-powered sentiment** — Claude AI scores each news item with per-item sentiment, sector/ticker tagging, and a strict €10/month budget cap; RSS lexicon available as a lightweight fallback
-- **Dashboard** — full local web UI with charts, controls, expandable per-symbol factor breakdowns, and manual overrides
+- **React SPA dashboard** — dark-mode single-page app (React 18 + Vite + Tailwind) served at `/app/*`, with TanStack Query live polling, Recharts equity/drawdown charts, per-symbol factor breakdowns, and a Tweaks panel for accent colour + layout density
 - **Unified CLI** — `python cli.py run [options_swing|equity_swing|all]`
 
 ---
@@ -323,11 +323,30 @@ market_AI/
     equity_execution.py   # Stock order placement (portfolio_id="equity_swing")
     options_execution.py  # Shim: TradeIntent → SignalIntent → execute_signal()
   api/
-    main.py               # FastAPI app + 8 UI page handlers
-    routes/               # health, state, controls, signals, sentiment, trades, rankings
+    main.py               # FastAPI app; serves SPA at /app/{path:path}
+    routes/               # Legacy routes: health, state, controls, signals, sentiment, trades, rankings
+    v1/                   # JSON API v1: overview, positions, orders, fills, signals, rankings,
+                          #   trade-plans, sentiment, risk, controls, config
   ui/
-    templates/            # Jinja2 (layout + 8 pages)
-    static/               # app.css (dark theme), app.js (Chart.js helpers)
+    templates/            # Jinja2 pages (legacy, kept for backward compat) + app.html (SPA fallback)
+    static/
+      app.css / app.js    # Legacy Jinja2 assets
+      dist/               # Built React SPA output (index.html + assets/)
+  frontend/               # React SPA source
+    package.json          # pnpm workspace (React 18, Vite 5, Tailwind 3, TanStack Query 5, Zustand 4)
+    vite.config.ts        # outDir → ../ui/static/dist; dev proxy /api → :8000
+    src/
+      main.tsx / App.tsx  # Entry + React Router (basename /app)
+      types/api.ts        # TypeScript interfaces matching Python Pydantic models
+      lib/api.ts          # Typed fetch wrappers
+      lib/formatters.ts   # fmtMoney, fmtCompact, fmtPct, fmtSign, fmtTs
+      store/botStore.ts   # Zustand bot state store
+      styles/globals.css  # Design tokens (CSS custom props) + component classes
+      components/         # AppShell, Sidebar, Topbar, Card, KPI, Badge, Sparkline,
+                          #   LineChart, Donut, ScoreBar, DataTable, Toggle, Button,
+                          #   SegmentedControl, TweaksPanel
+      pages/              # 9 pages (Overview … Config)
+      test/               # vitest setup + 11 smoke tests (one per page)
   scripts/
     init_db.py            # Run alembic + seed bot_state
     run_all.py            # Launch API + trader as subprocesses
@@ -339,42 +358,80 @@ market_AI/
 
 ## Dashboard
 
-| Page | Description |
-|------|-------------|
-| `/` | Overview — equity, positions, bot status, recent events |
-| `/positions` | Open positions with P&L |
-| `/orders` | Order history and fills |
-| `/signals` | Latest trading signals with score breakdowns |
-| `/sentiment` | Market & sector sentiment timeline + LLM budget status |
-| `/risk` | Drawdown chart + risk metrics |
-| `/controls` | Manual overrides — pause, kill switch, approve mode |
-| `/config` | Current configuration (read-only) |
-| `/rankings` | Latest symbol rankings with composite score + expandable per-factor breakdown (`<details>`) |
+The dashboard is a React 18 SPA (`frontend/`) served at `/app/*` by FastAPI once built. The original Jinja2 pages at `/`, `/positions`, etc. are preserved for backward compatibility.
+
+| SPA route | Description |
+|-----------|-------------|
+| `/app/overview` | Net liq KPIs, equity/drawdown chart (7D/30D/90D), bot status, top positions, recent events |
+| `/app/positions` | Open positions — filterable (all/equity/options/winners/losers), per-row sparkline |
+| `/app/orders` | Orders + Fills tabs, status badges, mono timestamps |
+| `/app/signals` | Signals with filter tabs, inline ScoreBar distribution |
+| `/app/rankings` | Top Bullish / Bearish panels, full ranking table with factor breakdowns, trade plans |
+| `/app/sentiment` | 60h market trend chart, sectors & tickers tables, headlines list, budget gauge, Refresh button |
+| `/app/risk` | Drawdown + position-slots donuts, 90d chart, limits card |
+| `/app/controls` | Trading / Kill switch / Options / Approve mode cards; two-step Close All confirmation |
+| `/app/config` | Read-only 3-column config grid (8 sections) |
+
+### Building and running the frontend
+
+```bash
+# Development (hot reload; proxies /api to localhost:8000)
+cd frontend
+pnpm dev          # → http://localhost:5173/
+
+# Production build (outputs to ui/static/dist/, served at /app/*)
+pnpm build
+
+# Then start FastAPI as usual
+uvicorn api.main:app --reload
+# Navigate to http://localhost:8000/app/overview
+```
 
 ---
 
 ## API Endpoints
 
+### v1 JSON API (used by the React SPA)
+
+All endpoints are prefixed `/api/v1/`. Controls return `{ ok: bool, bot: BotState }`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/overview` | Bot state, equity history, positions, events, LLM budget |
+| GET | `/api/v1/positions` | Open positions |
+| GET | `/api/v1/orders` | Order history |
+| GET | `/api/v1/fills` | Fill history |
+| GET | `/api/v1/signals` | Signal snapshots |
+| GET | `/api/v1/rankings` | Latest symbol rankings with factor components |
+| GET | `/api/v1/trade-plans` | Recent trade plans |
+| GET | `/api/v1/sentiment` | Market/sector/ticker scores, history, headlines, budget |
+| GET | `/api/v1/risk` | Drawdown history + risk config |
+| GET | `/api/v1/config` | Active config (8 sections) |
+| POST | `/api/v1/controls/pause` | Pause trading |
+| POST | `/api/v1/controls/resume` | Resume trading |
+| POST | `/api/v1/controls/kill/on` | Activate kill switch |
+| POST | `/api/v1/controls/kill/off` | Deactivate kill switch |
+| POST | `/api/v1/controls/close_all` | Close all positions (sets kill switch) |
+| POST | `/api/v1/controls/options/enable` | Enable options trading |
+| POST | `/api/v1/controls/options/disable` | Disable options trading |
+| POST | `/api/v1/controls/approve_mode/on` | Require manual approval |
+| POST | `/api/v1/controls/approve_mode/off` | Allow auto-trading |
+| POST | `/api/v1/sentiment/refresh` | Trigger sentiment refresh |
+
+### Legacy API (backward compat, unchanged)
+
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/health` | Health check |
 | GET | `/state` | Bot state + equity + positions summary |
-| POST | `/controls/pause` | Pause trading |
-| POST | `/controls/resume` | Resume trading |
-| POST | `/controls/kill/on` | Activate kill switch |
-| POST | `/controls/kill/off` | Deactivate kill switch |
-| POST | `/controls/close_all` | Close all positions (sets kill switch) |
-| POST | `/controls/options/enable` | Enable options trading |
-| POST | `/controls/options/disable` | Disable options trading |
-| POST | `/controls/approve_mode/on` | Require manual approval |
-| POST | `/controls/approve_mode/off` | Allow auto-trading |
 | GET | `/signals/latest` | Latest signal snapshots |
 | GET | `/sentiment/latest` | Latest sentiment data |
-| GET | `/sentiment/llm-budget` | Claude sentiment spend + remaining caps |
+| GET | `/sentiment/llm-budget` | Claude sentiment spend + caps |
 | GET | `/orders` | Order history |
 | GET | `/fills` | Fill history |
 | GET | `/positions` | Current positions |
-| GET | `/rankings` | Latest symbol rankings |
+| GET | `/api/rankings/latest` | Latest symbol rankings |
+| POST | `/controls/*` | All legacy control endpoints |
 
 Full interactive docs: **http://localhost:8000/docs**
 
@@ -489,7 +546,11 @@ The `security_master` table is auto-seeded from `data/us_listed_master.csv` when
 ## Running Tests
 
 ```bash
-python -m pytest tests/ -v    # 205 tests
+# Python backend (205 tests)
+python -m pytest tests/ -v
+
+# Frontend smoke tests (11 tests)
+cd frontend && pnpm test
 ```
 
 ---

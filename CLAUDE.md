@@ -2,20 +2,22 @@
 
 ## Project Overview
 
-Automated swing trading bot for Interactive Brokers (IBKR) targeting US stocks/ETFs. Supports two instrument types: **debit spread options** (`OptionsSwingBot`) and **equity shares** (`EquitySwingBot`), runnable independently or together. Paper-trading-first. Tech stack: Python 3.12, ib_insync, FastAPI, SQLAlchemy 2.0, SQLite/Postgres, Jinja2+HTMX+Chart.js dashboard, Click CLI. User's base currency is EUR; IBKR account is a cash account (no margin, no debt).
+Automated swing trading bot for Interactive Brokers (IBKR) targeting US stocks/ETFs. Supports two instrument types: **debit spread options** (`OptionsSwingBot`) and **equity shares** (`EquitySwingBot`), runnable independently or together. Paper-trading-first. Tech stack: Python 3.12, ib_insync, FastAPI, SQLAlchemy 2.0, SQLite/Postgres, React 18 + Vite + Tailwind SPA (replaces Jinja2/HTMX), Click CLI. User's base currency is EUR; IBKR account is a cash account (no margin, no debt).
 
 ## Architecture & Key Decisions
 
 ### Structure
 
-Six top-level packages plus data and scripts — flat layout, no `src/` directory. Installed as editable package via `pyproject.toml`.
+Seven top-level packages plus data, scripts, and frontend — flat layout, no `src/` directory. Installed as editable package via `pyproject.toml`.
 
 - **`common/`** — shared config, DB engine, ORM models, Pydantic schemas, logging, time utils
 - **`trader/`** — trading engine: IBKR client, market data, indicators, sentiment, strategy, risk, execution, scheduler, Greeks sub-package
 - **`bots/`** — bot plugin layer: `BaseBot` ABC + `OptionsSwingBot` + `EquitySwingBot`
 - **`execution/`** — order routing: `equity_execution.py` (STK orders) + `options_execution.py` (shim to existing pipeline)
-- **`api/`** — FastAPI app with API routes + server-rendered UI pages
-- **`ui/`** — Jinja2 templates + static CSS/JS
+- **`api/`** — FastAPI app with legacy Jinja2 routes + `api/v1/` JSON API for the SPA
+- **`api/v1/`** — versioned JSON endpoints (overview, positions, orders, fills, signals, rankings, trade-plans, sentiment, risk, controls, config). Controls return `{ ok, bot: BotState }`. All prefixed `/api/v1/`.
+- **`ui/`** — Jinja2 templates (legacy, kept for backward compat) + `static/dist/` (built SPA output)
+- **`frontend/`** — React 18 + Vite + TypeScript + Tailwind SPA. Build output goes to `ui/static/dist/`. Dev server on port 5173 proxies `/api` to FastAPI.
 - **`scripts/`** — `init_db.py` (DB setup), `run_all.py` (starts API + trader as subprocesses)
 - **`data/`** — `sp500.csv` (~180 S&P 500 stocks with symbol/name/sector); `us_listed_master.csv` (~220 major US stocks seed for security master); `manual_alias_overrides.csv` (manual priority-1 aliases)
 - **`cli.py`** — unified Click CLI entry point
@@ -97,16 +99,27 @@ Six top-level packages plus data and scripts — flat layout, no `src/` director
 - **Claude prompt** → `trader/sentiment/claude_provider.py` now requests `mentioned_companies` (company names) not ticker entities; `_build_ticker_results_from_companies()` runs the matcher post-LLM
 
 ### API & UI
-- **FastAPI app + UI routes** → `api/main.py` (API routers + 8 UI page handlers)
-- **API route modules** → `api/routes/` (health, state, controls, signals, sentiment, trades, rankings)
-- **Dashboard templates** → `ui/templates/` (layout.html + 8 page templates)
-- **Static assets** → `ui/static/app.css` (dark theme), `ui/static/app.js` (Chart.js helpers, `postControl()`)
+- **FastAPI app** → `api/main.py` — includes all routers, serves legacy Jinja2 pages, serves SPA at `GET /app/{path:path}` (returns `ui/static/dist/index.html` if built, else fallback `app.html`)
+- **Legacy API routes** → `api/routes/` (health, state, controls, signals, sentiment, trades, rankings) — unchanged, kept for backward compat
+- **JSON API v1** → `api/v1/` — 10 modules, master router at `api/v1/__init__.py`, all mounted under `/api/v1/`. Controls POST endpoints return `{ ok: bool, bot: BotState }`.
+- **SPA workspace** → `frontend/` — Vite 5, React 18, TypeScript strict, Tailwind 3, TanStack Query 5, Zustand 4, Recharts 2, lucide-react, @fontsource/inter + jetbrains-mono
+- **SPA entry** → `frontend/src/main.tsx` → `App.tsx` → React Router with `basename: '/app'`
+- **SPA pages** → `frontend/src/pages/` (Overview, Positions, Orders, Signals, Rankings, Sentiment, Risk, Controls, Config)
+- **SPA components** → `frontend/src/components/` (AppShell, Sidebar, Topbar, Card, KPI, Badge, Sparkline, LineChart, Donut, ScoreBar, DataTable, Toggle, Button, SegmentedControl, TweaksPanel)
+- **API client** → `frontend/src/lib/api.ts` (typed fetch wrappers keyed by `api.*` functions)
+- **Bot state store** → `frontend/src/store/botStore.ts` (Zustand; updated from every control POST response and overview poll)
+- **Design tokens** → `frontend/src/styles/globals.css` (CSS custom props: `--bg-0..4`, `--ink-1..5`, `--accent-h`, `--pos/neg/warn`, `--density`)
+- **Tweaks panel** → persists `{ accentHue, density }` to `localStorage` under `mai_tweaks`; density maps `dense=0.75 / balanced=1 / airy=1.25` into `--density`
+- **Legacy templates** → `ui/templates/` (layout.html + 9 Jinja2 pages — still functional, not modified)
+- **SPA fallback template** → `ui/templates/app.html` (shown when `ui/static/dist/index.html` does not exist)
+- **Built SPA** → `ui/static/dist/index.html` + `assets/` (Vite output, gitignored in practice)
 
 ### Entry Points & Data
 - **Unified CLI** → `cli.py` (Click; commands below)
 - **SP500 reference** → `data/sp500.csv` (~180 stocks, `symbol,name,sector`)
 - **Alembic migrations** → `alembic/versions/` (0001–0005)
-- **Tests** → `tests/` (205 tests, all passing)
+- **Python tests** → `tests/` (205 tests, all passing)
+- **Frontend tests** → `frontend/src/test/pages/` (11 vitest smoke tests, one per page + helpers)
 
 ## Commands
 
@@ -115,9 +128,14 @@ pip install -e ".[dev]"          # Install with dev deps (includes click)
 python scripts/init_db.py        # Create/seed DB
 alembic upgrade head             # Run all migrations (Postgres / fresh SQLite)
 python scripts/run_all.py        # Start API (port 8000) + trader worker (legacy)
-python -m pytest tests/ -v       # Run tests (205 tests)
+python -m pytest tests/ -v       # Run Python tests (205 tests)
 uvicorn api.main:app --reload    # API only (no trader)
 python trader/main.py            # Trader only (no API, continuous)
+
+# Frontend (from frontend/)
+pnpm dev                         # Dev server → localhost:5173, proxies /api to :8000
+pnpm build                       # Build SPA → ui/static/dist/
+pnpm test                        # Run vitest smoke tests (11 tests)
 
 # Unified CLI (new)
 python cli.py sentiment refresh [--source rss_lexicon|claude_llm] [--dry-run]
@@ -140,20 +158,20 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 ### Working
 - Full config system with YAML + Pydantic validation (`BotsConfig` + per-bot configs, `FundamentalsConfig`)
 - SQLite DB with 18 tables; Postgres-ready via alembic
-- FastAPI with 6 API route groups (14 endpoints) + 8 dashboard pages
+- FastAPI with legacy API routes (14 endpoints) + new `/api/v1/` JSON layer (10 endpoints) + 9 Jinja2 pages (kept)
+- **React SPA** (`frontend/`) — 9 pages, dark design system, TanStack Query polling, Zustand bot store, Recharts charts, Tweaks panel; built to `ui/static/dist/`, served at `/app/*`
 - Indicator calculations (EMA, SMA, RSI, MACD, ATR) — deterministic, tested
 - Risk engine: drawdown stop, position limits, cash reservation, kill switch, approve mode
 - Sentiment: RSS lexicon + Claude LLM + mock providers, DB persistence, recency weighting
 - Strategy: SPY regime filter, legacy 4-factor `score_symbol()` (still used by equity bot `score_candidate`)
-- **Multi-factor composite scoring** (`trader/scoring.py`): 5-factor [0,1] score per symbol driving both bots; missing factors redistribute weight proportionally; expandable `/rankings` breakdown with `<details>` (no JS)
-- `equity_eligible` gate: passes when liquidity checks out and contract is verified in IBKR
-- `options_eligible` gate: safe-by-default=False; reads `SecurityMaster.options_eligible`
+- **Multi-factor composite scoring** (`trader/scoring.py`): 5-factor [0,1] score per symbol driving both bots; missing factors redistribute weight proportionally
+- `equity_eligible` and `options_eligible` eligibility gates
 - DTE config unified: canonical `cfg.options.planner_dte_*`; `cfg.ranking.dte_*` kept deprecated
 - OptionsSwingBot: full debit spread pipeline (Greeks → gate → pricing → approve/submit)
 - EquitySwingBot: ATR-based sizing, sector concentration cap, risk-off cash/defensive modes, portfolio isolation
 - Unified CLI with continuous and single-cycle modes
-- **Security master** (`trader/securities/`): company-name→ticker deterministic matching via `security_master` + `security_alias` tables; Claude LLM now extracts `mentioned_companies` (not ticker guesses) and the matcher resolves them; audit log in `rss_entity_matches`
-- 205 pytest tests all passing
+- **Security master** (`trader/securities/`): company-name→ticker deterministic matching
+- 205 pytest tests + 11 vitest smoke tests all passing
 
 ### Not Yet Tested End-to-End
 - Live IBKR connection (requires TWS/Gateway running)
@@ -174,3 +192,4 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 - [2026-04-19] Multi-bot refactor: `bots/` plugin package (`BaseBot`, `OptionsSwingBot`, `EquitySwingBot`); `execution/` package (`equity_execution.py` with ATR sizing + portfolio isolation, `options_execution.py` shim); unified `cli.py` (Click: sentiment refresh, run, report); `data/sp500.csv`; alembic migration 0004 (`portfolio_id` on orders/positions/trades); `BotsConfig`/`EquityBotConfig`/`OptionsBotConfig` in config; fixed broken greeks flat-module imports in `trader/execution.py`. 94 new tests (138 total, all passing).
 - [2026-04-21] Security master + deterministic company→ticker matching: `trader/securities/` package (normalize, master, matcher); 3 new DB tables (`security_master`, `security_alias`, `rss_entity_matches`) + alembic 0005; `SecuritiesConfig`; Claude LLM prompt updated to emit `mentioned_companies` instead of ticker entities; `_build_ticker_results_from_companies()` in claude_provider maps them to verified symbols post-LLM; `securities import/verify/liquidity-refresh` CLI commands; `match-company` debug command; ~220-row `data/us_listed_master.csv` seed + `data/manual_alias_overrides.csv`; 41 new tests (179 total, all passing).
 - [2026-04-22] Multi-factor composite scoring: new `trader/scoring.py` with 5 factor functions (sentiment, momentum/trend, risk, liquidity, optionability) + `compute_composite()` with proportional weight redistribution; `rank_symbols()` rewritten to run full factor pipeline per symbol; `RankedSymbol` gains `equity_eligible`/`options_eligible` flags; both bots hard-gate on their eligibility flag; DTE config unified under `cfg.options.planner_dte_*`; `/rankings` dashboard shows expandable `<details>` factor breakdowns; `FundamentalsConfig` added to config; `enter_threshold` default changed 0.25→0.55; 26 new tests in `tests/test_scoring.py` (205 total, all passing).
+- [2026-04-23] React SPA + JSON API v1: replaced Jinja2/HTMX/Chart.js dashboard with a full React 18 + Vite + TypeScript + Tailwind SPA (`frontend/`). Added `api/v1/` package (10 FastAPI routers, all under `/api/v1/`; controls return `{ok, bot}`). FastAPI now also serves the SPA at `/app/{path:path}`. SPA features: dark design system with CSS custom property tokens, TanStack Query polling, Zustand bot state, Recharts charts, Tweaks panel (accent hue + density, persisted to localStorage). Legacy Jinja2 routes untouched. 11 vitest smoke tests added; all 205 Python tests still pass.
