@@ -24,7 +24,7 @@ Both bots can run together or independently. Each has its own position namespace
 - **Risk engine** — drawdown stop, per-bot position limits, cash reservation, kill switch
 - **Greeks gate** — 10-check filter before any options order (IV rank, delta range, theta/delta ratio, vega, gamma-near-expiry, liquidity, pricing ROC, composite score)
 - **LLM-powered sentiment** — Claude AI scores each news item with per-item sentiment, sector/ticker tagging, and a strict €10/month budget cap; RSS lexicon available as a lightweight fallback
-- **React SPA dashboard** — dark-mode single-page app (React 18 + Vite + Tailwind) served at `/app/*`, with TanStack Query live polling, Recharts equity/drawdown charts, per-symbol factor breakdowns, and a Tweaks panel for accent colour + layout density
+- **React SPA dashboard** — dark-mode single-page app (React 18 + Vite + Tailwind) served on root-level browser routes, with TanStack Query live polling, Recharts equity/drawdown charts, per-symbol factor breakdowns, and a Tweaks panel for accent colour + layout density
 - **Unified CLI** — `python cli.py run [options_swing|equity_swing|all]`
 
 ---
@@ -323,20 +323,18 @@ market_AI/
     equity_execution.py   # Stock order placement (portfolio_id="equity_swing")
     options_execution.py  # Shim: TradeIntent → SignalIntent → execute_signal()
   api/
-    main.py               # FastAPI app; serves SPA at /app/{path:path}
+    main.py               # FastAPI app; serves React SPA browser routes
     routes/               # Legacy routes: health, state, controls, signals, sentiment, trades, rankings
     v1/                   # JSON API v1: overview, positions, orders, fills, signals, rankings,
                           #   trade-plans, sentiment, risk, controls, config
   ui/
-    templates/            # Jinja2 pages (legacy, kept for backward compat) + app.html (SPA fallback)
     static/
-      app.css / app.js    # Legacy Jinja2 assets
       dist/               # Built React SPA output (index.html + assets/)
   frontend/               # React SPA source
     package.json          # pnpm workspace (React 18, Vite 5, Tailwind 3, TanStack Query 5, Zustand 4)
     vite.config.ts        # outDir → ../ui/static/dist; dev proxy /api → :8000
     src/
-      main.tsx / App.tsx  # Entry + React Router (basename /app)
+      main.tsx / App.tsx  # Entry + React Router
       types/api.ts        # TypeScript interfaces matching Python Pydantic models
       lib/api.ts          # Typed fetch wrappers
       lib/formatters.ts   # fmtMoney, fmtCompact, fmtPct, fmtSign, fmtTs
@@ -358,19 +356,19 @@ market_AI/
 
 ## Dashboard
 
-The dashboard is a React 18 SPA (`frontend/`) served at `/app/*` by FastAPI once built. The original Jinja2 pages at `/`, `/positions`, etc. are preserved for backward compatibility.
+The dashboard is a React 18 SPA (`frontend/`) served by FastAPI once built.
 
 | SPA route | Description |
 |-----------|-------------|
-| `/app/overview` | Net liq KPIs, equity/drawdown chart (7D/30D/90D), bot status, top positions, recent events |
-| `/app/positions` | Open positions — filterable (all/equity/options/winners/losers), per-row sparkline |
-| `/app/orders` | Orders + Fills tabs, status badges, mono timestamps |
-| `/app/signals` | Signals with filter tabs, inline ScoreBar distribution |
-| `/app/rankings` | Top Bullish / Bearish panels, full ranking table with factor breakdowns, trade plans |
-| `/app/sentiment` | 60h market trend chart, sectors & tickers tables, headlines list, budget gauge, Refresh button |
-| `/app/risk` | Drawdown + position-slots donuts, 90d chart, limits card |
-| `/app/controls` | Trading / Kill switch / Options / Approve mode cards; two-step Close All confirmation |
-| `/app/config` | Read-only 3-column config grid (8 sections) |
+| `/overview` | Net liq KPIs, equity/drawdown chart (7D/30D/90D), bot status, top positions, recent events |
+| `/positions` | Open positions — filterable (all/equity/options/winners/losers), per-row sparkline |
+| `/orders` | Orders + Fills tabs, status badges, mono timestamps |
+| `/signals` | Signals with filter tabs, inline ScoreBar distribution |
+| `/rankings` | Top Bullish / Bearish panels, full ranking table with factor breakdowns, trade plans |
+| `/sentiment` | 60h market trend chart, sectors & tickers tables, headlines list, budget gauge, Refresh button |
+| `/risk` | Drawdown + position-slots donuts, 90d chart, limits card |
+| `/controls` | Trading / Kill switch / Options / Approve mode cards; two-step Close All confirmation |
+| `/config` | Read-only 3-column config grid (8 sections) |
 
 ### Building and running the frontend
 
@@ -379,12 +377,12 @@ The dashboard is a React 18 SPA (`frontend/`) served at `/app/*` by FastAPI once
 cd frontend
 pnpm dev          # → http://localhost:5173/
 
-# Production build (outputs to ui/static/dist/, served at /app/*)
+# Production build (outputs to ui/static/dist/)
 pnpm build
 
 # Then start FastAPI as usual
 uvicorn api.main:app --reload
-# Navigate to http://localhost:8000/app/overview
+# Navigate to http://localhost:8000/overview
 ```
 
 ---

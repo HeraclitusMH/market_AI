@@ -30,7 +30,6 @@ const router = createBrowserRouter(
       ],
     },
   ],
-  { basename: import.meta.env.DEV ? undefined : '/app' },
 );
 
 export default function App() {

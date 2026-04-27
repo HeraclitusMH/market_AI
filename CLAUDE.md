@@ -14,9 +14,9 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **`trader/`** — trading engine: IBKR client, market data, indicators, sentiment, strategy, risk, execution, scheduler, Greeks sub-package
 - **`bots/`** — bot plugin layer: `BaseBot` ABC + `OptionsSwingBot` + `EquitySwingBot`
 - **`execution/`** — order routing: `equity_execution.py` (STK orders) + `options_execution.py` (shim to existing pipeline)
-- **`api/`** — FastAPI app with legacy Jinja2 routes + `api/v1/` JSON API for the SPA
+- **`api/`** — FastAPI app with JSON APIs and React SPA browser-route fallback
 - **`api/v1/`** — versioned JSON endpoints (overview, positions, orders, fills, signals, rankings, trade-plans, sentiment, risk, controls, config). Controls return `{ ok, bot: BotState }`. All prefixed `/api/v1/`.
-- **`ui/`** — Jinja2 templates (legacy, kept for backward compat) + `static/dist/` (built SPA output)
+- **`ui/`** — `static/dist/` built React SPA output
 - **`frontend/`** — React 18 + Vite + TypeScript + Tailwind SPA. Build output goes to `ui/static/dist/`. Dev server on port 5173 proxies `/api` to FastAPI.
 - **`scripts/`** — `init_db.py` (DB setup), `run_all.py` (starts API + trader as subprocesses)
 - **`data/`** — `sp500.csv` (~180 S&P 500 stocks with symbol/name/sector); `us_listed_master.csv` (~220 major US stocks seed for security master); `manual_alias_overrides.csv` (manual priority-1 aliases)
@@ -34,7 +34,6 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **DTE config unification** — canonical planner DTE lives in `cfg.options.planner_dte_{min,max,target,fallback_min}`. `cfg.ranking.dte_*` kept for backward compat with deprecation comment.
 - **Cash reservation** — before placing any order, cash equal to max loss is reserved; trade blocked if insufficient.
 - **Approve mode defaults ON** — signals saved to DB as `pending_approval`; orders not submitted until disabled.
-- **Starlette 1.0 TemplateResponse API** — uses `TemplateResponse(request, name, context)` signature.
 - **Sentiment** — pluggable `SentimentProvider` ABC. Providers: `rss_lexicon`, `claude_llm`, `mock`. Shared by both bots. Sentiment is one input to the composite score (not the only input).
 - **No paid APIs** — core universe seeded from embedded SEED_TICKERS (~50 tickers) + RSS-discovered tickers (verified via IBKR). `data/sp500.csv` exists as reference but is not yet auto-ingested into the universe builder.
 
@@ -99,19 +98,17 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **Claude prompt** → `trader/sentiment/claude_provider.py` now requests `mentioned_companies` (company names) not ticker entities; `_build_ticker_results_from_companies()` runs the matcher post-LLM
 
 ### API & UI
-- **FastAPI app** → `api/main.py` — includes all routers, serves legacy Jinja2 pages, serves SPA at `GET /app/{path:path}` (returns `ui/static/dist/index.html` if built, else fallback `app.html`)
+- **FastAPI app** → `api/main.py` — includes all routers and serves the React SPA for browser routes (returns `ui/static/dist/index.html` if built)
 - **Legacy API routes** → `api/routes/` (health, state, controls, signals, sentiment, trades, rankings) — unchanged, kept for backward compat
 - **JSON API v1** → `api/v1/` — 10 modules, master router at `api/v1/__init__.py`, all mounted under `/api/v1/`. Controls POST endpoints return `{ ok: bool, bot: BotState }`.
 - **SPA workspace** → `frontend/` — Vite 5, React 18, TypeScript strict, Tailwind 3, TanStack Query 5, Zustand 4, Recharts 2, lucide-react, @fontsource/inter + jetbrains-mono
-- **SPA entry** → `frontend/src/main.tsx` → `App.tsx` → React Router with `basename: '/app'`
+- **SPA entry** → `frontend/src/main.tsx` → `App.tsx` → React Router
 - **SPA pages** → `frontend/src/pages/` (Overview, Positions, Orders, Signals, Rankings, Sentiment, Risk, Controls, Config)
 - **SPA components** → `frontend/src/components/` (AppShell, Sidebar, Topbar, Card, KPI, Badge, Sparkline, LineChart, Donut, ScoreBar, DataTable, Toggle, Button, SegmentedControl, TweaksPanel)
 - **API client** → `frontend/src/lib/api.ts` (typed fetch wrappers keyed by `api.*` functions)
 - **Bot state store** → `frontend/src/store/botStore.ts` (Zustand; updated from every control POST response and overview poll)
 - **Design tokens** → `frontend/src/styles/globals.css` (CSS custom props: `--bg-0..4`, `--ink-1..5`, `--accent-h`, `--pos/neg/warn`, `--density`)
 - **Tweaks panel** → persists `{ accentHue, density }` to `localStorage` under `mai_tweaks`; density maps `dense=0.75 / balanced=1 / airy=1.25` into `--density`
-- **Legacy templates** → `ui/templates/` (layout.html + 9 Jinja2 pages — still functional, not modified)
-- **SPA fallback template** → `ui/templates/app.html` (shown when `ui/static/dist/index.html` does not exist)
 - **Built SPA** → `ui/static/dist/index.html` + `assets/` (Vite output, gitignored in practice)
 
 ### Entry Points & Data
@@ -158,8 +155,8 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 ### Working
 - Full config system with YAML + Pydantic validation (`BotsConfig` + per-bot configs, `FundamentalsConfig`)
 - SQLite DB with 18 tables; Postgres-ready via alembic
-- FastAPI with legacy API routes (14 endpoints) + new `/api/v1/` JSON layer (10 endpoints) + 9 Jinja2 pages (kept)
-- **React SPA** (`frontend/`) — 9 pages, dark design system, TanStack Query polling, Zustand bot store, Recharts charts, Tweaks panel; built to `ui/static/dist/`, served at `/app/*`
+- FastAPI with legacy API routes (14 endpoints) + new `/api/v1/` JSON layer (10 endpoints)
+- **React SPA** (`frontend/`) — 9 pages, dark design system, TanStack Query polling, Zustand bot store, Recharts charts, Tweaks panel; built to `ui/static/dist/`, served on root-level browser routes
 - Indicator calculations (EMA, SMA, RSI, MACD, ATR) — deterministic, tested
 - Risk engine: drawdown stop, position limits, cash reservation, kill switch, approve mode
 - Sentiment: RSS lexicon + Claude LLM + mock providers, DB persistence, recency weighting

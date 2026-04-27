@@ -24,7 +24,7 @@ Opens at `http://localhost:5173/` in dev. API calls proxy to `http://localhost:8
 pnpm build
 ```
 
-Outputs to `../ui/static/dist/`. FastAPI then serves the SPA at `/app/*`.
+Outputs to `../ui/static/dist/`. FastAPI then serves the SPA from root browser routes.
 
 ## Tests
 
@@ -40,11 +40,11 @@ Runs vitest smoke tests for each of the 9 pages.
 uvicorn api.main:app --reload
 ```
 
-Navigate to `http://localhost:8000/app/overview`.
+Navigate to `http://localhost:8000/overview`.
 
 ## Stack
 
-- **React 18** + React Router 6 (basename `/app` in production/FastAPI, `/` in Vite dev)
+- **React 18** + React Router 6
 - **TanStack Query 5** — data fetching, 15s refetch interval
 - **Zustand 4** — bot state store, updated from control POST responses
 - **Recharts 2** — equity curve, drawdown, sentiment trend charts

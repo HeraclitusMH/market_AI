@@ -130,7 +130,7 @@ flowchart TD
   EXEC_EQ --> IBKR
   IBKR -->|fills| SYNC
 
-  DB_ORD --> UI["FastAPI + Jinja UI (api/main.py)"]
+  DB_ORD --> UI["FastAPI + React UI (api/main.py)"]
   DB_RANK --> UI
   DB_EQUITY --> UI
   DB_SENT --> UI
@@ -600,9 +600,8 @@ flowchart TD
 - **Purpose.** Human approval of `pending_approval` orders; visibility into
   rankings, sentiment, risk, events.
 - **Trigger / cadence.** FastAPI request-driven (`api/main.py`).
-- **Core logic.** Server-rendered Jinja templates under `ui/templates/` powered
-  by API routers in `api/routes/` (health, state, controls, signals, sentiment,
-  trades, rankings).
+- **Core logic.** React SPA under `frontend/` powered by JSON endpoints in
+  `api/v1/`; FastAPI serves the built assets from `ui/static/dist/`.
 - **Outputs.** Control-plane mutations write to `BotState` (kill switch, pause,
   approve mode, options enabled) and to `orders` (approve / reject / close).
 
