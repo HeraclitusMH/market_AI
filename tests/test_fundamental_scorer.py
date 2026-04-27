@@ -131,6 +131,19 @@ def test_empty_response_returns_neutral_score():
     assert result["source"] == "none"
 
 
+def test_empty_response_is_not_cached_so_next_run_retries():
+    client = MagicMock()
+    client.get_info.side_effect = [{}, SAMPLE_YFINANCE_INFO]
+    scorer = FundamentalScorer(cfg=_cfg(), client=client)
+
+    first = scorer.get_score("AAPL")
+    second = scorer.get_score("AAPL")
+
+    assert first["source"] == "none"
+    assert second["source"] == "yfinance"
+    assert client.get_info.call_count == 2
+
+
 def test_get_score_uses_injected_yfinance_client():
     client = MagicMock()
     client.get_info.return_value = {"trailingPE": 20, "returnOnEquity": 0.18}

@@ -100,11 +100,13 @@ class FundamentalScorer:
             result = self._neutral_result(normalized_symbol, now, list(self._configured_fields()))
             result["pillars"]["_error"] = {"reason": str(exc)}
 
-        self._cache[normalized_symbol] = {
-            "ratios": ratios if "ratios" in locals() else {},
-            "result": copy.deepcopy(result),
-            "timestamp_dt": now,
-        }
+        ratios_to_cache = ratios if "ratios" in locals() else {}
+        if ratios_to_cache:
+            self._cache[normalized_symbol] = {
+                "ratios": ratios_to_cache,
+                "result": copy.deepcopy(result),
+                "timestamp_dt": now,
+            }
         log.info(
             "Fundamental score for %s: %.1f (cache miss)",
             normalized_symbol,
