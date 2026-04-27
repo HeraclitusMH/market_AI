@@ -122,9 +122,11 @@ ranking:
   dte_fallback_min: 14
 
 fundamentals:
-  enabled: true         # set false to disable IBKR Reuters/Refinitiv fundamental scoring
+  enabled: true         # set false to disable yfinance fundamental scoring
   ttl_days: 7           # backward compatibility for older DB-cached fundamentals
   cache_ttl_hours: 24
+  provider: "yfinance"
+  request_timeout_seconds: 15
   neutral_score: 50
   min_coverage: 0.2     # min fraction of universe with data for cross-sectional scoring
   pillar_weights:

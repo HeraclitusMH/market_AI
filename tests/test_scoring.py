@@ -316,42 +316,85 @@ def test_fundamentals_enabled_by_default_config():
     assert cfg.fundamentals.enabled is True
 
 
-def test_fundamentals_factor_scores_ibkr_snapshot_xml():
+def test_fundamentals_factor_scores_yfinance_info():
     from trader.fundamental_scorer import FundamentalScorer
 
     FundamentalScorer._shared_cache.clear()
     cfg = MagicMock()
     cfg.fundamentals.enabled = True
     cfg.fundamentals.cache_ttl_hours = 24
+    cfg.fundamentals.provider = "yfinance"
     cfg.fundamentals.neutral_score = 50
     client = MagicMock()
-    client.fundamental_data.return_value = """
-    <ReportRatios>
-      <Ratio FieldName="PEEXCLXOR">20</Ratio>
-      <Ratio FieldName="PRICE2BK">2.5</Ratio>
-      <Ratio FieldName="EVCUR2EBITDA">12.5</Ratio>
-      <Ratio FieldName="PRICE2SALESTTM">5</Ratio>
-      <Ratio FieldName="TTMROEPCT">18</Ratio>
-      <Ratio FieldName="TTMROAPCT">10</Ratio>
-      <Ratio FieldName="TTMGROSMGN">40</Ratio>
-      <Ratio FieldName="TTMNPMGN">15</Ratio>
-      <Ratio FieldName="REVCHNGYR">10</Ratio>
-      <Ratio FieldName="EPSCHNGYR">20</Ratio>
-      <Ratio FieldName="REVTRENDGR">5</Ratio>
-      <Ratio FieldName="QCURRATIO">2</Ratio>
-      <Ratio FieldName="QQUICKRATI">1.4</Ratio>
-      <Ratio FieldName="QTOTD2EQ">0.5</Ratio>
-    </ReportRatios>
-    """
+    client.get_info.return_value = {
+        "trailingPE": 20,
+        "priceToBook": 2.5,
+        "enterpriseToEbitda": 12.5,
+        "priceToSalesTrailing12Months": 5,
+        "returnOnEquity": 0.18,
+        "returnOnAssets": 0.10,
+        "grossMargins": 0.40,
+        "profitMargins": 0.15,
+        "revenueGrowth": 0.10,
+        "earningsGrowth": 0.20,
+        "currentRatio": 2,
+        "quickRatio": 1.4,
+        "debtToEquity": 50,
+    }
 
     result = compute_fundamentals_factor("AAPL", cfg, client)
 
     assert result["status"] == "ok"
-    assert result["value_0_1"] == pytest.approx(0.616, abs=0.001)
-    assert result["metrics"]["total_score"] == pytest.approx(61.6, abs=0.1)
+    assert result["value_0_1"] == pytest.approx(0.63, abs=0.001)
+    assert result["metrics"]["total_score"] == pytest.approx(63.0, abs=0.1)
     assert "valuation" in result["metrics"]["pillars"]
-    client.fundamental_data.assert_called_once()
+    assert result["metrics"]["source"] == "yfinance"
+    client.get_info.assert_called_once()
     FundamentalScorer._shared_cache.clear()
+
+
+def test_fundamentals_empty_yfinance_info_is_missing_for_composite():
+    from trader.fundamental_scorer import FundamentalScorer
+
+    FundamentalScorer._shared_cache.clear()
+    cfg = MagicMock()
+    cfg.fundamentals.enabled = True
+    cfg.fundamentals.cache_ttl_hours = 24
+    cfg.fundamentals.provider = "yfinance"
+    cfg.fundamentals.neutral_score = 50
+    client = MagicMock()
+    client.get_info.return_value = {}
+
+    result = compute_fundamentals_factor("AAPL", cfg, client)
+
+    assert result["status"] == "missing"
+    assert result["value_0_1"] is None
+    assert result["reason"] == "no_usable_fundamental_metrics"
+    FundamentalScorer._shared_cache.clear()
+
+
+def test_missing_fundamentals_weight_is_redistributed():
+    factors = {
+        "sentiment": {"value_0_1": 0.6},
+        "momentum_trend": {"value_0_1": 0.7},
+        "risk": {"value_0_1": 0.8},
+        "fundamentals": {"value_0_1": None, "status": "missing"},
+    }
+    weights = {
+        "sentiment": 0.30,
+        "momentum_trend": 0.25,
+        "risk": 0.20,
+        "fundamentals": 0.10,
+    }
+
+    score, wu = compute_composite(factors, weights)
+
+    assert wu["fundamentals"] == 0.0
+    assert sum(wu.values()) == pytest.approx(1.0, abs=0.001)
+    assert score == pytest.approx(
+        (0.30 / 0.75) * 0.6 + (0.25 / 0.75) * 0.7 + (0.20 / 0.75) * 0.8,
+        abs=0.001,
+    )
 
 
 def _mock_db_session(first_return):

@@ -1,12 +1,11 @@
-"""IBKR ReportRatios fundamental scoring."""
+"""yfinance fundamental scoring."""
 from __future__ import annotations
 
 import copy
-import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, TypedDict
 
-from ib_insync import Stock
+import yfinance as yf
 
 from common.config import FundamentalsConfig, get_config
 from common.logging import get_logger
@@ -23,17 +22,18 @@ class FundamentalResult(TypedDict):
     missing_fields: list[str]
     cached: bool
     timestamp: str
+    source: str
 
 
 _NEGATIVE_IS_ZERO_FIELDS = {"PEEXCLXOR", "EVCUR2EBITDA"}
 
 
 class FundamentalScorer:
-    """Score equity fundamentals from IBKR ``ReportRatios`` XML.
+    """Score equity fundamentals from yfinance quote data.
 
-    The scorer fetches ratio XML, parses numeric ``Ratio`` fields, normalizes
-    configured metrics to 0..100, computes configured pillar scores, and caches
-    results per symbol to avoid repeated IBKR fundamental data requests.
+    The scorer maps yfinance ``Ticker.get_info()`` fields to the configured
+    metric names, normalizes metrics to 0..100, computes configured pillar
+    scores, and caches results per symbol.
     """
 
     _shared_cache: dict[str, dict] = {}
@@ -57,10 +57,13 @@ class FundamentalScorer:
         ):
             return raw
         enabled = getattr(raw, "enabled", False)
+        provider = getattr(raw, "provider", None) or getattr(raw, "fallback_provider", "yfinance")
         return FundamentalsConfig(
             enabled=enabled if isinstance(enabled, bool) else False,
             ttl_days=int(_number_attr(raw, "ttl_days", 7)),
             cache_ttl_hours=_number_attr(raw, "cache_ttl_hours", 24),
+            provider=str(provider or "yfinance"),
+            request_timeout_seconds=_number_attr(raw, "request_timeout_seconds", 15),
             neutral_score=_number_attr(raw, "neutral_score", 50),
             min_coverage=_number_attr(raw, "min_coverage", 0.2),
         )
@@ -85,14 +88,13 @@ class FundamentalScorer:
             ratios = self._fetch_ratios(normalized_symbol)
             if not ratios:
                 log.warning(
-                    "No fundamental ratios available for %s; returning neutral score %.1f. "
-                    "IBKR Reuters/Refinitiv entitlement may be missing.",
+                    "No yfinance fundamental ratios available for %s; returning neutral score %.1f.",
                     normalized_symbol,
                     self.neutral_score,
                 )
                 result = self._neutral_result(normalized_symbol, now, list(self._configured_fields()))
             else:
-                result = self._score_from_ratios(normalized_symbol, ratios, now)
+                result = self._score_from_ratios(normalized_symbol, ratios, now, "yfinance")
         except Exception as exc:
             log.exception("Unexpected fundamental scoring failure for %s", normalized_symbol)
             result = self._neutral_result(normalized_symbol, now, list(self._configured_fields()))
@@ -112,52 +114,53 @@ class FundamentalScorer:
         return result
 
     def _fetch_ratios(self, symbol: str) -> Dict[str, float]:
-        """Fetch and parse IBKR ``ReportRatios`` XML for a stock symbol."""
-        if self.client is None:
-            from trader.ibkr_client import get_ibkr_client
-
-            self.client = get_ibkr_client()
-
+        """Fetch and map yfinance fundamentals for a stock symbol."""
+        provider = str(getattr(self.fundamentals_cfg, "provider", "yfinance") or "yfinance").lower()
+        if provider != "yfinance":
+            log.warning("Unsupported fundamentals provider %s", provider)
+            return {}
         try:
-            contract = Stock(symbol, "SMART", "USD")
-            if hasattr(self.client, "fundamental_data"):
-                xml_text = self.client.fundamental_data(contract, report_type="ReportRatios")
+            info = self._fetch_yfinance_info(symbol)
+            ratios = self._parse_yfinance_info(info)
+            if ratios:
+                log.info("Fetched %d yfinance fundamental ratios for %s", len(ratios), symbol)
             else:
-                if hasattr(self.client, "ensure_connected"):
-                    self.client.ensure_connected()
-                ib = getattr(self.client, "ib", self.client)
-                qualified = ib.qualifyContracts(contract)
-                contract = qualified[0] if qualified else contract
-                xml_text = ib.reqFundamentalData(contract, "ReportRatios", [])
-        except Exception as exc:
-            log.warning("IBKR fundamental data request failed for %s: %s", symbol, exc)
-            return {}
-
-        if not xml_text or not str(xml_text).strip():
-            log.warning("Empty IBKR fundamental XML for %s", symbol)
-            return {}
-        return self._parse_xml(str(xml_text))
-
-    def _parse_xml(self, xml_string: str) -> Dict[str, float]:
-        """Parse ``ReportRatios`` XML into ``FieldName -> numeric value``."""
-        try:
-            root = ET.fromstring(xml_string)
-            ratios: Dict[str, float] = {}
-            for ratio in root.iter("Ratio"):
-                field_name = ratio.attrib.get("FieldName")
-                if not field_name:
-                    continue
-                text = (ratio.text or "").strip()
-                if not text:
-                    continue
-                try:
-                    ratios[field_name] = float(text.replace(",", ""))
-                except ValueError:
-                    continue
+                log.warning("yfinance returned no usable fundamental ratios for %s", symbol)
             return ratios
         except Exception as exc:
-            log.warning("Failed to parse IBKR ReportRatios XML: %s", exc)
+            log.warning("yfinance fundamental request failed for %s: %s", symbol, exc)
             return {}
+
+    def _fetch_yfinance_info(self, symbol: str) -> dict:
+        if self.client is not None and hasattr(self.client, "get_info"):
+            info = self.client.get_info(symbol)
+        else:
+            ticker = yf.Ticker(symbol)
+            info = ticker.get_info() if hasattr(ticker, "get_info") else ticker.info
+        return info if isinstance(info, dict) else {}
+
+    def _parse_yfinance_info(self, info: dict) -> Dict[str, float]:
+        candidates = {
+            "PEEXCLXOR": _number(info.get("trailingPE")),
+            "PRICE2BK": _number(info.get("priceToBook")),
+            "EVCUR2EBITDA": _number(info.get("enterpriseToEbitda")),
+            "PRICE2SALESTTM": _number(info.get("priceToSalesTrailing12Months")),
+            "TTMROEPCT": _ratio_to_percent(_number(info.get("returnOnEquity"))),
+            "TTMROAPCT": _ratio_to_percent(_number(info.get("returnOnAssets"))),
+            "TTMGROSMGN": _ratio_to_percent(_number(info.get("grossMargins"))),
+            "TTMNPMGN": _ratio_to_percent(_number(info.get("profitMargins"))),
+            "REVCHNGYR": _ratio_to_percent(_number(info.get("revenueGrowth"))),
+            "EPSCHNGYR": _ratio_to_percent(_number(info.get("earningsGrowth"))),
+            "REVTRENDGR": _ratio_to_percent(_number(info.get("revenueGrowth"))),
+            "QCURRATIO": _number(info.get("currentRatio")),
+            "QQUICKRATI": _number(info.get("quickRatio")),
+            "QTOTD2EQ": _percent_to_ratio(_number(info.get("debtToEquity"))),
+        }
+        return {
+            field: float(value)
+            for field, value in candidates.items()
+            if field in self._configured_fields() and value is not None
+        }
 
     def _normalize(self, value: Optional[float], worst: float, best: float) -> Optional[float]:
         """Normalize a raw metric to a clamped 0..100 score."""
@@ -203,8 +206,23 @@ class FundamentalScorer:
         }
 
     def _compute_total_score(self, pillar_scores: Dict[str, dict]) -> float:
-        """Compute the configured weighted total score from pillar scores."""
-        total = sum(float(p["score"]) * float(p["weight"]) for p in pillar_scores.values())
+        """Compute weighted score, redistributing missing pillar weights."""
+        present = {
+            name: pillar
+            for name, pillar in pillar_scores.items()
+            if not pillar.get("missing")
+        }
+        if not present:
+            return round(self.neutral_score, 1)
+
+        total_weight = sum(float(p["weight"]) for p in present.values())
+        if total_weight <= 0:
+            return round(self.neutral_score, 1)
+
+        total = sum(
+            float(p["score"]) * (float(p["weight"]) / total_weight)
+            for p in present.values()
+        )
         return round(max(0.0, min(100.0, total)), 1)
 
     def _score_from_ratios(
@@ -212,6 +230,7 @@ class FundamentalScorer:
         symbol: str,
         ratios: Dict[str, float],
         timestamp: datetime,
+        source: str = "yfinance",
     ) -> FundamentalResult:
         pillars = {
             pillar_name: self._compute_pillar_score(pillar_name, ratios)
@@ -222,9 +241,8 @@ class FundamentalScorer:
         if missing_fields:
             log.warning("Missing fundamental metrics for %s: %s", symbol, missing_fields)
 
-        all_pillars_missing = all(pillar["missing"] for pillar in pillars.values())
-        total_score = self.neutral_score if all_pillars_missing else self._compute_total_score(pillars)
-        if all_pillars_missing:
+        total_score = self._compute_total_score(pillars)
+        if all(pillar["missing"] for pillar in pillars.values()):
             log.warning("All fundamental pillars missing for %s; returning neutral score", symbol)
 
         return {
@@ -234,6 +252,7 @@ class FundamentalScorer:
             "missing_fields": missing_fields,
             "cached": False,
             "timestamp": timestamp.isoformat().replace("+00:00", "Z"),
+            "source": source,
         }
 
     def _neutral_result(
@@ -258,6 +277,7 @@ class FundamentalScorer:
             "missing_fields": sorted(missing_fields),
             "cached": False,
             "timestamp": timestamp.isoformat().replace("+00:00", "Z"),
+            "source": "none",
         }
 
     def _configured_fields(self) -> set[str]:
@@ -277,3 +297,21 @@ def _number_attr(obj, name: str, default: float) -> float:
     if not isinstance(value, (int, float)):
         return float(default)
     return float(value)
+
+
+def _number(value: object) -> Optional[float]:
+    if not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
+def _ratio_to_percent(value: Optional[float]) -> Optional[float]:
+    if value is None:
+        return None
+    return value * 100 if abs(value) <= 2.0 else value
+
+
+def _percent_to_ratio(value: Optional[float]) -> Optional[float]:
+    if value is None:
+        return None
+    return value / 100 if abs(value) > 10.0 else value

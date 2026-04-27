@@ -55,3 +55,36 @@ def test_normalize_ranking_maps_legacy_momentum_weight_to_momentum_trend():
         "risk": 0.3077,
         "fundamentals": 0.0,
     }
+
+
+def test_normalize_ranking_treats_neutral_empty_fundamentals_as_missing():
+    components = {
+        "sentiment": {"value_0_1": 0.6, "status": "ok"},
+        "momentum_trend": {"value_0_1": 0.7, "status": "ok"},
+        "risk": {"value_0_1": 0.8, "status": "ok"},
+        "fundamentals": {
+            "value_0_1": 0.5,
+            "status": "neutral",
+            "metrics": {
+                "total_score": 50,
+                "pillars": {
+                    "valuation": {"metrics": {}, "missing": True},
+                    "profitability": {"metrics": {}, "missing": True},
+                },
+            },
+        },
+        "weights_used": {
+            "sentiment": 0.3529,
+            "momentum_trend": 0.2941,
+            "risk": 0.2353,
+            "fundamentals": 0.1176,
+        },
+    }
+
+    normalized, score_total, _, _ = _normalize_ranking(components, 0.663, True, [])
+
+    assert normalized["fundamentals"]["value_0_1"] is None
+    assert normalized["fundamentals"]["status"] == "missing"
+    assert normalized["fundamentals"]["reason"] == "no_usable_fundamental_metrics"
+    assert normalized["weights_used"]["fundamentals"] == 0.0
+    assert score_total == 0.6867

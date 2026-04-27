@@ -227,6 +227,8 @@ class FundamentalsConfig(BaseModel):
     enabled: bool = True
     ttl_days: int = 7  # backward compatibility for older DB-cached fundamentals
     cache_ttl_hours: float = 24
+    provider: str = "yfinance"
+    request_timeout_seconds: float = 15
     neutral_score: float = 50
     min_coverage: float = 0.2  # fraction of universe that must have data for cross-sectional scoring
     pillar_weights: Dict[str, float] = Field(default_factory=lambda: {

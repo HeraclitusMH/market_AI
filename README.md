@@ -15,7 +15,7 @@ Both bots can run together or independently. Each has its own position namespace
 ## Features
 
 - **Multi-factor composite scoring** — [0,1] score per symbol from sentiment, momentum/trend, risk, and fundamentals. Missing factors redistribute weight; liquidity is an eligibility gate only.
-- **IBKR fundamental score** — optional `ReportRatios` scorer normalizes valuation, profitability, growth, and financial-health ratios to a 0-100 breakdown, then feeds the existing composite as `fundamentals`.
+- **yfinance fundamental score** — optional scorer normalizes valuation, profitability, growth, and financial-health ratios to a 0-100 breakdown, then feeds the existing composite as `fundamentals`.
 - **Eligibility gates** — `equity_eligible` (liquidity + IBKR-verified contract) and `options_eligible` (from `SecurityMaster`; safe-by-default=False). Each bot hard-blocks symbols that fail its gate.
 - **Swing strategy** (2–20 day holds) — technical analysis (EMA, SMA, RSI, MACD, ATR) + market/sector/ticker sentiment
 - **Defined risk only** — options bot trades debit spreads exclusively (max loss = net debit paid)
@@ -243,9 +243,11 @@ ranking:
   min_dollar_volume: 20_000_000  # liquidity gate for equity_eligible
 
 fundamentals:
-  enabled: true                  # set false to disable IBKR Reuters/Refinitiv scoring
+  enabled: true                  # set false to disable yfinance fundamental scoring
   cache_ttl_hours: 24
-  neutral_score: 50              # fallback when data is unavailable
+  provider: "yfinance"
+  request_timeout_seconds: 15
+  neutral_score: 50              # internal no-data placeholder; not counted in composite
   pillars:
     valuation:
       weight: 0.25
@@ -327,7 +329,7 @@ market_AI/
     indicators.py         # EMA, SMA, RSI, MACD, ATR
     universe.py           # Ticker universe: seed, verify, get_verified_universe()
     scoring.py            # Multi-factor scoring: compute_composite(), liquidity/momentum/risk/sentiment/optionability/fundamentals factors
-    fundamental_scorer.py # IBKR ReportRatios parser/scorer with 24h in-memory cache
+    fundamental_scorer.py # yfinance parser/scorer with 24h in-memory cache
     ranking.py            # rank_symbols() — runs factor pipeline per symbol, sets equity_eligible/options_eligible
     strategy.py           # Regime check, score_symbol(), generate_signals()
     risk.py               # Risk engine: drawdown, position limits, cash reservation
@@ -582,7 +584,7 @@ cd frontend && pnpm test
 - **No automated exits** — the exit threshold (`exit_threshold`) and `max_holding_days` are tracked in config but position exit orders are not yet submitted automatically. Manual close via dashboard or IBKR.
 - **No EUR/USD FX conversion** — all risk calculations are in USD.
 - **IV Rank** requires the IBKR historical-volatility market data entitlement; falls back to "unknown" regime when unavailable (gate warns, does not block).
-- **Fundamental score** requires the IBKR Reuters/Refinitiv fundamental data entitlement; empty/error responses log warnings and return neutral score 50.
+- **Fundamental score** uses yfinance. If yfinance returns no usable metrics for a symbol, fundamentals are marked missing and their composite weight is redistributed.
 - **`data/sp500.csv`** exists as a reference file (~180 stocks with sectors) but is not yet auto-ingested — the live universe is still seeded from the embedded `SEED_TICKERS` list in `trader/universe.py`.
 - **`close_all` control** currently activates the kill switch only; actual IBKR position-closing orders are not yet wired.
 - **Company→ticker matching coverage** — only securities in `security_master` (~220 major US stocks) are resolved. Smaller-cap names mentioned in news will not produce ticker snapshots unless manually added to the CSV and re-imported.

@@ -60,15 +60,46 @@ def _factor_value(components: dict, name: str) -> Optional[float]:
         factor = components.get(key)
         if not isinstance(factor, dict):
             continue
+        if _factor_unavailable(factor):
+            return None
         value = factor.get("value_0_1")
         if isinstance(value, (int, float)):
             return float(value)
     return None
 
 
+def _factor_unavailable(factor: dict) -> bool:
+    status = factor.get("status")
+    if status in {"missing", "disabled", "error"}:
+        return True
+    if status != "neutral":
+        return False
+
+    metrics = factor.get("metrics")
+    if not isinstance(metrics, dict):
+        return True
+    pillars = metrics.get("pillars")
+    if not isinstance(pillars, dict):
+        return True
+    return not any(
+        isinstance(pillar, dict) and pillar.get("metrics")
+        for pillar in pillars.values()
+    )
+
+
 def _normalize_ranking(components: dict, score_total: float, eligible: bool, reasons: List[str]):
     """Normalize legacy ranking rows where liquidity was persisted as a score factor."""
     components = dict(components)
+    for name in _SCORING_FACTORS:
+        factor = components.get(name)
+        if isinstance(factor, dict) and _factor_unavailable(factor):
+            factor = dict(factor)
+            factor["value_0_1"] = None
+            if factor.get("status") == "neutral":
+                factor["status"] = "missing"
+                factor.setdefault("reason", "no_usable_fundamental_metrics")
+            components[name] = factor
+
     weights = components.get("weights_used")
     if isinstance(weights, dict):
         raw_weights = {

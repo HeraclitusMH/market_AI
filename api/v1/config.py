@@ -50,6 +50,8 @@ def get_config_view():
         "Fundamentals": {
             "enabled": cfg.fundamentals.enabled,
             "cache_ttl_hours": cfg.fundamentals.cache_ttl_hours,
+            "provider": cfg.fundamentals.provider,
+            "request_timeout_seconds": cfg.fundamentals.request_timeout_seconds,
             "neutral_score": cfg.fundamentals.neutral_score,
             "min_coverage": cfg.fundamentals.min_coverage,
         },

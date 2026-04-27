@@ -32,10 +32,9 @@
   `equity_eligible` (liquidity gate + IBKR-verified) and `options_eligible` (from
   `SecurityMaster`; safe-by-default=False) flags. Score drives bias labels
   (`≥0.55 → bullish`; `≤0.45 → bearish`). Rows persisted as `SymbolRanking`.
-- **Fundamentals** are optional and sourced from IBKR `reqFundamentalData`
-  `ReportRatios` via `trader/fundamental_scorer.py`. Missing entitlement, empty XML,
-  parse failures, or missing ratios degrade to a neutral 50/100 score so the
-  composite is not skewed.
+- **Fundamentals** are optional and sourced from yfinance via
+  `trader/fundamental_scorer.py`. If yfinance returns no usable ratios, the factor
+  is marked missing and its composite weight is redistributed.
 - **Options** score + plan produces a `TradePlan` (status `proposed` / `skipped`) via
   `trader/options_planner.py::plan_trade`. Execution picks delta-matched legs through
   `GreeksService → StrikeSelector → GreeksGate`, then builds an IBKR BAG combo order.
@@ -318,7 +317,7 @@ flowchart TD
   - Daily OHLCV bars (`market_data.get_latest_bars` or `fetch_bars` per symbol).
   - Latest `SentimentSnapshot` rows (market + sector + ticker).
   - `SecurityMaster.options_eligible` via `compute_optionability_factor`.
-  - Optional IBKR `ReportRatios` XML via `FundamentalScorer` when
+  - Optional yfinance fundamentals via `FundamentalScorer` when
     `cfg.fundamentals.enabled=True`.
 - **Core logic** (`trader/ranking.py::rank_symbols` + `trader/scoring.py`):
   1. For each symbol, fetch bars (try/except — missing bars → factor "missing").
@@ -333,7 +332,7 @@ flowchart TD
   6. Call `compute_optionability_factor(symbol)` — reads `SecurityMaster`.
      `eligible=False` when no record (safe-by-default).
   7. Call `compute_fundamentals_factor(symbol, cfg, client)` — wraps
-     `FundamentalScorer`, requests IBKR `ReportRatios`, computes a 0-100
+     `FundamentalScorer`, requests yfinance quote data, computes a 0-100
      breakdown, and returns `value_0_1` for the composite.
   8. `compute_composite(factors, nominal_weights)` for sentiment, momentum/trend,
      risk, and fundamentals only — proportional weight redistribution for any
@@ -346,7 +345,7 @@ flowchart TD
   - `cfg.ranking.{w_sentiment, w_momentum_trend, w_risk, w_fundamentals}` — nominal weights.
   - `cfg.ranking.{w_market, w_sector, w_ticker}` — sentiment sub-weights.
   - `cfg.ranking.enter_threshold` (default 0.55), `cfg.ranking.min_dollar_volume`.
-  - `cfg.fundamentals.{enabled, cache_ttl_hours, neutral_score, metric_bounds, pillars}`.
+  - `cfg.fundamentals.{enabled, provider, cache_ttl_hours, neutral_score, metric_bounds, pillars}`.
   - `cfg.universe.min_price`.
 - **Outputs/artifacts.** `List[RankedSymbol]` — `(symbol, sector, score_total,
   components{sentiment,momentum_trend,risk,liquidity,optionability,fundamentals},
@@ -363,7 +362,7 @@ flowchart TD
   - `cfg.ranking.fallback_trade_broad_etf` (default `False`) — ETF fallback when no candidates.
 - **Logging/metrics.** `log.info("Ranked N symbols (E eligible, B with bias)")`.
 - **Failure modes.** Missing bars return `missing` and redistribute weight.
-  Fundamental-data failures return neutral 50/100 (`value_0_1=0.5`) and log warnings.
+  Fundamental-data failures return `value_0_1=None` and redistribute weight.
   All factors missing → composite = 0.5 (neutral placeholder, unlikely to exceed threshold).
 
 ---
@@ -688,8 +687,8 @@ flowchart TD
   - `bot_state` (singleton): kill switch / pause / approve mode / last heartbeat.
 - **Process-local caches** (lost on restart):
   - `trader/market_data._cache` — IBKR bars, TTL `cfg.safety.data_stale_minutes`.
-  - `trader/fundamental_scorer.FundamentalScorer._shared_cache` — IBKR
-    `ReportRatios` breakdowns, TTL `cfg.fundamentals.cache_ttl_hours`.
+  - `trader/fundamental_scorer.FundamentalScorer._shared_cache` — yfinance
+    breakdowns, TTL `cfg.fundamentals.cache_ttl_hours`.
   - `common.config._cached` — parsed `AppConfig`.
   - `trader/sentiment/factory._REFRESH_LOCK` — prevents overlapping refresh.
 - **Scheduler fields** (`Scheduler.__init__`):
@@ -751,7 +750,7 @@ flowchart TD
 | 37 | Risk factor (vol buckets, drawdown buckets) | `trader/scoring.py::compute_risk_factor`; vol weight 0.6, drawdown weight 0.4 | E |
 | 38 | Liquidity eligibility gate | `trader/scoring.py::compute_liquidity_factor`; gate: price ≥ min_price AND ADV ≥ min_dollar_volume | E |
 | 39 | Options eligibility gate (safe-by-default) | `trader/scoring.py::compute_optionability_factor`; reads `SecurityMaster.options_eligible`; returns `eligible=False` when no DB record | E |
-| 40 | Fundamentals factor | `trader/scoring.py::compute_fundamentals_factor` wraps `trader/fundamental_scorer.py::FundamentalScorer`; IBKR `ReportRatios`; neutral fallback when unavailable; `cfg.fundamentals.*` | E |
+| 40 | Fundamentals factor | `trader/scoring.py::compute_fundamentals_factor` wraps `trader/fundamental_scorer.py::FundamentalScorer`; yfinance source; missing when unavailable; `cfg.fundamentals.*` | E |
 
 ---
 

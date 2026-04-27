@@ -362,11 +362,7 @@ def compute_risk_factor(df: pd.DataFrame) -> dict:
 # ─────────────────────── Fundamentals (stub) ─────────────────────────────────
 
 def _unused_fundamentals_stub(symbol: str, cfg=None) -> dict:
-    """Fundamentals factor — stub. Returns missing until IBKR entitlement wired up.
-
-    Future: if cfg.fundamentals.enabled and client available, call reqFundamentalData,
-    parse PE/PB/ROE/debt_to_equity, compute cross-sectional percentile scores.
-    """
+    """Legacy fundamentals stub. Returns missing."""
     return {"value_0_1": None, "metrics": {}, "status": "missing"}
 
 
@@ -425,7 +421,7 @@ def _parse_number(value: object) -> Optional[float]:
 
 
 def parse_fundamental_xml(xml_text: str) -> Dict[str, float]:
-    """Extract common IBKR/Reuters ratio fields from fundamental XML."""
+    """Extract common ratio fields from legacy fundamental XML."""
     if not xml_text or not xml_text.strip():
         return {}
 
@@ -559,7 +555,7 @@ def _save_cached_fundamentals(
 
 
 def compute_fundamentals_factor(symbol: str, cfg=None, client=None) -> dict:
-    """Fundamentals factor from IBKR ``ReportRatios`` XML.
+    """Fundamentals factor from yfinance.
 
     The composite scorer consumes the 0..1 ``value_0_1`` field. The full
     0..100 fundamental result and pillar breakdown are included under
@@ -583,21 +579,23 @@ def compute_fundamentals_factor(symbol: str, cfg=None, client=None) -> dict:
         result = FundamentalScorer(cfg=cfg, client=client).get_score(symbol)
     except Exception as exc:
         return {
-            "value_0_1": _fundamentals_neutral_0_1(cfg),
+            "value_0_1": None,
             "metrics": {},
-            "status": "neutral",
+            "status": "missing",
             "reason": str(exc),
         }
 
     raw_neutral = getattr(cfg.fundamentals, "neutral_score", 50)
     neutral = float(raw_neutral) if isinstance(raw_neutral, (int, float)) else 50.0
-    status = "neutral" if result["total_score"] == round(neutral, 1) and not any(
+    no_metrics = not any(
         pillar.get("metrics") for pillar in result["pillars"].values()
-    ) else "ok"
+    )
+    status = "missing" if result["total_score"] == round(neutral, 1) and no_metrics else "ok"
     return {
-        "value_0_1": round(result["total_score"] / 100.0, 4),
+        "value_0_1": None if status == "missing" else round(result["total_score"] / 100.0, 4),
         "metrics": result,
         "status": status,
+        **({"reason": "no_usable_fundamental_metrics"} if status == "missing" else {}),
     }
 
 
