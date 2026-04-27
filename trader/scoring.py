@@ -11,13 +11,18 @@ Gate factors add:
 """
 from __future__ import annotations
 
+import json
 import math
-from datetime import datetime, timezone
+import re
+import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
+from ib_insync import Stock
 
 from common.db import get_db
+from common.time import utcnow
 from trader.indicators import ema as _ema, sma as _sma, rsi as _rsi
 
 
@@ -356,13 +361,250 @@ def compute_risk_factor(df: pd.DataFrame) -> dict:
 
 # ─────────────────────── Fundamentals (stub) ─────────────────────────────────
 
-def compute_fundamentals_factor(symbol: str, cfg=None) -> dict:
+def _unused_fundamentals_stub(symbol: str, cfg=None) -> dict:
     """Fundamentals factor — stub. Returns missing until IBKR entitlement wired up.
 
     Future: if cfg.fundamentals.enabled and client available, call reqFundamentalData,
     parse PE/PB/ROE/debt_to_equity, compute cross-sectional percentile scores.
     """
     return {"value_0_1": None, "metrics": {}, "status": "missing"}
+
+
+_METRIC_ALIASES = {
+    "pe_ratio": {
+        "pe", "p/e", "p/e ratio", "pe ratio", "peexclxor", "apeexclxor",
+        "apenorm", "priceearnings", "price to earnings",
+    },
+    "pb_ratio": {
+        "pb", "p/b", "p/b ratio", "pb ratio", "price2bk", "price/book",
+        "price to book", "price_to_book",
+    },
+    "roe": {
+        "roe", "qroe", "ttmroe", "returnonequity", "return on equity",
+        "return_on_equity",
+    },
+    "debt_to_equity": {
+        "debt/equity", "debt to equity", "debt_to_equity", "qltdebt2eq",
+        "qtotd2eq", "total debt/equity", "long term debt/equity",
+    },
+    "eps_ttm": {"eps", "eps ttm", "ttmepsxclx", "eps_excl_extra_items_ttm"},
+    "market_cap": {"mktcap", "market cap", "market capitalization", "market_cap"},
+}
+
+
+def _norm_metric_name(name: str) -> str:
+    return re.sub(r"[^a-z0-9/]+", "", name.strip().lower())
+
+
+_ALIAS_LOOKUP = {
+    _norm_metric_name(alias): metric
+    for metric, aliases in _METRIC_ALIASES.items()
+    for alias in aliases
+}
+
+
+def _parse_number(value: object) -> Optional[float]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or text in {"-", "--", "N/A", "NA", "nan"}:
+        return None
+    multiplier = 1.0
+    if text.endswith("%"):
+        text = text[:-1]
+        multiplier = 0.01
+    suffix = text[-1:].upper()
+    if suffix in {"K", "M", "B", "T"}:
+        text = text[:-1]
+        multiplier *= {"K": 1e3, "M": 1e6, "B": 1e9, "T": 1e12}[suffix]
+    text = text.replace(",", "")
+    try:
+        return float(text) * multiplier
+    except ValueError:
+        return None
+
+
+def parse_fundamental_xml(xml_text: str) -> Dict[str, float]:
+    """Extract common IBKR/Reuters ratio fields from fundamental XML."""
+    if not xml_text or not xml_text.strip():
+        return {}
+
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return {}
+
+    found: Dict[str, float] = {}
+    for elem in root.iter():
+        possible_names = [
+            elem.attrib.get("FieldName"),
+            elem.attrib.get("fieldName"),
+            elem.attrib.get("Name"),
+            elem.attrib.get("name"),
+            elem.attrib.get("RatioID"),
+            elem.attrib.get("ratioID"),
+            elem.attrib.get("Type"),
+            elem.attrib.get("type"),
+            elem.tag,
+        ]
+        raw_value = (
+            elem.attrib.get("Value")
+            or elem.attrib.get("value")
+            or elem.attrib.get("Amount")
+            or elem.attrib.get("amount")
+            or elem.text
+        )
+        value = _parse_number(raw_value)
+        if value is None:
+            continue
+        for raw_name in possible_names:
+            if not raw_name:
+                continue
+            metric = _ALIAS_LOOKUP.get(_norm_metric_name(raw_name))
+            if metric and metric not in found:
+                if metric == "roe" and abs(value) > 1.0:
+                    value = value / 100.0
+                if metric == "debt_to_equity" and abs(value) > 10.0:
+                    value = value / 100.0
+                found[metric] = round(value, 6)
+                break
+
+    return found
+
+
+def _score_lower_better(value: Optional[float], good: float, bad: float) -> Optional[float]:
+    if value is None or value <= 0:
+        return None
+    return max(0.0, min(1.0, (bad - value) / (bad - good)))
+
+
+def _score_higher_better(value: Optional[float], bad: float, good: float) -> Optional[float]:
+    if value is None:
+        return None
+    return max(0.0, min(1.0, (value - bad) / (good - bad)))
+
+
+def _score_fundamental_metrics(metrics: Dict[str, float]) -> Tuple[Optional[float], Dict[str, float]]:
+    subscores = {
+        "pe": _score_lower_better(metrics.get("pe_ratio"), good=10.0, bad=40.0),
+        "pb": _score_lower_better(metrics.get("pb_ratio"), good=1.0, bad=8.0),
+        "roe": _score_higher_better(metrics.get("roe"), bad=0.0, good=0.25),
+        "debt": _score_lower_better(metrics.get("debt_to_equity"), good=0.0, bad=2.5),
+    }
+    present = {k: round(v, 4) for k, v in subscores.items() if v is not None}
+    if not present:
+        return None, present
+    weights = {"pe": 0.30, "pb": 0.20, "roe": 0.30, "debt": 0.20}
+    total_weight = sum(weights[k] for k in present)
+    score = sum(present[k] * weights[k] / total_weight for k in present)
+    return round(score, 4), present
+
+
+def _fundamentals_enabled(cfg) -> bool:
+    enabled = getattr(getattr(cfg, "fundamentals", None), "enabled", False)
+    return enabled if isinstance(enabled, bool) else False
+
+
+def _fundamentals_ttl(cfg) -> timedelta:
+    days = int(getattr(getattr(cfg, "fundamentals", None), "ttl_days", 7) or 7)
+    return timedelta(days=max(days, 1))
+
+
+def _load_cached_fundamentals(symbol: str, cfg) -> Optional[dict]:
+    from common.models import FundamentalSnapshot
+
+    try:
+        with get_db() as db:
+            row = db.query(FundamentalSnapshot).filter(FundamentalSnapshot.symbol == symbol).first()
+            if row is None:
+                return None
+            ts = row.ts.replace(tzinfo=timezone.utc) if row.ts.tzinfo is None else row.ts
+            if datetime.now(timezone.utc) - ts > _fundamentals_ttl(cfg):
+                return None
+            metrics = json.loads(row.metrics_json or "{}")
+            return {
+                "metrics": metrics,
+                "status": row.status,
+                "reason": row.reason,
+                "source": "cache",
+                "as_of": row.ts.isoformat(),
+            }
+    except Exception:
+        return None
+
+
+def _save_cached_fundamentals(
+    symbol: str,
+    metrics: Dict[str, float],
+    raw_xml: str,
+    status: str = "ok",
+    reason: Optional[str] = None,
+) -> None:
+    from common.models import FundamentalSnapshot
+
+    try:
+        with get_db() as db:
+            row = db.query(FundamentalSnapshot).filter(FundamentalSnapshot.symbol == symbol).first()
+            if row is None:
+                row = FundamentalSnapshot(symbol=symbol)
+                db.add(row)
+            row.ts = utcnow().replace(tzinfo=None)
+            row.report_type = "ReportSnapshot"
+            row.metrics_json = json.dumps(metrics)
+            row.raw_xml = raw_xml
+            row.status = status
+            row.reason = reason
+    except Exception:
+        return
+
+
+def compute_fundamentals_factor(symbol: str, cfg=None, client=None) -> dict:
+    """Fundamentals factor from IBKR ``ReportRatios`` XML.
+
+    The composite scorer consumes the 0..1 ``value_0_1`` field. The full
+    0..100 fundamental result and pillar breakdown are included under
+    ``metrics`` for logging/debugging.
+    """
+    if cfg is None:
+        from common.config import get_config
+        cfg = get_config()
+
+    if not _fundamentals_enabled(cfg):
+        return {
+            "value_0_1": None,
+            "metrics": {},
+            "status": "disabled",
+            "reason": "fundamentals_disabled",
+        }
+
+    try:
+        from trader.fundamental_scorer import FundamentalScorer
+
+        result = FundamentalScorer(cfg=cfg, client=client).get_score(symbol)
+    except Exception as exc:
+        return {
+            "value_0_1": _fundamentals_neutral_0_1(cfg),
+            "metrics": {},
+            "status": "neutral",
+            "reason": str(exc),
+        }
+
+    raw_neutral = getattr(cfg.fundamentals, "neutral_score", 50)
+    neutral = float(raw_neutral) if isinstance(raw_neutral, (int, float)) else 50.0
+    status = "neutral" if result["total_score"] == round(neutral, 1) and not any(
+        pillar.get("metrics") for pillar in result["pillars"].values()
+    ) else "ok"
+    return {
+        "value_0_1": round(result["total_score"] / 100.0, 4),
+        "metrics": result,
+        "status": status,
+    }
+
+
+def _fundamentals_neutral_0_1(cfg) -> float:
+    raw = getattr(getattr(cfg, "fundamentals", None), "neutral_score", 50)
+    neutral = float(raw) if isinstance(raw, (int, float)) else 50.0
+    return round(max(0.0, min(100.0, neutral)) / 100.0, 4)
 
 
 # ─────────────────────── Composite ──────────────────────────────────────────

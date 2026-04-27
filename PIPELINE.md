@@ -32,6 +32,10 @@
   `equity_eligible` (liquidity gate + IBKR-verified) and `options_eligible` (from
   `SecurityMaster`; safe-by-default=False) flags. Score drives bias labels
   (`≥0.55 → bullish`; `≤0.45 → bearish`). Rows persisted as `SymbolRanking`.
+- **Fundamentals** are optional and sourced from IBKR `reqFundamentalData`
+  `ReportRatios` via `trader/fundamental_scorer.py`. Missing entitlement, empty XML,
+  parse failures, or missing ratios degrade to a neutral 50/100 score so the
+  composite is not skewed.
 - **Options** score + plan produces a `TradePlan` (status `proposed` / `skipped`) via
   `trader/options_planner.py::plan_trade`. Execution picks delta-matched legs through
   `GreeksService → StrikeSelector → GreeksGate`, then builds an IBKR BAG combo order.
@@ -314,6 +318,8 @@ flowchart TD
   - Daily OHLCV bars (`market_data.get_latest_bars` or `fetch_bars` per symbol).
   - Latest `SentimentSnapshot` rows (market + sector + ticker).
   - `SecurityMaster.options_eligible` via `compute_optionability_factor`.
+  - Optional IBKR `ReportRatios` XML via `FundamentalScorer` when
+    `cfg.fundamentals.enabled=True`.
 - **Core logic** (`trader/ranking.py::rank_symbols` + `trader/scoring.py`):
   1. For each symbol, fetch bars (try/except — missing bars → factor "missing").
   2. Call `compute_sentiment_factor(market_snap, sector_snap, ticker_snap)` → `[0,1]`.
@@ -326,17 +332,21 @@ flowchart TD
      Sets `eligible=False` when price < min_price or ADV < min_dollar_volume.
   6. Call `compute_optionability_factor(symbol)` — reads `SecurityMaster`.
      `eligible=False` when no record (safe-by-default).
-  7. `compute_composite(factors, nominal_weights)` for sentiment, momentum/trend,
+  7. Call `compute_fundamentals_factor(symbol, cfg, client)` — wraps
+     `FundamentalScorer`, requests IBKR `ReportRatios`, computes a 0-100
+     breakdown, and returns `value_0_1` for the composite.
+  8. `compute_composite(factors, nominal_weights)` for sentiment, momentum/trend,
      risk, and fundamentals only — proportional weight redistribution for any
      `value_0_1=None` factor; returns `(score, weights_used)`.
-  8. `equity_eligible = liquidity.eligible AND symbol verified in IBKR`.
-  9. `options_eligible = optionability.eligible`.
-  10. Bias: `score ≥ enter_threshold → bullish`; `score ≤ 1-enter_threshold → bearish`.
-  11. Persist all rows to `symbol_rankings` with full `components_json`.
+  9. `equity_eligible = liquidity.eligible AND symbol verified in IBKR`.
+  10. `options_eligible = optionability.eligible`.
+  11. Bias: `score ≥ enter_threshold → bullish`; `score ≤ 1-enter_threshold → bearish`.
+  12. Persist all rows to `symbol_rankings` with full `components_json`.
 - **Key parameters/config.**
   - `cfg.ranking.{w_sentiment, w_momentum_trend, w_risk, w_fundamentals}` — nominal weights.
   - `cfg.ranking.{w_market, w_sector, w_ticker}` — sentiment sub-weights.
   - `cfg.ranking.enter_threshold` (default 0.55), `cfg.ranking.min_dollar_volume`.
+  - `cfg.fundamentals.{enabled, cache_ttl_hours, neutral_score, metric_bounds, pillars}`.
   - `cfg.universe.min_price`.
 - **Outputs/artifacts.** `List[RankedSymbol]` — `(symbol, sector, score_total,
   components{sentiment,momentum_trend,risk,liquidity,optionability,fundamentals},
@@ -352,8 +362,9 @@ flowchart TD
   - `select_candidates` caps at `cfg.ranking.max_candidates_total` (prefer 2 bull + 1 bear).
   - `cfg.ranking.fallback_trade_broad_etf` (default `False`) — ETF fallback when no candidates.
 - **Logging/metrics.** `log.info("Ranked N symbols (E eligible, B with bias)")`.
-- **Failure modes.** Missing bars → factors return `missing` → weight redistributed;
-  all factors missing → composite = 0.5 (neutral placeholder, unlikely to exceed threshold).
+- **Failure modes.** Missing bars return `missing` and redistribute weight.
+  Fundamental-data failures return neutral 50/100 (`value_0_1=0.5`) and log warnings.
+  All factors missing → composite = 0.5 (neutral placeholder, unlikely to exceed threshold).
 
 ---
 
@@ -618,6 +629,7 @@ flowchart TD
 | `SentimentLlmItem` | ORM `(id=sha256 prefix, processed_at, url)` | Claude provider | dedup inside provider | DB `sentiment_llm_items` | TTL = `dedup_cache_days` (default 14) |
 | `SentimentLlmUsage` | ORM `(prompt_tokens, completion_tokens, cost_usd_est, cost_eur_est, status)` | Claude provider | `trader/sentiment/budget.py` | DB `sentiment_llm_usage` | Source of truth for budget cap |
 | `RankedSymbol` | dataclass `(symbol, sector, score_total, components{sentiment,momentum_trend,risk,liquidity,optionability,fundamentals}, equity_eligible, options_eligible, eligible, reasons, sources, bias)` | `trader/ranking.py::rank_symbols` | `OptionsSwingBot.select_trades` (gates on `options_eligible`), `EquitySwingBot.select_trades` (gates on `equity_eligible`), UI, planner | in-memory + `symbol_rankings` row per cycle | `bias ∈ {bullish, bearish, None}`; `equity_eligible` = liquidity gate + IBKR-verified; `options_eligible` = SecurityMaster safe-by-default |
+| `FundamentalResult` | TypedDict `(symbol, total_score, pillars, missing_fields, cached, timestamp)` | `trader/fundamental_scorer.py::FundamentalScorer.get_score` | `compute_fundamentals_factor`, `components_json.fundamentals`, logs/debugging | process-local in-memory cache only | Score is 0-100; adapter divides by 100 for composite `value_0_1` |
 | `SignalIntent` | dataclass `(symbol, direction, instrument, score, max_risk_usd, explanation, components, regime)` | `score_symbol` / `_plan_to_signal` | `execute_signal`, `generate_signals` | `signal_snapshots` (for generate_signals only) | `direction ∈ {long, bearish}` |
 | `Candidate` | dataclass `(symbol, sector, source, verified)` | `BaseBot.build_candidates` | `score_candidate` | in-memory | |
 | `ScoreBreakdown` | dataclass `(trend, momentum, volatility, sentiment, final_score, direction, explanations, components, atr14?, last_price?)` | `BaseBot.score_candidate` | `select_trades` | in-memory | Equity bot fills `atr14` + `last_price` |
@@ -676,6 +688,8 @@ flowchart TD
   - `bot_state` (singleton): kill switch / pause / approve mode / last heartbeat.
 - **Process-local caches** (lost on restart):
   - `trader/market_data._cache` — IBKR bars, TTL `cfg.safety.data_stale_minutes`.
+  - `trader/fundamental_scorer.FundamentalScorer._shared_cache` — IBKR
+    `ReportRatios` breakdowns, TTL `cfg.fundamentals.cache_ttl_hours`.
   - `common.config._cached` — parsed `AppConfig`.
   - `trader/sentiment/factory._REFRESH_LOCK` — prevents overlapping refresh.
 - **Scheduler fields** (`Scheduler.__init__`):
@@ -737,7 +751,7 @@ flowchart TD
 | 37 | Risk factor (vol buckets, drawdown buckets) | `trader/scoring.py::compute_risk_factor`; vol weight 0.6, drawdown weight 0.4 | E |
 | 38 | Liquidity eligibility gate | `trader/scoring.py::compute_liquidity_factor`; gate: price ≥ min_price AND ADV ≥ min_dollar_volume | E |
 | 39 | Options eligibility gate (safe-by-default) | `trader/scoring.py::compute_optionability_factor`; reads `SecurityMaster.options_eligible`; returns `eligible=False` when no DB record | E |
-| 40 | Fundamentals factor (stub) | `trader/scoring.py::compute_fundamentals_factor`; always returns `missing` until IBKR entitlement wired; `cfg.fundamentals.enabled` | E |
+| 40 | Fundamentals factor | `trader/scoring.py::compute_fundamentals_factor` wraps `trader/fundamental_scorer.py::FundamentalScorer`; IBKR `ReportRatios`; neutral fallback when unavailable; `cfg.fundamentals.*` | E |
 
 ---
 

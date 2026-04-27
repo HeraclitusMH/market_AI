@@ -122,9 +122,44 @@ ranking:
   dte_fallback_min: 14
 
 fundamentals:
-  enabled: false        # requires IBKR fundamental data entitlement
-  ttl_days: 7
+  enabled: false        # requires IBKR Reuters/Refinitiv fundamental data entitlement
+  ttl_days: 7           # backward compatibility for older DB-cached fundamentals
+  cache_ttl_hours: 24
+  neutral_score: 50
   min_coverage: 0.2     # min fraction of universe with data for cross-sectional scoring
+  pillar_weights:
+    valuation: 0.25
+    profitability: 0.30
+    growth: 0.25
+    financial_health: 0.20
+  metric_bounds:
+    PEEXCLXOR:       { worst: 40,   best: 5    }
+    PRICE2BK:        { worst: 8,    best: 0.5  }
+    EVCUR2EBITDA:    { worst: 25,   best: 5    }
+    PRICE2SALESTTM:  { worst: 15,   best: 0.5  }
+    TTMROEPCT:       { worst: -5,   best: 30   }
+    TTMROAPCT:       { worst: -3,   best: 15   }
+    TTMGROSMGN:      { worst: 10,   best: 60   }
+    TTMNPMGN:        { worst: -5,   best: 25   }
+    REVCHNGYR:       { worst: -10,  best: 30   }
+    EPSCHNGYR:       { worst: -20,  best: 40   }
+    REVTRENDGR:      { worst: -5,   best: 25   }
+    QCURRATIO:       { worst: 0.5,  best: 3.0  }
+    QQUICKRATI:      { worst: 0.3,  best: 2.5  }
+    QTOTD2EQ:        { worst: 3.0,  best: 0.0  }
+  pillars:
+    valuation:
+      weight: 0.25
+      metrics: [PEEXCLXOR, PRICE2BK, EVCUR2EBITDA, PRICE2SALESTTM]
+    profitability:
+      weight: 0.30
+      metrics: [TTMROEPCT, TTMROAPCT, TTMGROSMGN, TTMNPMGN]
+    growth:
+      weight: 0.25
+      metrics: [REVCHNGYR, EPSCHNGYR, REVTRENDGR]
+    financial_health:
+      weight: 0.20
+      metrics: [QCURRATIO, QQUICKRATI, QTOTD2EQ]
 
 sentiment:
   provider: "rss_lexicon"         # rss_lexicon | claude_llm

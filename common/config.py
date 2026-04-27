@@ -213,10 +213,78 @@ class SecuritiesConfig(BaseModel):
     verification_cache_hours: int = 24
 
 
+class FundamentalMetricBounds(BaseModel):
+    worst: float
+    best: float
+
+
+class FundamentalPillarConfig(BaseModel):
+    weight: float
+    metrics: List[str]
+
+
 class FundamentalsConfig(BaseModel):
     enabled: bool = False
-    ttl_days: int = 7
+    ttl_days: int = 7  # backward compatibility for older DB-cached fundamentals
+    cache_ttl_hours: float = 24
+    neutral_score: float = 50
     min_coverage: float = 0.2  # fraction of universe that must have data for cross-sectional scoring
+    pillar_weights: Dict[str, float] = Field(default_factory=lambda: {
+        "valuation": 0.25,
+        "profitability": 0.30,
+        "growth": 0.25,
+        "financial_health": 0.20,
+    })
+    metric_bounds: Dict[str, FundamentalMetricBounds] = Field(default_factory=lambda: {
+        "PEEXCLXOR": FundamentalMetricBounds(worst=40, best=5),
+        "PRICE2BK": FundamentalMetricBounds(worst=8, best=0.5),
+        "EVCUR2EBITDA": FundamentalMetricBounds(worst=25, best=5),
+        "PRICE2SALESTTM": FundamentalMetricBounds(worst=15, best=0.5),
+        "TTMROEPCT": FundamentalMetricBounds(worst=-5, best=30),
+        "TTMROAPCT": FundamentalMetricBounds(worst=-3, best=15),
+        "TTMGROSMGN": FundamentalMetricBounds(worst=10, best=60),
+        "TTMNPMGN": FundamentalMetricBounds(worst=-5, best=25),
+        "REVCHNGYR": FundamentalMetricBounds(worst=-10, best=30),
+        "EPSCHNGYR": FundamentalMetricBounds(worst=-20, best=40),
+        "REVTRENDGR": FundamentalMetricBounds(worst=-5, best=25),
+        "QCURRATIO": FundamentalMetricBounds(worst=0.5, best=3.0),
+        "QQUICKRATI": FundamentalMetricBounds(worst=0.3, best=2.5),
+        "QTOTD2EQ": FundamentalMetricBounds(worst=3.0, best=0.0),
+    })
+    pillars: Dict[str, FundamentalPillarConfig] = Field(default_factory=lambda: {
+        "valuation": FundamentalPillarConfig(
+            weight=0.25,
+            metrics=["PEEXCLXOR", "PRICE2BK", "EVCUR2EBITDA", "PRICE2SALESTTM"],
+        ),
+        "profitability": FundamentalPillarConfig(
+            weight=0.30,
+            metrics=["TTMROEPCT", "TTMROAPCT", "TTMGROSMGN", "TTMNPMGN"],
+        ),
+        "growth": FundamentalPillarConfig(
+            weight=0.25,
+            metrics=["REVCHNGYR", "EPSCHNGYR", "REVTRENDGR"],
+        ),
+        "financial_health": FundamentalPillarConfig(
+            weight=0.20,
+            metrics=["QCURRATIO", "QQUICKRATI", "QTOTD2EQ"],
+        ),
+    })
+
+    @field_validator("pillars")
+    @classmethod
+    def _validate_pillar_weights(cls, v: Dict[str, FundamentalPillarConfig]) -> Dict[str, FundamentalPillarConfig]:
+        total = sum(pillar.weight for pillar in v.values())
+        if abs(total - 1.0) > 0.0001:
+            raise ValueError(f"fundamentals.pillars weights must sum to 1.0, got {total:.4f}")
+        return v
+
+    @field_validator("pillar_weights")
+    @classmethod
+    def _validate_legacy_pillar_weights(cls, v: Dict[str, float]) -> Dict[str, float]:
+        total = sum(v.values())
+        if abs(total - 1.0) > 0.0001:
+            raise ValueError(f"fundamentals.pillar_weights must sum to 1.0, got {total:.4f}")
+        return v
 
 
 class SentimentConfig(BaseModel):

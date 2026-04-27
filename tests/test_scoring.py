@@ -13,8 +13,10 @@ from trader.scoring import (
     compute_liquidity_factor,
     compute_momentum_trend_factor,
     compute_optionability_factor,
+    compute_fundamentals_factor,
     compute_risk_factor,
     compute_sentiment_factor,
+    parse_fundamental_xml,
     _compute_score,
     _age_hours,
     _apply_recency,
@@ -278,6 +280,72 @@ def test_composite_score_clamped_to_unit():
 
 
 # ─────────────────────── Optionability — safe-by-default ─────────────────────
+
+def test_parse_fundamental_xml_extracts_common_ratios():
+    xml = """
+    <Report>
+      <Ratio FieldName="PEEXCLXOR">20</Ratio>
+      <Ratio FieldName="PRICE2BK">2.5</Ratio>
+      <Ratio FieldName="QROE">18%</Ratio>
+      <Ratio FieldName="QTOTD2EQ">0.5</Ratio>
+    </Report>
+    """
+
+    metrics = parse_fundamental_xml(xml)
+
+    assert metrics["pe_ratio"] == pytest.approx(20)
+    assert metrics["pb_ratio"] == pytest.approx(2.5)
+    assert metrics["roe"] == pytest.approx(0.18)
+    assert metrics["debt_to_equity"] == pytest.approx(0.5)
+
+
+def test_fundamentals_disabled_redistributes_weight():
+    cfg = MagicMock()
+    cfg.fundamentals.enabled = False
+
+    result = compute_fundamentals_factor("AAPL", cfg)
+
+    assert result["value_0_1"] is None
+    assert result["status"] == "disabled"
+
+
+def test_fundamentals_factor_scores_ibkr_snapshot_xml():
+    from trader.fundamental_scorer import FundamentalScorer
+
+    FundamentalScorer._shared_cache.clear()
+    cfg = MagicMock()
+    cfg.fundamentals.enabled = True
+    cfg.fundamentals.cache_ttl_hours = 24
+    cfg.fundamentals.neutral_score = 50
+    client = MagicMock()
+    client.fundamental_data.return_value = """
+    <ReportRatios>
+      <Ratio FieldName="PEEXCLXOR">20</Ratio>
+      <Ratio FieldName="PRICE2BK">2.5</Ratio>
+      <Ratio FieldName="EVCUR2EBITDA">12.5</Ratio>
+      <Ratio FieldName="PRICE2SALESTTM">5</Ratio>
+      <Ratio FieldName="TTMROEPCT">18</Ratio>
+      <Ratio FieldName="TTMROAPCT">10</Ratio>
+      <Ratio FieldName="TTMGROSMGN">40</Ratio>
+      <Ratio FieldName="TTMNPMGN">15</Ratio>
+      <Ratio FieldName="REVCHNGYR">10</Ratio>
+      <Ratio FieldName="EPSCHNGYR">20</Ratio>
+      <Ratio FieldName="REVTRENDGR">5</Ratio>
+      <Ratio FieldName="QCURRATIO">2</Ratio>
+      <Ratio FieldName="QQUICKRATI">1.4</Ratio>
+      <Ratio FieldName="QTOTD2EQ">0.5</Ratio>
+    </ReportRatios>
+    """
+
+    result = compute_fundamentals_factor("AAPL", cfg, client)
+
+    assert result["status"] == "ok"
+    assert result["value_0_1"] == pytest.approx(0.616, abs=0.001)
+    assert result["metrics"]["total_score"] == pytest.approx(61.6, abs=0.1)
+    assert "valuation" in result["metrics"]["pillars"]
+    client.fundamental_data.assert_called_once()
+    FundamentalScorer._shared_cache.clear()
+
 
 def _mock_db_session(first_return):
     """Context manager mock that returns first_return from .query().filter().first()."""

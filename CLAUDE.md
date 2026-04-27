@@ -30,6 +30,7 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **Portfolio isolation via `portfolio_id`** — `Order`, `Position`, `Trade` rows carry `portfolio_id` ("options_swing" or "equity_swing"). Each bot's risk/position checks filter by its own portfolio_id. Migration: `alembic/versions/0004_portfolio_id.py`.
 - **Bot plugin pattern** — `BaseBot` ABC defines `build_candidates / score_candidate / select_trades / execute_intent`. `run()` orchestrates the full cycle (regime → universe → rank → score → select → execute). Both bots share universe, regime check, and composite ranking score.
 - **Multi-factor composite scoring** — `rank_symbols()` computes a unified [0,1] score per symbol from sentiment, momentum/trend, risk, and fundamentals. Missing factors redistribute weight; liquidity is an eligibility gate only. Score drives bias (≥0.55 → bullish, ≤0.45 → bearish) and bot selection thresholds.
+- **IBKR fundamental scoring** — `trader/fundamental_scorer.py` fetches IBKR `ReportRatios` XML, parses numeric `<Ratio FieldName=...>` values, normalizes configured metrics to 0-100, rolls them into valuation/profitability/growth/financial-health pillars, and exposes a neutral-safe result through `compute_fundamentals_factor()` as `value_0_1` for the existing composite scorer.
 - **Eligibility gates** — `equity_eligible` (liquidity + contract verified) and `options_eligible` (from `SecurityMaster.options_eligible`, safe-by-default=False). OptionsSwingBot hard-blocks `options_eligible=False`; EquitySwingBot hard-blocks `equity_eligible=False`.
 - **DTE config unification** — canonical planner DTE lives in `cfg.options.planner_dte_{min,max,target,fallback_min}`. `cfg.ranking.dte_*` kept for backward compat with deprecation comment.
 - **Cash reservation** — before placing any order, cash equal to max loss is reserved; trade blocked if insufficient.
@@ -59,6 +60,7 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **Market data** → `trader/market_data.py` (`fetch_bars()`, `get_latest_bars()`, in-memory cache)
 - **Strategy & scoring** → `trader/strategy.py` (`check_regime()` SPY-based regime, `score_symbol()` per ticker, `generate_signals()` legacy entry)
 - **Multi-factor scoring** → `trader/scoring.py` (`compute_composite()`, `compute_sentiment_factor()`, `compute_liquidity_factor()`, `compute_momentum_trend_factor()`, `compute_risk_factor()`, `compute_optionability_factor()`, `compute_fundamentals_factor()`)
+- **Fundamental scoring** → `trader/fundamental_scorer.py` (`FundamentalScorer`, `FundamentalResult`; IBKR `ReportRatios`, in-memory 24h default cache, neutral fallback)
 - **Risk engine** → `trader/risk.py` (`check_can_trade()`, `compute_max_risk_for_trade()`, `record_equity_snapshot()`, `log_event()`)
 - **Options order construction** → `trader/execution.py` (debit spread spec, IBKR BAG combo orders, `execute_signal()`)
 - **Options trade planner** → `trader/options_planner.py` (`plan_trade()` — pure planning, no submission, writes TradePlan rows)
@@ -115,7 +117,7 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **Unified CLI** → `cli.py` (Click; commands below)
 - **SP500 reference** → `data/sp500.csv` (~180 stocks, `symbol,name,sector`)
 - **Alembic migrations** → `alembic/versions/` (0001–0005)
-- **Python tests** → `tests/` (205 tests, all passing)
+- **Python tests** → `tests/` (pytest suite; focused fundamental/scoring run: 37 passing)
 - **Frontend tests** → `frontend/src/test/pages/` (11 vitest smoke tests, one per page + helpers)
 
 ## Commands
@@ -125,7 +127,7 @@ pip install -e ".[dev]"          # Install with dev deps (includes click)
 python scripts/init_db.py        # Create/seed DB
 alembic upgrade head             # Run all migrations (Postgres / fresh SQLite)
 python scripts/run_all.py        # Start API (port 8000) + trader worker (legacy)
-python -m pytest tests/ -v       # Run Python tests (205 tests)
+python -m pytest tests/ -v       # Run Python tests
 uvicorn api.main:app --reload    # API only (no trader)
 python trader/main.py            # Trader only (no API, continuous)
 
@@ -162,6 +164,7 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 - Sentiment: RSS lexicon + Claude LLM + mock providers, DB persistence, recency weighting
 - Strategy: SPY regime filter, legacy 4-factor `score_symbol()` (still used by equity bot `score_candidate`)
 - **Multi-factor composite scoring** (`trader/scoring.py`): [0,1] score per symbol from sentiment, momentum/trend, risk, and fundamentals; liquidity is an eligibility gate only
+- **FundamentalScorer** (`trader/fundamental_scorer.py`): IBKR `ReportRatios` parser/scorer with configured metric bounds/pillars, neutral 50 fallback for unavailable data, and shared in-memory TTL cache
 - `equity_eligible` and `options_eligible` eligibility gates
 - DTE config unified: canonical `cfg.options.planner_dte_*`; `cfg.ranking.dte_*` kept deprecated
 - OptionsSwingBot: full debit spread pipeline (Greeks → gate → pricing → approve/submit)
@@ -180,6 +183,7 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 - No EUR/USD FX conversion — all risk calculations in USD
 - EquitySwingBot long-only in v1 (`long_only: true` in config)
 - IV Rank requires IBKR historical-volatility entitlement; falls back to "unknown" (gate warns, does not block)
+- Fundamental scoring requires IBKR Reuters/Refinitiv fundamental data entitlement; empty/error responses return neutral score 50 and log warnings
 - Position exit logic (trailing stop, max_holding_days) is config-specified but not yet automated — manual via dashboard
 
 ## Session Log
@@ -190,3 +194,4 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 - [2026-04-21] Security master + deterministic company→ticker matching: `trader/securities/` package (normalize, master, matcher); 3 new DB tables (`security_master`, `security_alias`, `rss_entity_matches`) + alembic 0005; `SecuritiesConfig`; Claude LLM prompt updated to emit `mentioned_companies` instead of ticker entities; `_build_ticker_results_from_companies()` in claude_provider maps them to verified symbols post-LLM; `securities import/verify/liquidity-refresh` CLI commands; `match-company` debug command; ~220-row `data/us_listed_master.csv` seed + `data/manual_alias_overrides.csv`; 41 new tests (179 total, all passing).
 - [2026-04-22] Multi-factor composite scoring: new `trader/scoring.py` with 5 factor functions (sentiment, momentum/trend, risk, liquidity, optionability) + `compute_composite()` with proportional weight redistribution; `rank_symbols()` rewritten to run full factor pipeline per symbol; `RankedSymbol` gains `equity_eligible`/`options_eligible` flags; both bots hard-gate on their eligibility flag; DTE config unified under `cfg.options.planner_dte_*`; `/rankings` dashboard shows expandable `<details>` factor breakdowns; `FundamentalsConfig` added to config; `enter_threshold` default changed 0.25→0.55; 26 new tests in `tests/test_scoring.py` (205 total, all passing).
 - [2026-04-23] React SPA + JSON API v1: replaced Jinja2/HTMX/Chart.js dashboard with a full React 18 + Vite + TypeScript + Tailwind SPA (`frontend/`). Added `api/v1/` package (10 FastAPI routers, all under `/api/v1/`; controls return `{ok, bot}`). FastAPI now also serves the SPA at `/app/{path:path}`. SPA features: dark design system with CSS custom property tokens, TanStack Query polling, Zustand bot state, Recharts charts, Tweaks panel (accent hue + density, persisted to localStorage). Legacy Jinja2 routes untouched. 11 vitest smoke tests added; all 205 Python tests still pass.
+- [2026-04-27] Added IBKR `ReportRatios` fundamental scoring: new `trader/fundamental_scorer.py`, config-driven metric bounds/pillars in `common/config.py` and `config.example.yaml`, and `compute_fundamentals_factor()` adapter returning composite `value_0_1` plus full 0-100 breakdown. Added/updated tests for XML parsing, normalization, pillar fallback, cache expiry, and composite adapter; focused run `python -m pytest tests\test_fundamental_scorer.py tests\test_scoring.py -q` passed (37 tests).
