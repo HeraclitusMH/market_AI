@@ -168,7 +168,7 @@ def rank_symbols(
         opt_factor = compute_optionability_factor(item.symbol, client)
 
         # ── Fundamentals (stub) ───────────────────────────────────────────
-        fund_factor = compute_fundamentals_factor(item.symbol, cfg)
+        fund_factor = compute_fundamentals_factor(item.symbol, cfg, client)
 
         # ── Composite ─────────────────────────────────────────────────────
         factors = {

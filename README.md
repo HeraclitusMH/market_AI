@@ -243,7 +243,7 @@ ranking:
   min_dollar_volume: 20_000_000  # liquidity gate for equity_eligible
 
 fundamentals:
-  enabled: false                 # requires IBKR Reuters/Refinitiv entitlement
+  enabled: true                  # set false to disable IBKR Reuters/Refinitiv scoring
   cache_ttl_hours: 24
   neutral_score: 50              # fallback when data is unavailable
   pillars:

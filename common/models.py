@@ -183,6 +183,19 @@ class SymbolRanking(Base):
     reasons_json = Column(Text, default="[]")
 
 
+class FundamentalSnapshot(Base):
+    """Cached IBKR fundamental data parsed into scoring metrics."""
+    __tablename__ = "fundamental_snapshots"
+
+    symbol = Column(String(20), primary_key=True)
+    ts = Column(DateTime, default=utcnow, nullable=False, index=True)
+    report_type = Column(String(30), nullable=False, default="ReportSnapshot")
+    metrics_json = Column(Text, default="{}")
+    raw_xml = Column(Text, default="")
+    status = Column(String(20), nullable=False, default="ok")
+    reason = Column(Text, nullable=True)
+
+
 class TradePlan(Base):
     """Options trade plan produced by planner; may or may not become an order."""
     __tablename__ = "trade_plans"

@@ -1,15 +1,14 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { resolve } from 'path';
 
 export default defineConfig({
   plugins: [react()],
   base: '/static/dist/',
   resolve: {
-    alias: { '@': resolve(__dirname, 'src') },
+    alias: { '@': new URL('./src', import.meta.url).pathname },
   },
   build: {
-    outDir: resolve(__dirname, '../ui/static/dist'),
+    outDir: '../ui/static/dist',
     emptyOutDir: true,
     rollupOptions: {
       output: {

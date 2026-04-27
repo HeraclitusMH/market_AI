@@ -113,7 +113,7 @@ class Scheduler:
         if self._should_rank():
             try:
                 universe = get_verified_universe(self.client)
-                ranked = rank_symbols(universe)
+                ranked = rank_symbols(universe, client=self.client)
                 candidates = select_candidates(ranked)
                 self._last_ranking = datetime.now()
                 log.info("Ranking done: %d ranked, %d candidates.", len(ranked), len(candidates))

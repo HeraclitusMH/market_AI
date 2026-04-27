@@ -21,6 +21,7 @@ from trader.scoring import (
     _age_hours,
     _apply_recency,
 )
+from common.config import AppConfig
 
 
 # ─────────────────────── Helpers ────────────────────────────────────────────
@@ -307,6 +308,12 @@ def test_fundamentals_disabled_redistributes_weight():
 
     assert result["value_0_1"] is None
     assert result["status"] == "disabled"
+
+
+def test_fundamentals_enabled_by_default_config():
+    cfg = AppConfig(db={"path": ":memory:"})
+
+    assert cfg.fundamentals.enabled is True
 
 
 def test_fundamentals_factor_scores_ibkr_snapshot_xml():

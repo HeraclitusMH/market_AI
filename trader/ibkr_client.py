@@ -93,6 +93,12 @@ class IBKRClient:
         )
         return bars
 
+    def fundamental_data(self, contract: Contract, report_type: str = "ReportSnapshot") -> str:
+        """Request IBKR fundamental data XML for a qualified contract."""
+        self.ensure_connected()
+        qualified = self.qualify_contract(contract)
+        return self.ib.reqFundamentalData(qualified, report_type, [])
+
     def qualify_contract(self, contract: Contract) -> Contract:
         self.ensure_connected()
         qualified = self.ib.qualifyContracts(contract)

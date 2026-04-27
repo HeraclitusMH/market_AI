@@ -16,6 +16,23 @@ const SCORE_FACTOR_KEYS: [string, string][] = [
   ['fundamentals', 'Fundamentals'],
 ];
 
+const SCORE_FACTOR_LABELS: Record<string, string> = {
+  sentiment: 'Sentiment',
+  momentum_trend: 'Momentum',
+  momentum: 'Momentum',
+  trend: 'Trend',
+  risk: 'Risk',
+  fundamentals: 'Fundamentals',
+};
+
+const SCORE_FACTOR_WEIGHT_KEYS = new Set(Object.keys(SCORE_FACTOR_LABELS));
+
+const SCORE_FACTOR_ALIASES: Record<string, string[]> = {
+  momentum_trend: ['momentum', 'trend'],
+  momentum: ['momentum_trend'],
+  trend: ['momentum_trend'],
+};
+
 function isFactor(value: unknown): value is RankingFactor {
   return value !== null && typeof value === 'object' && (
     'value_0_1' in value || 'status' in value || 'eligible' in value || 'metrics' in value
@@ -28,27 +45,71 @@ function factorValue(factor: unknown): number | null {
   return Number.isFinite(value) ? value as number : null;
 }
 
+function componentFactorValue(components: RankingComponents, key: string): number | null {
+  const direct = factorValue(components[key]);
+  if (direct != null) return direct;
+
+  for (const alias of SCORE_FACTOR_ALIASES[key] ?? []) {
+    const aliased = factorValue(components[alias]);
+    if (aliased != null) return aliased;
+  }
+
+  return null;
+}
+
 function pct(value: number | null): string {
   return value == null ? '--' : String(Math.round(Math.min(Math.max(value, 0), 1) * 100));
 }
 
 function ScoreFormula({ components, total }: { components: RankingComponents; total: number }) {
   const weights = components.weights_used ?? {};
-  const terms = SCORE_FACTOR_KEYS
-    .map(([key, label]) => {
-      const value = factorValue(components[key]);
-      const weight = weights[key];
+  type TermData = { label: string; value: number; weight: number };
+  const weightedEntries = Object.entries(weights)
+    .filter(([key, weight]) => SCORE_FACTOR_WEIGHT_KEYS.has(key) && Number.isFinite(weight) && weight > 0);
+  const scoringWeightSum = weightedEntries.reduce((sum, [, weight]) => sum + weight, 0);
+  const weightedKeys = weightedEntries.map(([key]) => key);
+  const displayKeys = weightedKeys.length ? weightedKeys : SCORE_FACTOR_KEYS.map(([key]) => key);
+  const termData = displayKeys
+    .map((key): TermData | null => {
+      const value = componentFactorValue(components, key);
+      const rawWeight = weights[key] ?? 0;
+      const weight = scoringWeightSum > 0 ? rawWeight / scoringWeightSum : rawWeight;
       if (value == null || !Number.isFinite(weight) || weight <= 0) return null;
-      return `${label} ${pct(value)} x ${(weight * 100).toFixed(1)}%`;
+      return { label: SCORE_FACTOR_LABELS[key] ?? key, value, weight };
     })
-    .filter(Boolean);
+    .filter((t): t is TermData => t !== null);
 
-  if (!terms.length) return null;
+  if (!termData.length) return null;
+
+  const includedLabels = new Set(termData.map(t => t.label));
+  const missingTerms = SCORE_FACTOR_KEYS
+    .filter(([key, label]) => !includedLabels.has(label) && isFactor(components[key]))
+    .map(([key, label]) => {
+      const factor = components[key] as RankingFactor;
+      const status = factor.status ?? 'missing';
+      return `${label} ${status}`;
+    });
+
+  // Compute result from the displayed weighted terms; effective weights should sum to 1.
+  const weightSum = termData.reduce((s, t) => s + t.weight, 0);
+  const computedTotal = Math.round(termData.reduce((s, t) => s + t.value * t.weight, 0) * 100);
+  const hasHiddenContribution = Math.abs(Math.round(total * 100) - computedTotal) > 1;
+  const terms = termData.map(t => `${t.label} ${pct(t.value)} x ${(t.weight * 100).toFixed(1)}%`);
+  const weightsNote = weightSum < 0.99
+    ? ` [visible weights sum ${(weightSum * 100).toFixed(0)}%; score includes another weighted factor]`
+    : '';
 
   return (
     <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--ink-2)' }}>
       <span style={{ color: 'var(--ink-3)' }}>Formula: </span>
-      <span className="mono">{terms.join(' + ')} = {pct(total)}</span>
+      <span className="mono">
+        {terms.join(' + ')} = {computedTotal}
+        {hasHiddenContribution && <span style={{ color: 'var(--warn)' }}> (stored score: {pct(total)})</span>}
+        {weightsNote && <span style={{ color: 'var(--warn)' }}>{weightsNote}</span>}
+        {missingTerms.length > 0 && (
+          <span style={{ color: 'var(--ink-3)' }}> ({missingTerms.join(', ')}; weights redistributed)</span>
+        )}
+      </span>
     </div>
   );
 }
@@ -79,8 +140,7 @@ function FactorBreakdown({ components, total }: { components: RankingComponents;
     <div style={{ padding: '8px 12px 12px' }}>
       {SCORE_FACTOR_KEYS.map(([k, label]) => {
         const factor = components[k];
-        if (!isFactor(factor)) return null;
-        return <FactorBar key={k} name={label} value={factorValue(factor)} status={factor.status} />;
+        return <FactorBar key={k} name={label} value={factorValue(factor)} status={isFactor(factor) ? factor.status : 'missing'} />;
       })}
       <LiquidityGate factor={components.liquidity} />
       <ScoreFormula components={components} total={total} />

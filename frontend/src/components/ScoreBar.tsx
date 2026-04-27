@@ -31,13 +31,14 @@ export function FactorBar({ name, value, status }: FactorBarProps) {
   const numeric = Number.isFinite(value) ? value as number : null;
   const pct = numeric == null ? 0 : Math.round(Math.min(Math.max(numeric, 0), 1) * 100);
   const color = numeric == null ? 'var(--ink-3)' : colorForScore(numeric);
+  const statusLabel = status ? status.charAt(0).toUpperCase() + status.slice(1) : '--';
   return (
     <div className="factor-bar-row">
       <span className="factor-bar-name">{name}</span>
       <div className="factor-bar-track">
         <div className="factor-bar-fill" style={{ width: `${pct}%`, background: color }} />
       </div>
-      <span className="factor-bar-val" title={status}>{numeric == null ? '--' : pct}</span>
+      <span className="factor-bar-val" title={status}>{numeric == null ? statusLabel : pct}</span>
     </div>
   );
 }

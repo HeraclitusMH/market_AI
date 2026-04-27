@@ -47,6 +47,12 @@ def get_config_view():
             "planner_dte_target": cfg.options.planner_dte_target,
             "min_open_interest": cfg.options.min_open_interest,
         },
+        "Fundamentals": {
+            "enabled": cfg.fundamentals.enabled,
+            "cache_ttl_hours": cfg.fundamentals.cache_ttl_hours,
+            "neutral_score": cfg.fundamentals.neutral_score,
+            "min_coverage": cfg.fundamentals.min_coverage,
+        },
         "Risk": {
             "max_drawdown_pct": cfg.risk.max_drawdown_pct,
             "max_risk_per_trade_pct": cfg.risk.max_risk_per_trade_pct,

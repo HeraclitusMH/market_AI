@@ -224,7 +224,7 @@ class FundamentalPillarConfig(BaseModel):
 
 
 class FundamentalsConfig(BaseModel):
-    enabled: bool = False
+    enabled: bool = True
     ttl_days: int = 7  # backward compatibility for older DB-cached fundamentals
     cache_ttl_hours: float = 24
     neutral_score: float = 50

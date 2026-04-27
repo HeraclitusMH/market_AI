@@ -109,14 +109,20 @@ def _parse_json(s, default=None):
 
 
 _SCORING_FACTORS = ("sentiment", "momentum_trend", "risk", "fundamentals")
+_FACTOR_ALIASES = {
+    "momentum_trend": ("momentum", "trend"),
+}
 
 
 def _factor_value(components: dict, name: str) -> float | None:
-    factor = components.get(name)
-    if not isinstance(factor, dict):
-        return None
-    value = factor.get("value_0_1")
-    return float(value) if isinstance(value, (int, float)) else None
+    for key in (name, *_FACTOR_ALIASES.get(name, ())):
+        factor = components.get(key)
+        if not isinstance(factor, dict):
+            continue
+        value = factor.get("value_0_1")
+        if isinstance(value, (int, float)):
+            return float(value)
+    return None
 
 
 def _normalize_ranking(components: dict, score_total: float, eligible: bool, reasons: List[str]):
@@ -125,7 +131,10 @@ def _normalize_ranking(components: dict, score_total: float, eligible: bool, rea
     weights = components.get("weights_used")
     if isinstance(weights, dict):
         raw_weights = {
-            name: float(weights.get(name, 0.0))
+            name: float(weights.get(name, 0.0) or sum(
+                float(weights.get(alias, 0.0) or 0.0)
+                for alias in _FACTOR_ALIASES.get(name, ())
+            ))
             for name in _SCORING_FACTORS
             if _factor_value(components, name) is not None
         }
