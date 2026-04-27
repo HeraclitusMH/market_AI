@@ -98,11 +98,11 @@ ranking:
   w_market: 0.20
   w_sector: 0.30
   w_ticker: 0.50
-  # Composite factor weights (redistribute proportionally when a factor is missing)
+  # Composite factor weights (redistribute proportionally when a factor is missing).
+  # Liquidity is an eligibility gate only and does not contribute to score.
   w_sentiment: 0.30
   w_momentum_trend: 0.25
   w_risk: 0.20
-  w_liquidity: 0.15
   w_fundamentals: 0.10
   # Selection thresholds (0..1 scale matching composite score)
   enter_threshold: 0.55            # score >= this → bullish; (1-threshold) → bearish

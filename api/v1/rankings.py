@@ -49,6 +49,50 @@ def _parse(s: Optional[str], default=None):
         return default
 
 
+_SCORING_FACTORS = ("sentiment", "momentum_trend", "risk", "fundamentals")
+
+
+def _factor_value(components: dict, name: str) -> Optional[float]:
+    factor = components.get(name)
+    if not isinstance(factor, dict):
+        return None
+    value = factor.get("value_0_1")
+    return float(value) if isinstance(value, (int, float)) else None
+
+
+def _normalize_ranking(components: dict, score_total: float, eligible: bool, reasons: List[str]):
+    """Normalize legacy ranking rows where liquidity was persisted as a score factor."""
+    components = dict(components)
+    weights = components.get("weights_used")
+    if isinstance(weights, dict):
+        raw_weights = {
+            name: float(weights.get(name, 0.0))
+            for name in _SCORING_FACTORS
+            if _factor_value(components, name) is not None
+        }
+        total_weight = sum(raw_weights.values())
+        if total_weight > 0:
+            normalized_weights = {
+                name: round(raw_weights.get(name, 0.0) / total_weight, 4)
+                for name in _SCORING_FACTORS
+            }
+            score_total = round(sum(
+                normalized_weights[name] * (_factor_value(components, name) or 0.0)
+                for name in _SCORING_FACTORS
+            ), 4)
+            components["weights_used"] = normalized_weights
+            components["total_score"] = score_total
+
+    liquidity = components.get("liquidity")
+    if isinstance(liquidity, dict) and liquidity.get("eligible") is False:
+        eligible = False
+        for reason in liquidity.get("reasons", []):
+            if reason not in reasons:
+                reasons.append(reason)
+
+    return components, score_total, eligible, reasons
+
+
 @router.get("/rankings", response_model=List[RankingRow])
 def get_rankings(limit: int = Query(50, le=200), db: Session = Depends(get_db)):
     max_ts = db.query(func.max(SymbolRanking.ts)).scalar()
@@ -57,22 +101,26 @@ def get_rankings(limit: int = Query(50, le=200), db: Session = Depends(get_db)):
     rows = (
         db.query(SymbolRanking)
         .filter(SymbolRanking.ts == max_ts)
-        .order_by(SymbolRanking.score_total.desc())
-        .limit(limit)
         .all()
     )
-    return [
-        RankingRow(
+    result = []
+    for r in rows:
+        components = _parse(r.components_json)
+        reasons = _parse(r.reasons_json, [])
+        components, score_total, eligible, reasons = _normalize_ranking(
+            components, r.score_total, r.eligible, reasons
+        )
+        result.append(RankingRow(
             id=r.id,
             ts=str(r.ts),
             symbol=r.symbol,
-            score_total=r.score_total,
-            components=_parse(r.components_json),
-            eligible=r.eligible,
-            reasons=_parse(r.reasons_json, []),
-        )
-        for r in rows
-    ]
+            score_total=score_total,
+            components=components,
+            eligible=eligible,
+            reasons=reasons,
+        ))
+    result.sort(key=lambda row: row.score_total, reverse=True)
+    return result[:limit]
 
 
 @router.get("/trade-plans", response_model=List[PlanRow])

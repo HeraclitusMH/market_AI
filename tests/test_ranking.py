@@ -32,6 +32,21 @@ def _item(symbol="AAPL", sector="Technology", verified=True, active=True):
     )
 
 
+def _ranking_cfg():
+    cfg = MagicMock()
+    rc = MagicMock()
+    rc.w_market = 0.20
+    rc.w_sector = 0.30
+    rc.w_ticker = 0.50
+    rc.w_sentiment = 0.30
+    rc.w_momentum_trend = 0.25
+    rc.w_risk = 0.20
+    rc.w_fundamentals = 0.10
+    rc.enter_threshold = 0.55
+    cfg.ranking = rc
+    return cfg
+
+
 # ── Recency logic ──────────────────────────────────────────────────────
 
 def test_apply_recency_fresh():
@@ -168,6 +183,57 @@ def test_rank_symbols_sorted_descending():
     assert len(ranked) == 3
     scores = [r.score_total for r in ranked]
     assert scores == sorted(scores, reverse=True), "Results must be sorted descending"
+
+
+def test_rank_symbols_liquidity_does_not_contribute_to_score():
+    items = [_item("AAPL")]
+
+    with patch("trader.ranking.get_config", return_value=_ranking_cfg()), \
+         patch("trader.ranking._get_market_snap", return_value=None), \
+         patch("trader.ranking._get_sector_snap", return_value=None), \
+         patch("trader.ranking.get_latest_ticker_score", return_value=None), \
+         patch("trader.market_data.get_latest_bars", return_value=MagicMock()), \
+         patch("trader.ranking.compute_sentiment_factor", return_value={"value_0_1": 0.6, "status": "ok"}), \
+         patch("trader.ranking.compute_momentum_trend_factor", return_value={"value_0_1": 0.7, "status": "ok"}), \
+         patch("trader.ranking.compute_risk_factor", return_value={"value_0_1": 0.8, "status": "ok"}), \
+         patch("trader.ranking.compute_fundamentals_factor", return_value={"value_0_1": None, "status": "missing"}), \
+         patch("trader.ranking.compute_liquidity_factor", return_value={"eligible": True, "value_0_1": 0.0, "status": "ok", "reasons": []}), \
+         patch("trader.ranking.compute_optionability_factor", return_value={"eligible": False, "value_0_1": 0.0, "status": "unknown", "reasons": []}), \
+         patch("trader.ranking._check_eligibility", return_value=(True, [])), \
+         patch("trader.ranking._persist_rankings"):
+        ranked = rank_symbols(items)
+
+    # Liquidity's 0.0 value is ignored. Only sentiment/momentum/risk participate.
+    expected = (0.30 / 0.75) * 0.6 + (0.25 / 0.75) * 0.7 + (0.20 / 0.75) * 0.8
+    assert ranked[0].score_total == pytest.approx(expected, abs=0.001)
+    assert "liquidity" not in ranked[0].components["weights_used"]
+    assert ranked[0].components["liquidity"]["value_0_1"] == 0.0
+
+
+def test_rank_symbols_liquidity_failure_makes_symbol_ineligible():
+    items = [_item("LOWVOL")]
+
+    with patch("trader.ranking.get_config", return_value=_ranking_cfg()), \
+         patch("trader.ranking._get_market_snap", return_value=None), \
+         patch("trader.ranking._get_sector_snap", return_value=None), \
+         patch("trader.ranking.get_latest_ticker_score", return_value=None), \
+         patch("trader.market_data.get_latest_bars", return_value=MagicMock()), \
+         patch("trader.ranking.compute_sentiment_factor", return_value={"value_0_1": 1.0, "status": "ok"}), \
+         patch("trader.ranking.compute_momentum_trend_factor", return_value={"value_0_1": 1.0, "status": "ok"}), \
+         patch("trader.ranking.compute_risk_factor", return_value={"value_0_1": 1.0, "status": "ok"}), \
+         patch("trader.ranking.compute_fundamentals_factor", return_value={"value_0_1": None, "status": "missing"}), \
+         patch("trader.ranking.compute_liquidity_factor", return_value={"eligible": False, "value_0_1": 1.0, "status": "ok", "reasons": ["low_adv_dollar_1000"]}), \
+         patch("trader.ranking.compute_optionability_factor", return_value={"eligible": False, "value_0_1": 0.0, "status": "unknown", "reasons": []}), \
+         patch("trader.ranking._check_eligibility", return_value=(True, [])), \
+         patch("trader.ranking._persist_rankings"):
+        ranked = rank_symbols(items)
+
+    result = ranked[0]
+    assert result.score_total == pytest.approx(1.0)
+    assert result.eligible is False
+    assert result.equity_eligible is False
+    assert result.bias is None
+    assert result.reasons == ["low_adv_dollar_1000"]
 
 
 def test_rank_symbols_bias_assignment():
@@ -308,6 +374,22 @@ def test_select_candidates_fallback_etf():
     assert len(selected) == 1
     assert selected[0].symbol == "SPY"
     assert selected[0].bias == "bullish"
+
+
+def test_select_candidates_fallback_respects_eligibility_gate():
+    spy = RankedSymbol("SPY", "Broad Market", 0.05, {}, False, ["low_adv"], ["etf"], None)
+
+    with patch("trader.ranking.get_config") as mock_cfg, \
+         patch("trader.ranking._get_market_snap", return_value=_snap(0.5)):
+        rc = MagicMock()
+        rc.max_candidates_total = 3
+        rc.enter_threshold = 0.25
+        rc.fallback_trade_broad_etf = True
+        mock_cfg.return_value.ranking = rc
+
+        selected = select_candidates([spy])
+
+    assert selected == []
 
 
 def test_select_candidates_no_fallback_returns_empty():

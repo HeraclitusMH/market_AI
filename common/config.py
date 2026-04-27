@@ -154,6 +154,7 @@ class RankingConfig(BaseModel):
     w_sentiment: float = 0.30
     w_momentum_trend: float = 0.25
     w_risk: float = 0.20
+    # Deprecated/ignored: liquidity is an eligibility gate, not a score factor.
     w_liquidity: float = 0.15
     w_fundamentals: float = 0.10
     # Selection thresholds (0..1 scale matching composite score range)

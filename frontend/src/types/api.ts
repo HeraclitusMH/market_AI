@@ -98,9 +98,25 @@ export interface RankingRow {
   ts: string;
   symbol: string;
   score_total: number;
-  components: Record<string, number>;
+  components: RankingComponents;
   eligible: boolean;
   reasons: string[];
+}
+
+export interface RankingComponents {
+  [key: string]: RankingFactor | Record<string, number> | Record<string, unknown> | number | undefined;
+  weights_used?: Record<string, number>;
+  total_score?: number;
+}
+
+export interface RankingFactor {
+  value_0_1?: number | null;
+  status?: string;
+  eligible?: boolean;
+  reasons?: string[];
+  metrics?: Record<string, unknown>;
+  components?: Record<string, unknown>;
+  raw_score?: number;
 }
 
 export interface PlanRow {

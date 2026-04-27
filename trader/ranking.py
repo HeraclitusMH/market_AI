@@ -1,4 +1,4 @@
-"""Symbol ranking: multi-factor composite score (sentiment + technical + risk)."""
+"""Symbol ranking: composite score plus eligibility gates."""
 from __future__ import annotations
 
 import json
@@ -120,11 +120,12 @@ def rank_symbols(
     now: Optional[datetime] = None,
     client=None,
 ) -> List[RankedSymbol]:
-    """Score and rank all verified universe symbols using a composite of:
+    """Score and rank universe symbols using a composite of:
 
-    sentiment (30%) + momentum/trend (25%) + risk (20%) + liquidity (15%) + fundamentals (10%)
+    sentiment + momentum/trend + risk + fundamentals
 
     Weights redistribute proportionally when a factor is missing.
+    Liquidity is a hard eligibility gate and does not contribute to score_total.
     Score is in [0, 1]: >= enter_threshold → bullish, <= (1-enter_threshold) → bearish.
     """
     from trader.market_data import get_latest_bars
@@ -137,7 +138,6 @@ def rank_symbols(
         "sentiment":        rc.w_sentiment,
         "momentum_trend":   rc.w_momentum_trend,
         "risk":             rc.w_risk,
-        "liquidity":        rc.w_liquidity,
         "fundamentals":     rc.w_fundamentals,
     }
 
@@ -175,14 +175,16 @@ def rank_symbols(
             "sentiment":      sent_factor,
             "momentum_trend": mt_factor,
             "risk":           risk_factor,
-            "liquidity":      liq_factor,
             "fundamentals":   fund_factor,
         }
         total_score, weights_used = compute_composite(factors, nominal_weights)
 
         # ── Eligibility gates ─────────────────────────────────────────────
-        eligible, reasons = _check_eligibility(item)
-        equity_eligible = eligible and liq_factor.get("eligible", True)
+        base_eligible, base_reasons = _check_eligibility(item)
+        liq_reasons = liq_factor.get("reasons", [])
+        eligible = base_eligible and liq_factor.get("eligible", True)
+        reasons = base_reasons + liq_reasons
+        equity_eligible = eligible
         options_eligible = opt_factor.get("eligible", False)
 
         # ── Bias ──────────────────────────────────────────────────────────
@@ -207,7 +209,7 @@ def rank_symbols(
             "eligibility": {
                 "equity_eligible":   equity_eligible,
                 "options_eligible":  options_eligible,
-                "reasons":           reasons + liq_factor.get("reasons", []),
+                "reasons":           reasons,
             },
         }
 
@@ -273,10 +275,10 @@ def select_candidates(
         fallback_sym = "SPY" if mkt_score >= 0 else "QQQ"
         fallback_bias = "bullish" if mkt_score >= 0 else "bearish"
         for r in ranked:
-            if r.symbol == fallback_sym:
+            if r.symbol == fallback_sym and r.eligible:
                 r_copy = RankedSymbol(
                     symbol=r.symbol, sector=r.sector, score_total=r.score_total,
-                    components=r.components, eligible=True, reasons=["fallback_broad_etf"],
+                    components=r.components, eligible=r.eligible, reasons=["fallback_broad_etf"],
                     sources=r.sources, bias=fallback_bias,
                     equity_eligible=r.equity_eligible,
                     options_eligible=r.options_eligible,

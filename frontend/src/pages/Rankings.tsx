@@ -7,25 +7,83 @@ import { Card, CardHead, CardBody } from '@/components/Card';
 import { DataTable, type Column } from '@/components/DataTable';
 import { ScoreBar, FactorBar } from '@/components/ScoreBar';
 import { Badge } from '@/components/Badge';
-import type { RankingRow, PlanRow } from '@/types/api';
+import type { RankingRow, PlanRow, RankingComponents, RankingFactor } from '@/types/api';
 
-const FACTOR_KEYS: [string, string][] = [
+const SCORE_FACTOR_KEYS: [string, string][] = [
   ['sentiment', 'Sentiment'],
   ['momentum_trend', 'Momentum'],
   ['risk', 'Risk'],
-  ['liquidity', 'Liquidity'],
-  ['optionability', 'Options'],
   ['fundamentals', 'Fundamentals'],
 ];
 
-function FactorBreakdown({ components }: { components: Record<string, number> }) {
+function isFactor(value: unknown): value is RankingFactor {
+  return value !== null && typeof value === 'object' && (
+    'value_0_1' in value || 'status' in value || 'eligible' in value || 'metrics' in value
+  );
+}
+
+function factorValue(factor: unknown): number | null {
+  if (!isFactor(factor)) return null;
+  const value = factor?.value_0_1;
+  return Number.isFinite(value) ? value as number : null;
+}
+
+function pct(value: number | null): string {
+  return value == null ? '--' : String(Math.round(Math.min(Math.max(value, 0), 1) * 100));
+}
+
+function ScoreFormula({ components, total }: { components: RankingComponents; total: number }) {
+  const weights = components.weights_used ?? {};
+  const terms = SCORE_FACTOR_KEYS
+    .map(([key, label]) => {
+      const value = factorValue(components[key]);
+      const weight = weights[key];
+      if (value == null || !Number.isFinite(weight) || weight <= 0) return null;
+      return `${label} ${pct(value)} x ${(weight * 100).toFixed(1)}%`;
+    })
+    .filter(Boolean);
+
+  if (!terms.length) return null;
+
+  return (
+    <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--ink-2)' }}>
+      <span style={{ color: 'var(--ink-3)' }}>Formula: </span>
+      <span className="mono">{terms.join(' + ')} = {pct(total)}</span>
+    </div>
+  );
+}
+
+function LiquidityGate({ factor }: { factor: unknown }) {
+  if (!isFactor(factor)) return null;
+  const passed = factor.eligible !== false;
+  const metrics = factor.metrics ?? {};
+  const adv = typeof metrics.adv_dollar_20d === 'number' ? `$${Math.round(metrics.adv_dollar_20d).toLocaleString()}` : null;
+  const price = typeof metrics.last_price === 'number' ? `$${metrics.last_price.toFixed(2)}` : null;
+  const detail = [price && `Price ${price}`, adv && `ADV ${adv}`, ...(factor.reasons ?? [])].filter(Boolean).join(' · ');
+
+  return (
+    <div className="factor-bar-row">
+      <span className="factor-bar-name">Liquidity Gate</span>
+      <div style={{ flex: 1, minWidth: 0, color: 'var(--ink-2)', fontSize: 11.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {detail || factor.status || 'No liquidity data'}
+      </div>
+      <span className="factor-bar-val" title={factor.status}>
+        {passed ? 'Pass' : 'Fail'}
+      </span>
+    </div>
+  );
+}
+
+function FactorBreakdown({ components, total }: { components: RankingComponents; total: number }) {
   return (
     <div style={{ padding: '8px 12px 12px' }}>
-      {FACTOR_KEYS.map(([k, label]) => {
-        const v = components[k];
-        if (v === undefined) return null;
-        return <FactorBar key={k} name={label} value={v} />;
+      {SCORE_FACTOR_KEYS.map(([k, label]) => {
+        const factor = components[k];
+        if (!isFactor(factor)) return null;
+        return <FactorBar key={k} name={label} value={factorValue(factor)} status={factor.status} />;
       })}
+      <LiquidityGate factor={components.liquidity} />
+      <ScoreFormula components={components} total={total} />
     </div>
   );
 }
@@ -42,7 +100,7 @@ const RANKING_COLS: Column<RankingRow>[] = [
     render: (r) => (
       <details style={{ cursor: 'pointer' }}>
         <summary style={{ fontSize: 11.5, color: 'var(--accent)' }}>View breakdown</summary>
-        <FactorBreakdown components={r.components} />
+        <FactorBreakdown components={r.components} total={r.score_total} />
       </details>
     ),
   },

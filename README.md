@@ -14,7 +14,7 @@ Both bots can run together or independently. Each has its own position namespace
 
 ## Features
 
-- **Multi-factor composite scoring** — 5-factor [0,1] score per symbol: sentiment (30%), momentum/trend (25%), risk (20%), liquidity (15%), fundamentals (10%). Missing factors redistribute weight; both bots gate on the same composite score.
+- **Multi-factor composite scoring** — [0,1] score per symbol from sentiment, momentum/trend, risk, and fundamentals. Missing factors redistribute weight; liquidity is an eligibility gate only.
 - **Eligibility gates** — `equity_eligible` (liquidity + IBKR-verified contract) and `options_eligible` (from `SecurityMaster`; safe-by-default=False). Each bot hard-blocks symbols that fail its gate.
 - **Swing strategy** (2–20 day holds) — technical analysis (EMA, SMA, RSI, MACD, ATR) + market/sector/ticker sentiment
 - **Defined risk only** — options bot trades debit spreads exclusively (max loss = net debit paid)
@@ -231,11 +231,11 @@ bots:
     risk_off_mode: "cash"        # "cash" or "defensive"
 
 ranking:
-  # Composite factor weights (missing factors redistribute weight proportionally)
+  # Composite factor weights (missing factors redistribute weight proportionally).
+  # Liquidity is an eligibility gate only and does not contribute to score.
   w_sentiment: 0.30
   w_momentum_trend: 0.25
   w_risk: 0.20
-  w_liquidity: 0.15
   w_fundamentals: 0.10
   # Score threshold: >= enter_threshold → bullish; <= (1-enter_threshold) → bearish
   enter_threshold: 0.55

@@ -134,7 +134,7 @@ def compute_sentiment_factor(
 # ─────────────────────── Liquidity ──────────────────────────────────────────
 
 def compute_liquidity_factor(df: pd.DataFrame, cfg) -> dict:
-    """Liquidity gate + continuous score from daily bars.
+    """Liquidity eligibility gate and diagnostics from daily bars.
 
     Gate passes when last_close >= min_price AND adv_20d >= min_dollar_volume.
     If bars are missing, marks eligible=True (cannot verify → don't block).

@@ -29,7 +29,7 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **ATR-based equity sizing** — `stop = entry - atr_stop_multiplier × ATR(14)`; `shares = floor(nav × risk_per_trade_pct% / stop_distance)`. Capped to available cash and sector concentration limit.
 - **Portfolio isolation via `portfolio_id`** — `Order`, `Position`, `Trade` rows carry `portfolio_id` ("options_swing" or "equity_swing"). Each bot's risk/position checks filter by its own portfolio_id. Migration: `alembic/versions/0004_portfolio_id.py`.
 - **Bot plugin pattern** — `BaseBot` ABC defines `build_candidates / score_candidate / select_trades / execute_intent`. `run()` orchestrates the full cycle (regime → universe → rank → score → select → execute). Both bots share universe, regime check, and composite ranking score.
-- **Multi-factor composite scoring** — `rank_symbols()` computes a unified [0,1] score per symbol from 5 factors: sentiment (30%), momentum/trend (25%), risk (20%), liquidity (15%), fundamentals (10%). Missing factors redistribute weight. Score drives bias (≥0.55 → bullish, ≤0.45 → bearish) and both bot selection thresholds.
+- **Multi-factor composite scoring** — `rank_symbols()` computes a unified [0,1] score per symbol from sentiment, momentum/trend, risk, and fundamentals. Missing factors redistribute weight; liquidity is an eligibility gate only. Score drives bias (≥0.55 → bullish, ≤0.45 → bearish) and bot selection thresholds.
 - **Eligibility gates** — `equity_eligible` (liquidity + contract verified) and `options_eligible` (from `SecurityMaster.options_eligible`, safe-by-default=False). OptionsSwingBot hard-blocks `options_eligible=False`; EquitySwingBot hard-blocks `equity_eligible=False`.
 - **DTE config unification** — canonical planner DTE lives in `cfg.options.planner_dte_{min,max,target,fallback_min}`. `cfg.ranking.dte_*` kept for backward compat with deprecation comment.
 - **Cash reservation** — before placing any order, cash equal to max loss is reserved; trade blocked if insufficient.
@@ -161,7 +161,7 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 - Risk engine: drawdown stop, position limits, cash reservation, kill switch, approve mode
 - Sentiment: RSS lexicon + Claude LLM + mock providers, DB persistence, recency weighting
 - Strategy: SPY regime filter, legacy 4-factor `score_symbol()` (still used by equity bot `score_candidate`)
-- **Multi-factor composite scoring** (`trader/scoring.py`): 5-factor [0,1] score per symbol driving both bots; missing factors redistribute weight proportionally
+- **Multi-factor composite scoring** (`trader/scoring.py`): [0,1] score per symbol from sentiment, momentum/trend, risk, and fundamentals; liquidity is an eligibility gate only
 - `equity_eligible` and `options_eligible` eligibility gates
 - DTE config unified: canonical `cfg.options.planner_dte_*`; `cfg.ranking.dte_*` kept deprecated
 - OptionsSwingBot: full debit spread pipeline (Greeks → gate → pricing → approve/submit)

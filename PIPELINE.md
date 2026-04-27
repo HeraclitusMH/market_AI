@@ -26,9 +26,9 @@
 - **Sentiment** is pluggable (`rss_lexicon` | `claude_llm` | `mock`). Claude has a
   hard €10/month budget cap and **must not fall back to lexicon** on failure. Output
   is three scopes — market / sector / ticker — persisted as `SentimentSnapshot`.
-- **Ranking** runs a 5-factor composite scoring pipeline per symbol — sentiment (30%),
-  momentum/trend (25%), risk (20%), liquidity (15%), fundamentals (10%) — with
-  proportional weight redistribution for missing factors. Each symbol also gets
+- **Ranking** runs a composite scoring pipeline per symbol — sentiment,
+  momentum/trend, risk, and fundamentals — with proportional weight redistribution
+  for missing factors. Liquidity is an eligibility gate only. Each symbol also gets
   `equity_eligible` (liquidity gate + IBKR-verified) and `options_eligible` (from
   `SecurityMaster`; safe-by-default=False) flags. Score drives bias labels
   (`≥0.55 → bullish`; `≤0.45 → bearish`). Rows persisted as `SymbolRanking`.
@@ -305,7 +305,7 @@ flowchart TD
 
 ### Phase E — Ranking (multi-factor composite)
 
-- **Purpose.** Compute a 5-factor composite [0,1] score per universe symbol, set
+- **Purpose.** Compute a composite [0,1] score per universe symbol, set
   eligibility flags, and label each symbol bullish / bearish / neutral.
 - **Trigger / cadence.** Per bot cycle (via `BaseBot.run`). Scheduler also invokes
   it at the sentiment-refresh cadence.
@@ -322,18 +322,19 @@ flowchart TD
      + scaled 63d/126d returns. Requires ≥63 bars or returns `missing`.
   4. Call `compute_risk_factor(df)` — 20d annualised vol + 252d max drawdown,
      bucketed. Requires ≥20 bars or returns `missing`.
-  5. Call `compute_liquidity_factor(df, cfg)` — log-scale ADV$ + price score.
+  5. Call `compute_liquidity_factor(df, cfg)` — ADV$ + price gate metrics.
      Sets `eligible=False` when price < min_price or ADV < min_dollar_volume.
   6. Call `compute_optionability_factor(symbol)` — reads `SecurityMaster`.
      `eligible=False` when no record (safe-by-default).
-  7. `compute_composite(factors, nominal_weights)` — proportional weight
-     redistribution for any `value_0_1=None` factor; returns `(score, weights_used)`.
+  7. `compute_composite(factors, nominal_weights)` for sentiment, momentum/trend,
+     risk, and fundamentals only — proportional weight redistribution for any
+     `value_0_1=None` factor; returns `(score, weights_used)`.
   8. `equity_eligible = liquidity.eligible AND symbol verified in IBKR`.
   9. `options_eligible = optionability.eligible`.
   10. Bias: `score ≥ enter_threshold → bullish`; `score ≤ 1-enter_threshold → bearish`.
   11. Persist all rows to `symbol_rankings` with full `components_json`.
 - **Key parameters/config.**
-  - `cfg.ranking.{w_sentiment, w_momentum_trend, w_risk, w_liquidity, w_fundamentals}` — nominal weights.
+  - `cfg.ranking.{w_sentiment, w_momentum_trend, w_risk, w_fundamentals}` — nominal weights.
   - `cfg.ranking.{w_market, w_sector, w_ticker}` — sentiment sub-weights.
   - `cfg.ranking.enter_threshold` (default 0.55), `cfg.ranking.min_dollar_volume`.
   - `cfg.universe.min_price`.
@@ -731,10 +732,10 @@ flowchart TD
 | 32 | Company→ticker matching logic (exact, ambiguity, audit) | `trader/securities/matcher.py::match_companies_to_symbols`; ambiguous = 2+ different symbols → skipped | B |
 | 33 | RSS ticker detection filter (which aliases are scanned in headlines) | `trader/sentiment/rss_provider.py::_load_ticker_aliases` — ≥2-word aliases or manual priority≤1 with len≥5; avoids short single-word false positives | B |
 | 34 | Allowed exchanges + liquidity thresholds for security master | `cfg.securities.{allowed_exchanges, min_price, min_avg_dollar_volume_20d}`; filters applied in `_load_ticker_aliases` JOIN | B |
-| 35 | Composite factor weights (5 factors, proportional redistribution) | `cfg.ranking.{w_sentiment, w_momentum_trend, w_risk, w_liquidity, w_fundamentals}`; `trader/scoring.py::compute_composite` | E |
+| 35 | Composite factor weights (proportional redistribution) | `cfg.ranking.{w_sentiment, w_momentum_trend, w_risk, w_fundamentals}`; `trader/scoring.py::compute_composite` | E |
 | 36 | Momentum/trend factor (SMA200, EMA trend, 63d/126d returns) | `trader/scoring.py::compute_momentum_trend_factor`; requires ≥63 bars | E |
 | 37 | Risk factor (vol buckets, drawdown buckets) | `trader/scoring.py::compute_risk_factor`; vol weight 0.6, drawdown weight 0.4 | E |
-| 38 | Liquidity factor + equity_eligible gate | `trader/scoring.py::compute_liquidity_factor`; log-scale ADV$ score; gate: price ≥ min_price AND ADV ≥ min_dollar_volume | E |
+| 38 | Liquidity eligibility gate | `trader/scoring.py::compute_liquidity_factor`; gate: price ≥ min_price AND ADV ≥ min_dollar_volume | E |
 | 39 | Options eligibility gate (safe-by-default) | `trader/scoring.py::compute_optionability_factor`; reads `SecurityMaster.options_eligible`; returns `eligible=False` when no DB record | E |
 | 40 | Fundamentals factor (stub) | `trader/scoring.py::compute_fundamentals_factor`; always returns `missing` until IBKR entitlement wired; `cfg.fundamentals.enabled` | E |
 
@@ -871,7 +872,7 @@ If the `/sentiment` dashboard shows market/sector rows but no ticker rows:
 
 8. ~~**`BaseBot.build_candidates` vs `ranked` decoupling.**~~ **RESOLVED** —
    `OptionsSwingBot.select_trades` now hard-gates on `rs.options_eligible=False`
-   (skips the symbol) and uses the 5-factor composite `score_total` from `ranked`
+   (skips the symbol) and uses the composite `score_total` from `ranked`
    for all selection logic. `EquitySwingBot.select_trades` similarly gates on
    `rs.equity_eligible=False`. The composite score from Phase E is now the primary
    selection driver for both bots; `score_candidate` (Phase F) provides the per-candidate
