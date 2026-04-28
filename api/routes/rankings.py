@@ -119,7 +119,7 @@ def _factor_value(components: dict, name: str) -> float | None:
         factor = components.get(key)
         if not isinstance(factor, dict):
             continue
-        if _factor_unavailable(factor):
+        if _factor_unavailable(name, factor):
             return None
         value = factor.get("value_0_1")
         if isinstance(value, (int, float)):
@@ -127,11 +127,13 @@ def _factor_value(components: dict, name: str) -> float | None:
     return None
 
 
-def _factor_unavailable(factor: dict) -> bool:
+def _factor_unavailable(name: str, factor: dict) -> bool:
     status = factor.get("status")
     if status in {"missing", "disabled", "error"}:
         return True
     if status != "neutral":
+        return False
+    if name != "fundamentals":
         return False
 
     metrics = factor.get("metrics")
@@ -151,7 +153,7 @@ def _normalize_ranking(components: dict, score_total: float, eligible: bool, rea
     components = dict(components)
     for name in _SCORING_FACTORS:
         factor = components.get(name)
-        if isinstance(factor, dict) and _factor_unavailable(factor):
+        if isinstance(factor, dict) and _factor_unavailable(name, factor):
             factor = dict(factor)
             factor["value_0_1"] = None
             if factor.get("status") == "neutral":

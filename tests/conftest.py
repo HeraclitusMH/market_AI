@@ -33,3 +33,26 @@ def _ensure_valid_config(monkeypatch):
             "_cached",
             AppConfig(db={"path": ":memory:"}),
         )
+
+
+@pytest.fixture(autouse=True)
+def _isolate_fundamental_caches():
+    """Reset the FundamentalScorer in-memory + DB caches between tests.
+
+    The scorer now persists to ``fundamental_snapshots`` in the live SQLite
+    DB; without this, a test that hits the real DB pollutes later tests by
+    serving cached rows where they expect a fresh yfinance call.
+    """
+    from trader.fundamental_scorer import FundamentalScorer
+
+    FundamentalScorer._shared_cache.clear()
+    try:
+        from common.db import get_db
+        from common.models import FundamentalSnapshot
+
+        with get_db() as db:
+            db.query(FundamentalSnapshot).delete()
+    except Exception:
+        pass
+    yield
+    FundamentalScorer._shared_cache.clear()

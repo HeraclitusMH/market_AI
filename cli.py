@@ -107,6 +107,33 @@ def cli():
 
 
 @cli.group()
+def fundamentals():
+    """Fundamentals scoring commands."""
+
+
+@fundamentals.command("refresh")
+@click.option("--symbol", default=None, help="Refresh a single symbol (default: full verified universe).")
+def fundamentals_refresh(symbol: Optional[str]) -> None:
+    """Force-refresh yfinance fundamentals for one symbol or every symbol."""
+    _setup()
+    from trader.fundamentals_refresh import refresh_fundamentals
+
+    target = [symbol] if symbol else None
+    click.echo(f"Refreshing fundamentals for {symbol or 'all universe symbols'}…")
+    try:
+        result = refresh_fundamentals(symbols=target, force=True)
+    except Exception as e:
+        click.echo(f"ERROR: {e}", err=True)
+        sys.exit(1)
+    click.echo(
+        f"Done: refreshed={result['refreshed']} missing={result['missing']} "
+        f"errors={len(result['errors'])} duration_s={result['duration_s']}"
+    )
+    for err in result["errors"][:10]:
+        click.echo(f"  ! {err['symbol']}: {err['error']}", err=True)
+
+
+@cli.group()
 def sentiment():
     """Sentiment data commands."""
 

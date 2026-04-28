@@ -17,6 +17,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Install Python deps first so image layer caches on code-only changes.
+# Note: any time pyproject.toml changes (e.g. adding yfinance for fundamentals
+# scoring) you MUST rebuild the image — `docker compose up -d` alone reuses
+# the cached layer and the new dep won't be present at runtime.
 COPY pyproject.toml README.md ./
 RUN pip install --upgrade pip && pip install -e .
 

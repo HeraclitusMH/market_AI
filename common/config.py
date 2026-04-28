@@ -20,6 +20,9 @@ class IbkrConfig(BaseModel):
     port: int = 7497
     client_id: int = 1
     account: str = ""
+    # 1=Live, 2=Frozen, 3=Delayed, 4=Delayed-Frozen. Paper accounts without
+    # market-data subscriptions should use 3 (recommended) or 4.
+    market_data_type: int = 3
 
 
 class DbConfig(BaseModel):
@@ -225,8 +228,9 @@ class FundamentalPillarConfig(BaseModel):
 
 class FundamentalsConfig(BaseModel):
     enabled: bool = True
-    ttl_days: int = 7  # backward compatibility for older DB-cached fundamentals
+    ttl_days: int = 7  # DB cache TTL — drives the weekly scheduled refresh
     cache_ttl_hours: float = 24
+    refresh_days: int = 7  # scheduler tick: how often to bulk-refresh every symbol
     provider: str = "yfinance"
     request_timeout_seconds: float = 15
     neutral_score: float = 50

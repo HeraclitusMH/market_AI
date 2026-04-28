@@ -417,10 +417,22 @@ class GreeksService:
             self.client.qualify_contract(stock)
             ticker = self.client.ib.reqMktData(stock, "", snapshot=True, regulatorySnapshot=False)
             self.client.ib.sleep(1.0)
-            for candidate in (ticker.last, ticker.close, ticker.marketPrice()):
+            # Delayed feeds populate delayedLast / delayedClose instead of last / close.
+            candidates = (
+                getattr(ticker, "last", None),
+                getattr(ticker, "close", None),
+                getattr(ticker, "delayedLast", None),
+                getattr(ticker, "delayedClose", None),
+                ticker.marketPrice(),
+            )
+            for candidate in candidates:
                 p = _sanitize_price(candidate)
                 if p is not None:
                     return p
+            log.warning(
+                "Underlying price unavailable for %s (no live/delayed quote returned).",
+                symbol,
+            )
         except Exception as e:
             log.warning("Underlying price fetch failed for %s: %s", symbol, e)
         return 0.0
@@ -433,7 +445,22 @@ class GreeksService:
         strike_range_pct: float,
         exchange: str,
     ) -> List[float]:
-        """Select published strikes within ±range of underlying price."""
+        """Select published strikes within ±range of underlying price.
+
+        Returns an empty list when the underlying price is unavailable. The
+        previous fallback (return every strike in the chain) caused a flood
+        of Error 200 ("no security definition") because chain.strikes is the
+        union across all expiries — many of those strikes don't exist for
+        any single expiry.
+        """
+        if not (underlying_price and underlying_price > 0 and math.isfinite(underlying_price)):
+            log.warning(
+                "Skipping strike selection for %s exp=%s: underlying price unavailable "
+                "(check IBKR market-data subscription / market_data_type config).",
+                symbol, expiration,
+            )
+            return []
+
         try:
             chains = self.client.option_chains(symbol)
         except Exception as e:
@@ -445,8 +472,9 @@ class GreeksService:
             if expiration in chain.expirations:
                 all_strikes.extend(chain.strikes)
 
-        if not all_strikes or underlying_price <= 0:
-            return sorted(set(all_strikes))
+        if not all_strikes:
+            log.warning("No published strikes for %s exp=%s", symbol, expiration)
+            return []
 
         lo = underlying_price * (1.0 - strike_range_pct)
         hi = underlying_price * (1.0 + strike_range_pct)

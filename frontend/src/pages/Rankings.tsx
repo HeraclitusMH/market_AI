@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { fmtTs } from '@/lib/formatters';
 import { KPI } from '@/components/KPI';
@@ -135,12 +135,52 @@ function LiquidityGate({ factor }: { factor: unknown }) {
   );
 }
 
-function FactorBreakdown({ components, total }: { components: RankingComponents; total: number }) {
+function FactorBreakdown({
+  components,
+  total,
+  symbol,
+}: {
+  components: RankingComponents;
+  total: number;
+  symbol: string;
+}) {
+  const queryClient = useQueryClient();
+  const refreshOne = useMutation({
+    mutationFn: () => api.refreshFundamentals(symbol),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['rankings'] }),
+  });
+
   return (
     <div style={{ padding: '8px 12px 12px' }}>
       {SCORE_FACTOR_KEYS.map(([k, label]) => {
         const factor = components[k];
-        return <FactorBar key={k} name={label} value={factorValue(factor)} status={isFactor(factor) ? factor.status : 'missing'} />;
+        const isFundamentals = k === 'fundamentals';
+        return (
+          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <FactorBar name={label} value={factorValue(factor)} status={isFactor(factor) ? factor.status : 'missing'} />
+            </div>
+            {isFundamentals && (
+              <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); refreshOne.mutate(); }}
+                disabled={refreshOne.isPending}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid var(--bg-3)',
+                  color: 'var(--accent)',
+                  fontSize: 11,
+                  padding: '2px 8px',
+                  borderRadius: 4,
+                  cursor: refreshOne.isPending ? 'wait' : 'pointer',
+                }}
+                title={`Recalculate fundamentals for ${symbol}`}
+              >
+                {refreshOne.isPending ? 'Refreshing…' : 'Refresh'}
+              </button>
+            )}
+          </div>
+        );
       })}
       <LiquidityGate factor={components.liquidity} />
       <ScoreFormula components={components} total={total} />
@@ -160,7 +200,7 @@ const RANKING_COLS: Column<RankingRow>[] = [
     render: (r) => (
       <details style={{ cursor: 'pointer' }}>
         <summary style={{ fontSize: 11.5, color: 'var(--accent)' }}>View breakdown</summary>
-        <FactorBreakdown components={r.components} total={r.score_total} />
+        <FactorBreakdown components={r.components} total={r.score_total} symbol={r.symbol} />
       </details>
     ),
   },
@@ -177,8 +217,14 @@ const PLAN_COLS: Column<PlanRow>[] = [
 ];
 
 export function Rankings() {
+  const queryClient = useQueryClient();
   const { data: rankings = [], isLoading: rankLoading } = useQuery({ queryKey: ['rankings'], queryFn: () => api.getRankings(100), refetchInterval: 30_000 });
   const { data: plans = [], isLoading: planLoading } = useQuery({ queryKey: ['tradePlans'], queryFn: () => api.getTradePlans(50), refetchInterval: 30_000 });
+
+  const refreshAll = useMutation({
+    mutationFn: () => api.refreshFundamentals(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['rankings'] }),
+  });
 
   const [activeTab, setActiveTab] = useState<'all' | 'bullish' | 'bearish'>('all');
 
@@ -228,14 +274,37 @@ export function Rankings() {
       <Card style={{ marginBottom: 'var(--gap)' }}>
         <CardHead
           title="Full Rankings"
-          subtitle={`${displayed.length} shown`}
+          subtitle={
+            refreshAll.isSuccess
+              ? `${displayed.length} shown · refreshed ${refreshAll.data.refreshed} (missing ${refreshAll.data.missing}) in ${refreshAll.data.duration_s}s`
+              : `${displayed.length} shown`
+          }
           right={
-            <div className="seg-ctrl">
-              {(['all', 'bullish', 'bearish'] as const).map((t) => (
-                <button key={t} className={`seg-ctrl-item${activeTab === t ? ' active' : ''}`} onClick={() => setActiveTab(t)}>
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </button>
-              ))}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={() => refreshAll.mutate()}
+                disabled={refreshAll.isPending}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid var(--bg-3)',
+                  color: 'var(--accent)',
+                  fontSize: 12,
+                  padding: '4px 10px',
+                  borderRadius: 4,
+                  cursor: refreshAll.isPending ? 'wait' : 'pointer',
+                }}
+                title="Force-refresh yfinance fundamentals for every symbol in the universe"
+              >
+                {refreshAll.isPending ? 'Refreshing…' : 'Refresh Fundamentals'}
+              </button>
+              <div className="seg-ctrl">
+                {(['all', 'bullish', 'bearish'] as const).map((t) => (
+                  <button key={t} className={`seg-ctrl-item${activeTab === t ? ' active' : ''}`} onClick={() => setActiveTab(t)}>
+                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                  </button>
+                ))}
+              </div>
             </div>
           }
         />

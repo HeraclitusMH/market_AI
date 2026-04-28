@@ -5,6 +5,9 @@ ibkr:
   port: 7497          # 7497 = TWS paper, 4002 = Gateway paper
   client_id: 1
   account: ""         # leave blank to auto-detect
+  # 1=Live, 2=Frozen, 3=Delayed, 4=Delayed-Frozen.
+  # Paper accounts without market-data subscriptions should use 3 (default).
+  market_data_type: 3
 
 db:
   # Postgres (recommended): set DATABASE_URL env var or uncomment url below.
@@ -123,8 +126,9 @@ ranking:
 
 fundamentals:
   enabled: true         # set false to disable yfinance fundamental scoring
-  ttl_days: 7           # backward compatibility for older DB-cached fundamentals
-  cache_ttl_hours: 24
+  ttl_days: 7           # DB cache TTL in days; rows older than this are recomputed
+  cache_ttl_hours: 24   # in-process cache TTL (intra-run dedup of yfinance calls)
+  refresh_days: 7       # scheduler bulk-refresh cadence (every symbol in the universe)
   provider: "yfinance"
   request_timeout_seconds: 15
   neutral_score: 50

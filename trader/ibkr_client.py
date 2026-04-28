@@ -32,6 +32,26 @@ class IBKRClient:
         self.ib.connect(self.cfg.host, self.cfg.port, clientId=self.cfg.client_id, readonly=False)
         self._connected = True
         log.info("Connected to IBKR. Accounts: %s", self.ib.managedAccounts())
+        self._apply_market_data_type()
+
+    def _apply_market_data_type(self) -> None:
+        """Tell IBKR to send delayed quotes when live aren't subscribed.
+
+        1=Live, 2=Frozen, 3=Delayed, 4=Delayed-Frozen. Without this call,
+        accounts without US market-data subscriptions get errors 10089/354
+        on every reqMktData and a flood of "no security definition" (200)
+        downstream because option strikes are picked from a NaN underlying
+        price.
+        """
+        mdt = int(getattr(self.cfg, "market_data_type", 3) or 3)
+        if mdt not in (1, 2, 3, 4):
+            log.warning("Invalid ibkr.market_data_type=%s; falling back to 3 (delayed).", mdt)
+            mdt = 3
+        try:
+            self.ib.reqMarketDataType(mdt)
+            log.info("IBKR market data type set to %d (1=live,2=frozen,3=delayed,4=delayed-frozen).", mdt)
+        except Exception as e:
+            log.warning("reqMarketDataType(%d) failed: %s", mdt, e)
 
     def disconnect(self) -> None:
         if self.connected:

@@ -34,7 +34,10 @@
   (`≥0.55 → bullish`; `≤0.45 → bearish`). Rows persisted as `SymbolRanking`.
 - **Fundamentals** are optional and sourced from yfinance via
   `trader/fundamental_scorer.py`. If yfinance returns no usable ratios, the factor
-  is marked missing and its composite weight is redistributed.
+  is marked missing and its composite weight is redistributed. Results are cached
+  in memory and persisted to `fundamental_snapshots`; `force_refresh=True` bypasses
+  both caches. The manual API refresh route imports this path lazily so a missing
+  `yfinance` package returns `503` instead of preventing `uvicorn` startup.
 - **Options** score + plan produces a `TradePlan` (status `proposed` / `skipped`) via
   `trader/options_planner.py::plan_trade`. Execution picks delta-matched legs through
   `GreeksService → StrikeSelector → GreeksGate`, then builds an IBKR BAG combo order.
@@ -345,7 +348,7 @@ flowchart TD
   - `cfg.ranking.{w_sentiment, w_momentum_trend, w_risk, w_fundamentals}` — nominal weights.
   - `cfg.ranking.{w_market, w_sector, w_ticker}` — sentiment sub-weights.
   - `cfg.ranking.enter_threshold` (default 0.55), `cfg.ranking.min_dollar_volume`.
-  - `cfg.fundamentals.{enabled, provider, cache_ttl_hours, neutral_score, metric_bounds, pillars}`.
+  - `cfg.fundamentals.{enabled, ttl_days, cache_ttl_hours, refresh_days, provider, neutral_score, metric_bounds, pillars}`.
   - `cfg.universe.min_price`.
 - **Outputs/artifacts.** `List[RankedSymbol]` — `(symbol, sector, score_total,
   components{sentiment,momentum_trend,risk,liquidity,optionability,fundamentals},
@@ -657,6 +660,7 @@ flowchart TD
 
 - **CLI** (`cli.py`) — preferred:
   - `python cli.py run <bot>|all --mode paper|live [--once] [--approve/--no-approve] [--dry-run] [--refresh-sentiment/--no-refresh-sentiment]`
+  - `python cli.py fundamentals refresh [--symbol AAPL]`
   - `python cli.py sentiment refresh [--source rss_lexicon|claude_llm] [--dry-run]`
   - `python cli.py report last-run [--bot ...] [--json-out]`
 - **Legacy trader daemon** (`trader/main.py`) — calls `Scheduler.run()` with a 10 s heartbeat.

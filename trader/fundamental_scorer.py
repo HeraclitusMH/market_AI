@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, TypedDict
 
@@ -45,6 +46,9 @@ class FundamentalScorer:
         self.cache_ttl = timedelta(
             hours=max(float(getattr(self.fundamentals_cfg, "cache_ttl_hours", 24) or 24), 0.0)
         )
+        self.db_ttl = timedelta(
+            days=max(int(getattr(self.fundamentals_cfg, "ttl_days", 7) or 7), 1)
+        )
         self.neutral_score = float(getattr(self.fundamentals_cfg, "neutral_score", 50) or 50)
         self._cache = self._shared_cache
         self._validate_pillar_weights()
@@ -68,21 +72,45 @@ class FundamentalScorer:
             min_coverage=_number_attr(raw, "min_coverage", 0.2),
         )
 
-    def get_score(self, symbol: str) -> FundamentalResult:
-        """Return the 0..100 fundamental score and full scoring breakdown."""
+    def get_score(self, symbol: str, force_refresh: bool = False) -> FundamentalResult:
+        """Return the 0..100 fundamental score and full scoring breakdown.
+
+        Cache layers (in order):
+          1. In-process cache (TTL = cache_ttl_hours, default 24h) — fast path.
+          2. DB ``fundamental_snapshots`` row (TTL = ttl_days, default 7) — survives restarts.
+          3. yfinance fetch + score, then write through to both caches.
+
+        ``force_refresh=True`` skips both caches and always re-fetches from yfinance.
+        """
         normalized_symbol = symbol.strip().upper()
         now = datetime.now(timezone.utc)
 
-        cached = self._cache.get(normalized_symbol)
-        if cached and now - cached["timestamp_dt"] <= self.cache_ttl:
-            result = copy.deepcopy(cached["result"])
-            result["cached"] = True
-            log.info(
-                "Fundamental score for %s: %.1f (cache hit)",
-                normalized_symbol,
-                result["total_score"],
-            )
-            return result
+        if not force_refresh:
+            cached = self._cache.get(normalized_symbol)
+            if cached and now - cached["timestamp_dt"] <= self.cache_ttl:
+                result = copy.deepcopy(cached["result"])
+                result["cached"] = True
+                log.info(
+                    "Fundamental score for %s: %.1f (memory hit)",
+                    normalized_symbol,
+                    result["total_score"],
+                )
+                return result
+
+            db_hit = self._load_db_snapshot(normalized_symbol, now)
+            if db_hit is not None:
+                ratios, result = db_hit
+                self._cache[normalized_symbol] = {
+                    "ratios": ratios,
+                    "result": copy.deepcopy(result),
+                    "timestamp_dt": now,
+                }
+                log.info(
+                    "Fundamental score for %s: %.1f (db hit)",
+                    normalized_symbol,
+                    result["total_score"],
+                )
+                return result
 
         try:
             ratios = self._fetch_ratios(normalized_symbol)
@@ -107,6 +135,7 @@ class FundamentalScorer:
                 "result": copy.deepcopy(result),
                 "timestamp_dt": now,
             }
+            self._save_db_snapshot(normalized_symbol, ratios_to_cache, result, now)
         log.info(
             "Fundamental score for %s: %.1f (cache miss)",
             normalized_symbol,
@@ -114,6 +143,65 @@ class FundamentalScorer:
         )
         log.debug("Fundamental score breakdown for %s: %s", normalized_symbol, result)
         return result
+
+    def _load_db_snapshot(
+        self, symbol: str, now: datetime
+    ) -> Optional[tuple[Dict[str, float], FundamentalResult]]:
+        """Return (ratios, result) when a fresh row exists in the DB; else None."""
+        try:
+            from common.db import get_db
+            from common.models import FundamentalSnapshot
+
+            with get_db() as db:
+                row = db.query(FundamentalSnapshot).filter(FundamentalSnapshot.symbol == symbol).first()
+                if row is None:
+                    return None
+                ts = row.ts.replace(tzinfo=timezone.utc) if row.ts.tzinfo is None else row.ts
+                if now - ts > self.db_ttl:
+                    return None
+                try:
+                    payload = json.loads(row.metrics_json or "{}")
+                    ratios = json.loads(row.raw_xml or "{}")
+                except Exception:
+                    return None
+                if not isinstance(payload, dict) or "total_score" not in payload:
+                    return None
+                result: FundamentalResult = copy.deepcopy(payload)  # type: ignore[assignment]
+                result["cached"] = True
+                if not isinstance(ratios, dict):
+                    ratios = {}
+                return ratios, result
+        except Exception as exc:
+            log.debug("DB fundamental cache lookup failed for %s: %s", symbol, exc)
+            return None
+
+    def _save_db_snapshot(
+        self,
+        symbol: str,
+        ratios: Dict[str, float],
+        result: FundamentalResult,
+        now: datetime,
+    ) -> None:
+        """Upsert the symbol's fundamental snapshot into the DB."""
+        try:
+            from common.db import get_db
+            from common.models import FundamentalSnapshot
+
+            payload = json.dumps(result)
+            ratios_json = json.dumps(ratios)
+            with get_db() as db:
+                row = db.query(FundamentalSnapshot).filter(FundamentalSnapshot.symbol == symbol).first()
+                if row is None:
+                    row = FundamentalSnapshot(symbol=symbol)
+                    db.add(row)
+                row.ts = now.replace(tzinfo=None)
+                row.report_type = "yfinance"
+                row.metrics_json = payload
+                row.raw_xml = ratios_json
+                row.status = "ok"
+                row.reason = None
+        except Exception as exc:
+            log.debug("DB fundamental cache write failed for %s: %s", symbol, exc)
 
     def _fetch_ratios(self, symbol: str) -> Dict[str, float]:
         """Fetch and map yfinance fundamentals for a stock symbol."""

@@ -15,7 +15,7 @@ Both bots can run together or independently. Each has its own position namespace
 ## Features
 
 - **Multi-factor composite scoring** — [0,1] score per symbol from sentiment, momentum/trend, risk, and fundamentals. Missing factors redistribute weight; liquidity is an eligibility gate only.
-- **yfinance fundamental score** — optional scorer normalizes valuation, profitability, growth, and financial-health ratios to a 0-100 breakdown, then feeds the existing composite as `fundamentals`.
+- **yfinance fundamental score** — optional scorer normalizes valuation, profitability, growth, and financial-health ratios to a 0-100 breakdown, then feeds the existing composite as `fundamentals`. Persisted to `fundamental_snapshots` (default 7-day TTL) and refreshed weekly by the scheduler. Manual refresh via dashboard button (all symbols or per-row) or `python cli.py fundamentals refresh`.
 - **Eligibility gates** — `equity_eligible` (liquidity + IBKR-verified contract) and `options_eligible` (from `SecurityMaster`; safe-by-default=False). Each bot hard-blocks symbols that fail its gate.
 - **Swing strategy** (2–20 day holds) — technical analysis (EMA, SMA, RSI, MACD, ATR) + market/sector/ticker sentiment
 - **Defined risk only** — options bot trades debit spreads exclusively (max loss = net debit paid)
@@ -65,6 +65,8 @@ docker compose up -d
 ```
 
 Open **http://localhost:8000**. The API container auto-applies Alembic migrations and seeds `bot_state` on first boot.
+
+> ⚠️ **Rebuild after adding/upgrading dependencies.** The repo is bind-mounted into the containers (see `docker-compose.yml`), so plain code changes are picked up live — but Python packages live inside the image. After any `pyproject.toml` change (e.g. the `yfinance` dependency added for fundamental scoring), run `docker compose up --build -d api trader` once to refresh the image. The fundamentals refresh endpoint lazily imports `yfinance`, so a missing package returns `503` from `/api/v1/fundamentals/refresh` instead of crashing API startup.
 
 ### 4. Verify
 
@@ -161,6 +163,10 @@ python trader/main.py                                         # Terminal 2
 The unified CLI (`cli.py`) is the recommended entry point for bot operations:
 
 ```bash
+# Refresh fundamentals (yfinance)
+python cli.py fundamentals refresh                         # every symbol in the verified universe
+python cli.py fundamentals refresh --symbol AAPL           # one symbol only
+
 # Refresh sentiment data
 python cli.py sentiment refresh
 python cli.py sentiment refresh --source claude_llm --dry-run
@@ -244,7 +250,9 @@ ranking:
 
 fundamentals:
   enabled: true                  # set false to disable yfinance fundamental scoring
-  cache_ttl_hours: 24
+  ttl_days: 7                    # DB cache TTL (rows older than this are recomputed)
+  cache_ttl_hours: 24            # in-process cache TTL (intra-run dedup)
+  refresh_days: 7                # scheduler bulk-refresh cadence (every universe symbol)
   provider: "yfinance"
   request_timeout_seconds: 15
   neutral_score: 50              # internal no-data placeholder; not counted in composite
@@ -329,7 +337,8 @@ market_AI/
     indicators.py         # EMA, SMA, RSI, MACD, ATR
     universe.py           # Ticker universe: seed, verify, get_verified_universe()
     scoring.py            # Multi-factor scoring: compute_composite(), liquidity/momentum/risk/sentiment/optionability/fundamentals factors
-    fundamental_scorer.py # yfinance parser/scorer with 24h in-memory cache
+    fundamental_scorer.py # yfinance parser/scorer; 3-tier cache (memory → fundamental_snapshots DB → yfinance)
+    fundamentals_refresh.py # Shared refresh helper used by scheduler + API + CLI
     ranking.py            # rank_symbols() — runs factor pipeline per symbol, sets equity_eligible/options_eligible
     strategy.py           # Regime check, score_symbol(), generate_signals()
     risk.py               # Risk engine: drawdown, position limits, cash reservation
@@ -348,7 +357,7 @@ market_AI/
     main.py               # FastAPI app; serves React SPA browser routes
     routes/               # Legacy routes: health, state, controls, signals, sentiment, trades, rankings
     v1/                   # JSON API v1: overview, positions, orders, fills, signals, rankings,
-                          #   trade-plans, sentiment, risk, controls, config
+                          #   trade-plans, sentiment, risk, controls, config, fundamentals
   ui/
     static/
       dist/               # Built React SPA output (index.html + assets/)
@@ -371,7 +380,7 @@ market_AI/
     init_db.py            # Run alembic + seed bot_state
     run_all.py            # Launch API + trader as subprocesses
   tests/                  # 205 pytest tests
-  alembic/versions/       # DB migrations (0001–0005)
+  alembic/versions/       # DB migrations (0001–0006)
 ```
 
 ---
@@ -437,6 +446,7 @@ All endpoints are prefixed `/api/v1/`. Controls return `{ ok: bool, bot: BotStat
 | POST | `/api/v1/controls/approve_mode/on` | Require manual approval |
 | POST | `/api/v1/controls/approve_mode/off` | Allow auto-trading |
 | POST | `/api/v1/sentiment/refresh` | Trigger sentiment refresh |
+| POST | `/api/v1/fundamentals/refresh` | Force-refresh yfinance fundamentals (`?symbol=AAPL` for one, no params = all) |
 
 ### Legacy API (backward compat, unchanged)
 
@@ -584,7 +594,8 @@ cd frontend && pnpm test
 - **No automated exits** — the exit threshold (`exit_threshold`) and `max_holding_days` are tracked in config but position exit orders are not yet submitted automatically. Manual close via dashboard or IBKR.
 - **No EUR/USD FX conversion** — all risk calculations are in USD.
 - **IV Rank** requires the IBKR historical-volatility market data entitlement; falls back to "unknown" regime when unavailable (gate warns, does not block).
-- **Fundamental score** uses yfinance. If yfinance returns no usable metrics for a symbol, fundamentals are marked missing and their composite weight is redistributed.
+- **Fundamental score** uses yfinance. If yfinance returns no usable metrics for a symbol, fundamentals are marked missing and their composite weight is redistributed. Successful results are persisted to `fundamental_snapshots` for `fundamentals.ttl_days` (default 7); the scheduler force-refreshes every symbol weekly. Manual refresh: dashboard button on `/rankings` or `python cli.py fundamentals refresh [--symbol]`.
+- **IBKR market data subscription** — paper accounts without live US data subscriptions default to delayed quotes (`ibkr.market_data_type: 3`). If you see Error 10089/354, that knob isn't being applied; if you see Error 200 ("no security definition") storms, the underlying-price fetch returned NaN — both are now handled, but a real subscription is still needed for live trading.
 - **`data/sp500.csv`** exists as a reference file (~180 stocks with sectors) but is not yet auto-ingested — the live universe is still seeded from the embedded `SEED_TICKERS` list in `trader/universe.py`.
 - **`close_all` control** currently activates the kill switch only; actual IBKR position-closing orders are not yet wired.
 - **Company→ticker matching coverage** — only securities in `security_master` (~220 major US stocks) are resolved. Smaller-cap names mentioned in news will not produce ticker snapshots unless manually added to the CSV and re-imported.

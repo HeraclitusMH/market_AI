@@ -205,3 +205,71 @@ def test_total_score_redistributes_missing_pillar_weights():
     score = scorer._compute_total_score(pillars)
 
     assert score == pytest.approx(70.0, abs=0.1)
+
+
+# ─── DB-backed cache tests ──────────────────────────────────────────────────
+
+
+@pytest.fixture
+def _db_session(monkeypatch):
+    """Spin up a fresh in-memory SQLite DB for each test that needs persistence."""
+    import common.db as db_mod
+    from common.models import Base
+
+    monkeypatch.setattr(db_mod, "_engine", None)
+    monkeypatch.setattr(db_mod, "_SessionLocal", None)
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
+
+    engine = db_mod.get_engine()
+    Base.metadata.create_all(engine)
+    yield
+    Base.metadata.drop_all(engine)
+    monkeypatch.setattr(db_mod, "_engine", None)
+    monkeypatch.setattr(db_mod, "_SessionLocal", None)
+
+
+def test_db_cache_hit_skips_yfinance(_db_session):
+    client = MagicMock()
+    client.get_info.return_value = SAMPLE_YFINANCE_INFO
+    scorer = FundamentalScorer(cfg=_cfg(), client=client)
+
+    scorer.get_score("AAPL")  # populates DB + memory
+    FundamentalScorer._shared_cache.clear()  # simulate process restart
+
+    second = scorer.get_score("AAPL")
+
+    assert client.get_info.call_count == 1
+    assert second["cached"] is True
+    assert second["total_score"] == pytest.approx(63.0, abs=0.1)
+
+
+def test_db_cache_expired_triggers_refetch(_db_session):
+    client = MagicMock()
+    client.get_info.return_value = SAMPLE_YFINANCE_INFO
+    scorer = FundamentalScorer(cfg=_cfg(ttl_days=1), client=client)
+
+    scorer.get_score("AAPL")
+    FundamentalScorer._shared_cache.clear()
+
+    from common.db import get_db
+    from common.models import FundamentalSnapshot
+
+    with get_db() as db:
+        row = db.query(FundamentalSnapshot).filter_by(symbol="AAPL").first()
+        row.ts = (datetime.now(timezone.utc) - timedelta(days=2)).replace(tzinfo=None)
+
+    scorer.get_score("AAPL")
+
+    assert client.get_info.call_count == 2
+
+
+def test_force_refresh_bypasses_both_caches(_db_session):
+    client = MagicMock()
+    client.get_info.return_value = SAMPLE_YFINANCE_INFO
+    scorer = FundamentalScorer(cfg=_cfg(), client=client)
+
+    scorer.get_score("AAPL")
+    scorer.get_score("AAPL", force_refresh=True)
+    scorer.get_score("AAPL", force_refresh=True)
+
+    assert client.get_info.call_count == 3

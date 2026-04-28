@@ -36,6 +36,7 @@ class Scheduler:
         self._last_ranking = datetime.min
         self._last_rebalance: Optional[str] = None  # date string
         self._last_sync = datetime.min
+        self._last_fundamentals = datetime.min
 
     def _heartbeat(self) -> None:
         with get_db() as db:
@@ -76,6 +77,10 @@ class Scheduler:
             or self.cfg.scheduling.sentiment_refresh_minutes
         return (datetime.now() - self._last_ranking).total_seconds() > interval * 60
 
+    def _should_refresh_fundamentals(self) -> bool:
+        days = int(getattr(getattr(self.cfg, "fundamentals", None), "refresh_days", 7) or 7)
+        return (datetime.now() - self._last_fundamentals).total_seconds() > days * 24 * 60 * 60
+
     def run_once(self) -> None:
         """Single iteration of the scheduler loop."""
         from trader.sync import full_sync
@@ -95,6 +100,19 @@ class Scheduler:
                 self._last_sync = datetime.now()
             except Exception as e:
                 log.error("Sync failed: %s", e)
+
+        # Weekly fundamentals refresh (force fresh yfinance fetch for every universe symbol)
+        if self._should_refresh_fundamentals():
+            try:
+                from trader.fundamentals_refresh import refresh_fundamentals
+                result = refresh_fundamentals(force=True, client=self.client)
+                self._last_fundamentals = datetime.now()
+                log.info(
+                    "Fundamentals weekly refresh: refreshed=%d missing=%d errors=%d duration_s=%.2f",
+                    result["refreshed"], result["missing"], len(result["errors"]), result["duration_s"],
+                )
+            except Exception as e:
+                log.error("Fundamentals refresh failed: %s", e)
 
         # Refresh sentiment
         if self._should_refresh_sentiment():

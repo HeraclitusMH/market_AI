@@ -88,3 +88,25 @@ def test_normalize_ranking_treats_neutral_empty_fundamentals_as_missing():
     assert normalized["fundamentals"]["reason"] == "no_usable_fundamental_metrics"
     assert normalized["weights_used"]["fundamentals"] == 0.0
     assert score_total == 0.6867
+
+
+def test_normalize_ranking_keeps_neutral_risk_with_numeric_value():
+    components = {
+        "sentiment": {"value_0_1": 0.6, "status": "ok"},
+        "momentum_trend": {"value_0_1": 0.7, "status": "ok"},
+        "risk": {"value_0_1": 0.75, "status": "neutral", "metrics": {}},
+        "fundamentals": {"value_0_1": None, "status": "missing"},
+        "weights_used": {
+            "sentiment": 0.3529,
+            "momentum_trend": 0.2941,
+            "risk": 0.2353,
+            "fundamentals": 0.1176,
+        },
+    }
+
+    normalized, score_total, _, _ = _normalize_ranking(components, 0.659, True, [])
+
+    assert normalized["risk"]["value_0_1"] == 0.75
+    assert normalized["risk"]["status"] == "neutral"
+    assert normalized["weights_used"]["risk"] == 0.2667
+    assert score_total == 0.6733

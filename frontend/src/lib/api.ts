@@ -38,6 +38,14 @@ export const api = {
   refreshSentiment: () => post<{ status: string; snapshots_written: number; reason: string }>(
     '/sentiment/refresh',
   ),
+  refreshFundamentals: (symbol?: string) =>
+    post<{
+      refreshed: number;
+      missing: number;
+      errors: { symbol: string; error: string }[];
+      duration_s: number;
+      symbols: string[];
+    }>(`/fundamentals/refresh${symbol ? `?symbol=${encodeURIComponent(symbol)}` : ''}`),
 } as const;
 
 export type ApiClient = typeof api;
