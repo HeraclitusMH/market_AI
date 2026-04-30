@@ -43,6 +43,7 @@ class RankedSymbol:
     bias: Optional[str] = None          # "bullish" | "bearish" | None
     equity_eligible: bool = True        # passes liquidity gate → can trade equity
     options_eligible: bool = False      # passes options gate (safe-by-default: False)
+    name: str = ""                      # human-readable company/fund name
 
 
 # ── Sentiment snapshot helpers ────────────────────────────────────────────────
@@ -224,6 +225,7 @@ def rank_symbols(
             bias=bias,
             equity_eligible=equity_eligible,
             options_eligible=options_eligible,
+            name=item.name,
         ))
 
     results.sort(key=lambda r: r.score_total, reverse=True)

@@ -6,6 +6,7 @@ import { KPI } from '@/components/KPI';
 import { Card, CardHead, CardBody } from '@/components/Card';
 import { DataTable, type Column } from '@/components/DataTable';
 import { SegmentedControl } from '@/components/SegmentedControl';
+import { symbolCell } from '@/lib/cells';
 import { ScoreBar } from '@/components/ScoreBar';
 import { actionBadge } from '@/components/Badge';
 import type { Signal } from '@/types/api';
@@ -20,7 +21,7 @@ const FILTERS = [
 
 const COLS: Column<Signal>[] = [
   { key: 'timestamp', header: 'Time', render: (r) => <span className="mono" style={{ fontSize: 11.5 }}>{fmtTs(r.timestamp)}</span> },
-  { key: 'symbol', header: 'Symbol', render: (r) => <strong style={{ color: 'var(--ink-1)' }}>{r.symbol}</strong> },
+  { key: 'symbol', header: 'Company', render: (r) => symbolCell(r) },
   { key: 'action', header: 'Action', render: (r) => actionBadge(r.action) },
   { key: 'regime', header: 'Regime' },
   {

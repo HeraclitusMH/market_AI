@@ -17,6 +17,7 @@ export interface EquitySnapshot {
 
 export interface Position {
   symbol: string;
+  name?: string;
   quantity: number;
   avg_cost: number;
   market_price: number;
@@ -31,6 +32,7 @@ export interface Order {
   intent_id: string;
   timestamp: string;
   symbol: string;
+  name?: string;
   direction: string;
   instrument: string;
   quantity: number;
@@ -46,6 +48,7 @@ export interface Fill {
   order_id: number;
   timestamp: string;
   symbol: string;
+  name?: string;
   quantity: number;
   price: number;
   commission: number;
@@ -55,6 +58,7 @@ export interface Signal {
   id: number;
   timestamp: string;
   symbol: string;
+  name?: string;
   score_total: number;
   components_json: string;
   regime: string;
@@ -97,6 +101,7 @@ export interface RankingRow {
   id: number;
   ts: string;
   symbol: string;
+  name?: string;
   score_total: number;
   components: RankingComponents;
   eligible: boolean;
@@ -123,6 +128,7 @@ export interface PlanRow {
   id: number;
   ts: string;
   symbol: string;
+  name?: string;
   bias: string;
   strategy: string;
   expiry: string | null;

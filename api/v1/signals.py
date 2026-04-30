@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from api.deps import get_db
-from common.models import SignalSnapshot
+from common.models import SecurityMaster, SignalSnapshot
 from common.schema import SignalOut
 
 router = APIRouter(tags=["v1"])
@@ -21,4 +21,9 @@ def list_signals(limit: int = Query(50, le=200), db: Session = Depends(get_db)):
         .limit(limit)
         .all()
     )
-    return [SignalOut.model_validate(r) for r in rows]
+    symbols = [r.symbol for r in rows]
+    names = (
+        {r.symbol: r.name for r in db.query(SecurityMaster.symbol, SecurityMaster.name).filter(SecurityMaster.symbol.in_(symbols)).all()}
+        if symbols else {}
+    )
+    return [SignalOut.model_validate(r).model_copy(update={"name": names.get(r.symbol)}) for r in rows]

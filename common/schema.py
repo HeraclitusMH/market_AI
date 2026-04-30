@@ -32,6 +32,7 @@ class EquitySnapshotOut(BaseModel):
 
 class PositionOut(BaseModel):
     symbol: str
+    name: Optional[str] = None
     quantity: int
     avg_cost: float
     market_price: float
@@ -49,6 +50,7 @@ class OrderOut(BaseModel):
     intent_id: str
     timestamp: datetime
     symbol: str
+    name: Optional[str] = None
     direction: str
     instrument: str
     quantity: int
@@ -67,6 +69,7 @@ class FillOut(BaseModel):
     order_id: int
     timestamp: datetime
     symbol: str
+    name: Optional[str] = None
     quantity: int
     price: float
     commission: float
@@ -79,6 +82,7 @@ class SignalOut(BaseModel):
     id: int
     timestamp: datetime
     symbol: str
+    name: Optional[str] = None
     score_total: float
     components_json: str
     regime: str

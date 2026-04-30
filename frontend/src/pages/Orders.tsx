@@ -6,6 +6,7 @@ import { KPI } from '@/components/KPI';
 import { Card, CardHead, CardBody } from '@/components/Card';
 import { DataTable, type Column } from '@/components/DataTable';
 import { SegmentedControl } from '@/components/SegmentedControl';
+import { symbolCell } from '@/lib/cells';
 import { statusBadge, actionBadge } from '@/components/Badge';
 import type { Order, Fill } from '@/types/api';
 
@@ -13,7 +14,7 @@ const TABS = [{ value: 'orders', label: 'Orders' }, { value: 'fills', label: 'Fi
 
 const ORDER_COLS: Column<Order>[] = [
   { key: 'timestamp', header: 'Time', render: (r) => <span className="mono" style={{ fontSize: 11.5 }}>{fmtTs(r.timestamp)}</span> },
-  { key: 'symbol', header: 'Symbol', render: (r) => <strong style={{ color: 'var(--ink-1)' }}>{r.symbol}</strong> },
+  { key: 'symbol', header: 'Company', render: (r) => symbolCell(r) },
   { key: 'direction', header: 'Side', render: (r) => actionBadge(r.direction) },
   { key: 'instrument', header: 'Instr' },
   { key: 'quantity', header: 'Qty', numeric: true },
@@ -26,7 +27,7 @@ const ORDER_COLS: Column<Order>[] = [
 
 const FILL_COLS: Column<Fill>[] = [
   { key: 'timestamp', header: 'Time', render: (r) => <span className="mono" style={{ fontSize: 11.5 }}>{fmtTs(r.timestamp)}</span> },
-  { key: 'symbol', header: 'Symbol', render: (r) => <strong style={{ color: 'var(--ink-1)' }}>{r.symbol}</strong> },
+  { key: 'symbol', header: 'Company', render: (r) => symbolCell(r) },
   { key: 'quantity', header: 'Qty', numeric: true },
   { key: 'price', header: 'Price', numeric: true, render: (r) => fmtMoney(r.price) },
   { key: 'commission', header: 'Comm', numeric: true, render: (r) => fmtMoney(r.commission) },

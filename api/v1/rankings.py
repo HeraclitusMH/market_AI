@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from api.deps import get_db
-from common.models import SymbolRanking, TradePlan
+from common.models import SecurityMaster, SymbolRanking, TradePlan
 
 router = APIRouter(tags=["v1"])
 
@@ -19,6 +19,7 @@ class RankingRow(BaseModel):
     id: int
     ts: str
     symbol: str
+    name: str = ""
     score_total: float
     components: dict
     eligible: bool
@@ -29,6 +30,7 @@ class PlanRow(BaseModel):
     id: int
     ts: str
     symbol: str
+    name: str = ""
     bias: str
     strategy: str
     expiry: Optional[str] = None
@@ -38,6 +40,15 @@ class PlanRow(BaseModel):
     rationale: dict
     status: str
     skip_reason: Optional[str] = None
+
+
+def _lookup_names(db: Session, symbols: List[str]) -> dict:
+    if not symbols:
+        return {}
+    rows = db.query(SecurityMaster.symbol, SecurityMaster.name).filter(
+        SecurityMaster.symbol.in_(symbols)
+    ).all()
+    return {r.symbol: r.name for r in rows}
 
 
 def _parse(s: Optional[str], default=None):
@@ -145,6 +156,7 @@ def get_rankings(limit: int = Query(50, le=200), db: Session = Depends(get_db)):
         .filter(SymbolRanking.ts == max_ts)
         .all()
     )
+    names = _lookup_names(db, [r.symbol for r in rows])
     result = []
     for r in rows:
         components = _parse(r.components_json)
@@ -156,6 +168,7 @@ def get_rankings(limit: int = Query(50, le=200), db: Session = Depends(get_db)):
             id=r.id,
             ts=str(r.ts),
             symbol=r.symbol,
+            name=names.get(r.symbol, ""),
             score_total=score_total,
             components=components,
             eligible=eligible,
@@ -175,11 +188,13 @@ def get_trade_plans(
     if status:
         q = q.filter(TradePlan.status == status)
     rows = q.limit(limit).all()
+    names = _lookup_names(db, [r.symbol for r in rows])
     return [
         PlanRow(
             id=r.id,
             ts=str(r.ts),
             symbol=r.symbol,
+            name=names.get(r.symbol, ""),
             bias=r.bias,
             strategy=r.strategy,
             expiry=r.expiry,

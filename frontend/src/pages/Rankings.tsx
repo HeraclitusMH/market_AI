@@ -7,6 +7,7 @@ import { Card, CardHead, CardBody } from '@/components/Card';
 import { DataTable, type Column } from '@/components/DataTable';
 import { ScoreBar, FactorBar } from '@/components/ScoreBar';
 import { Badge } from '@/components/Badge';
+import { symbolCell } from '@/lib/cells';
 import type { RankingRow, PlanRow, RankingComponents, RankingFactor } from '@/types/api';
 
 const SCORE_FACTOR_KEYS: [string, string][] = [
@@ -189,7 +190,7 @@ function FactorBreakdown({
 }
 
 const RANKING_COLS: Column<RankingRow>[] = [
-  { key: 'symbol', header: 'Symbol', render: (r) => <strong style={{ color: 'var(--ink-1)' }}>{r.symbol}</strong> },
+  { key: 'symbol', header: 'Company', render: (r) => symbolCell(r) },
   { key: 'score_total', header: 'Score', numeric: true, render: (r) => <ScoreBar value={r.score_total} /> },
   {
     key: 'eligible', header: 'Eligible', sortable: false,
@@ -208,7 +209,7 @@ const RANKING_COLS: Column<RankingRow>[] = [
 
 const PLAN_COLS: Column<PlanRow>[] = [
   { key: 'ts', header: 'Time', render: (r) => <span className="mono" style={{ fontSize: 11.5 }}>{fmtTs(r.ts)}</span> },
-  { key: 'symbol', header: 'Symbol', render: (r) => <strong style={{ color: 'var(--ink-1)' }}>{r.symbol}</strong> },
+  { key: 'symbol', header: 'Company', render: (r) => symbolCell(r) },
   { key: 'bias', header: 'Bias', render: (r) => <Badge variant={r.bias === 'bullish' ? 'pos' : 'neg'}>{r.bias}</Badge> },
   { key: 'strategy', header: 'Strategy' },
   { key: 'expiry', header: 'Expiry', render: (r) => r.expiry ?? '—' },

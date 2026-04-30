@@ -6,6 +6,7 @@ import { KPI } from '@/components/KPI';
 import { Card, CardHead, CardBody } from '@/components/Card';
 import { DataTable, type Column } from '@/components/DataTable';
 import { Sparkline } from '@/components/Sparkline';
+import { symbolCell } from '@/lib/cells';
 import { Badge } from '@/components/Badge';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import type { Position } from '@/types/api';
@@ -21,7 +22,7 @@ const FILTERS = [
 ];
 
 const COLS: Column<Position>[] = [
-  { key: 'symbol', header: 'Symbol', render: (r) => <strong style={{ color: 'var(--ink-1)' }}>{r.symbol}</strong> },
+  { key: 'symbol', header: 'Company', render: (r) => symbolCell(r) },
   { key: 'instrument', header: 'Type', render: (r) => <Badge variant="info">{r.instrument}</Badge> },
   { key: 'quantity', header: 'Qty', numeric: true },
   { key: 'avg_cost', header: 'Avg Cost', numeric: true, render: (r) => fmtMoney(r.avg_cost) },

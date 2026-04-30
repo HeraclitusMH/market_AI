@@ -33,6 +33,8 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **yfinance fundamental scoring** — `trader/fundamental_scorer.py` fetches yfinance quote data, normalizes configured metrics to 0-100, rolls them into valuation/profitability/growth/financial-health pillars, and exposes the result through `compute_fundamentals_factor()` as `value_0_1` for the existing composite scorer. Three-tier cache: in-process (`cache_ttl_hours`, default 24h) → DB `fundamental_snapshots` (`ttl_days`, default 7) → yfinance fetch. `get_score(symbol, force_refresh=True)` bypasses both caches.
 - **Weekly fundamentals refresh** — `trader/fundamentals_refresh.py::refresh_fundamentals(symbols=None, force=True)` is the single entry point shared by the scheduler, API endpoint, and CLI. When called with no symbols, it pulls the verified universe and force-refreshes every ticker. Scheduler tick runs every `fundamentals.refresh_days` (default 7). The API route imports this helper lazily so missing optional dependency `yfinance` returns a `503` from `/api/v1/fundamentals/refresh` instead of crashing FastAPI at startup.
 - **IBKR delayed market data** — `IBKRClient.connect()` calls `reqMarketDataType(cfg.ibkr.market_data_type)` (default `3` = delayed) so paper accounts without live US subscriptions get delayed quotes instead of Error 10089/354 storms. `_fetch_underlying_price` reads `delayedLast`/`delayedClose` in addition to `last`/`close`. When the underlying is still unavailable, `_select_strikes_in_range` bails with `[]` instead of returning the full chain (which previously triggered Error 200 floods on strikes that don't exist for the requested expiry).
+- **1-year bar history for momentum** — `trader/market_data.py::_TF_MAP["1D"]` fetches `"1 Y"` (~252 trading bars) from IBKR. The minimum for `compute_momentum_trend_factor()` is 63 bars (ret_63d); the prior `"60 D"` (~42 bars) caused the factor to always return `status: "missing"`. Results are cached in-process; the extra fetch cost is one-time per process lifetime.
+- **Company names in API responses** — all `/api/v1/` endpoints that return symbol rows (`positions`, `orders`, `fills`, `signals`, `rankings`, `trade-plans`) now look up `SecurityMaster.name` and include it as `name` (nullable). `RankedSymbol` carries `name` from `UniverseItem.name`. The SPA renders "Apple [AAPL]" format via a shared `symbolCell()` helper (`frontend/src/lib/cells.tsx`); falls back to ticker-only when name is absent.
 - **Eligibility gates** — `equity_eligible` (liquidity + contract verified) and `options_eligible` (from `SecurityMaster.options_eligible`, safe-by-default=False). OptionsSwingBot hard-blocks `options_eligible=False`; EquitySwingBot hard-blocks `equity_eligible=False`.
 - **DTE config unification** — canonical planner DTE lives in `cfg.options.planner_dte_{min,max,target,fallback_min}`. `cfg.ranking.dte_*` kept for backward compat with deprecation comment.
 - **Cash reservation** — before placing any order, cash equal to max loss is reserved; trade blocked if insufficient.
@@ -59,7 +61,7 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 ### Core Trading
 - **IBKR connection** → `trader/ibkr_client.py` (singleton via `get_ibkr_client()`)
 - **Technical indicators** → `trader/indicators.py` (EMA, SMA, RSI, MACD, ATR + `compute_indicators()`)
-- **Market data** → `trader/market_data.py` (`fetch_bars()`, `get_latest_bars()`, in-memory cache)
+- **Market data** → `trader/market_data.py` (`fetch_bars()`, `get_latest_bars()`, in-memory cache; `_TF_MAP["1D"]` = `"1 Y"` duration to supply enough bars for momentum/SMA200)
 - **Strategy & scoring** → `trader/strategy.py` (`check_regime()` SPY-based regime, `score_symbol()` per ticker, `generate_signals()` legacy entry)
 - **Multi-factor scoring** → `trader/scoring.py` (`compute_composite()`, `compute_sentiment_factor()`, `compute_liquidity_factor()`, `compute_momentum_trend_factor()`, `compute_risk_factor()`, `compute_optionability_factor()`, `compute_fundamentals_factor()`)
 - **Fundamental scoring** → `trader/fundamental_scorer.py` (`FundamentalScorer`, `FundamentalResult`; yfinance, three-tier cache: memory → `fundamental_snapshots` DB → yfinance; `force_refresh` param; missing-factor redistribution)
@@ -111,6 +113,7 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **SPA pages** → `frontend/src/pages/` (Overview, Positions, Orders, Signals, Rankings, Sentiment, Risk, Controls, Config)
 - **SPA components** → `frontend/src/components/` (AppShell, Sidebar, Topbar, Card, KPI, Badge, Sparkline, LineChart, Donut, ScoreBar, DataTable, Toggle, Button, SegmentedControl, TweaksPanel)
 - **API client** → `frontend/src/lib/api.ts` (typed fetch wrappers keyed by `api.*` functions)
+- **Symbol cell helper** → `frontend/src/lib/cells.tsx` (`symbolCell(r)` — renders "Apple [AAPL]" with name bold and ticker dimmed; used in all table "Company" columns)
 - **Bot state store** → `frontend/src/store/botStore.ts` (Zustand; updated from every control POST response and overview poll)
 - **Design tokens** → `frontend/src/styles/globals.css` (CSS custom props: `--bg-0..4`, `--ink-1..5`, `--accent-h`, `--pos/neg/warn`, `--density`)
 - **Tweaks panel** → persists `{ accentHue, density }` to `localStorage` under `mai_tweaks`; density maps `dense=0.75 / balanced=1 / airy=1.25` into `--density`
@@ -176,7 +179,7 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 - EquitySwingBot: ATR-based sizing, sector concentration cap, risk-off cash/defensive modes, portfolio isolation
 - Unified CLI with continuous and single-cycle modes
 - **Security master** (`trader/securities/`): company-name→ticker deterministic matching
-- 205 pytest tests + 11 vitest smoke tests all passing
+- 205 pytest tests + 11 vitest smoke tests all passing (momentum fix and name enrichment require no new tests — covered by existing scorer and schema tests)
 
 ### Not Yet Tested End-to-End
 - Live IBKR connection (requires TWS/Gateway running)
@@ -206,3 +209,6 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
   - New `trader/fundamentals_refresh.py::refresh_fundamentals()` shared helper. `Scheduler` calls it once per week (`fundamentals.refresh_days`, default 7). New `POST /api/v1/fundamentals/refresh[?symbol=]` (in `api/v1/fundamentals.py`) + new `python cli.py fundamentals refresh [--symbol]`. Rankings page got a "Refresh Fundamentals" button (all) and per-row Refresh button via `useMutation` + `invalidateQueries(['rankings'])`. The API route lazily imports the helper so `ModuleNotFoundError: yfinance` cannot take down `uvicorn`; rebuild the Docker image after dependency changes.
   - IBKR noise fix: added `ibkr.market_data_type: int = 3` config; `IBKRClient.connect()` now calls `reqMarketDataType(...)` to enable delayed quotes; `_fetch_underlying_price` reads `delayedLast`/`delayedClose`; `_select_strikes_in_range` returns `[]` (with warning) when underlying is unavailable instead of returning the entire chain (which had been triggering Error 200 floods on non-existent strikes).
   - Test isolation: new autouse fixture `_isolate_fundamental_caches` in `tests/conftest.py` clears `_shared_cache` + `fundamental_snapshots` between tests. 5 new fundamental tests + 2 new refresh-helper tests. 235 Python tests + 14 vitest smokes all green.
+- [2026-04-30] Momentum fix + company names in UI.
+  - **Momentum fix**: `trader/market_data.py` `_TF_MAP["1D"]` changed from `"60 D"` to `"1 Y"` — prior 60-day window (~42 trading bars) was below the 63-bar minimum required by `compute_momentum_trend_factor()`, causing the factor to always return `status: "missing"` and have its weight redistributed away.
+  - **Company names**: all six `/api/v1/` symbol-row endpoints now look up `SecurityMaster.name` and include it as `name` in responses (`PositionOut`, `OrderOut`, `FillOut`, `SignalOut`, `RankingRow`, `PlanRow` updated). `RankedSymbol` gains `name` field populated from `UniverseItem.name`. New `frontend/src/lib/cells.tsx::symbolCell()` renders "Apple [AAPL]" across all five pages (Overview, Positions, Orders, Signals, Rankings); column headers renamed "Symbol" → "Company".

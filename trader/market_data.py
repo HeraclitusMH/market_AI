@@ -17,7 +17,7 @@ log = get_logger(__name__)
 _cache: Dict[Tuple[str, str], Tuple[datetime, pd.DataFrame]] = {}
 
 _TF_MAP = {
-    "1D": ("60 D", "1 day"),
+    "1D": ("1 Y", "1 day"),
     "1H": ("20 D", "1 hour"),
 }
 

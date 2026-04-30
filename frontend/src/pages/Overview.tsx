@@ -8,6 +8,7 @@ import { Card, CardHead, CardBody } from '@/components/Card';
 import { LineChart } from '@/components/LineChart';
 import { DataTable, type Column } from '@/components/DataTable';
 import { Sparkline } from '@/components/Sparkline';
+import { symbolCell } from '@/lib/cells';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { Badge } from '@/components/Badge';
 import type { Position, EventLog, EquitySnapshot } from '@/types/api';
@@ -25,7 +26,7 @@ function filterByDays(history: EquitySnapshot[], days: number): EquitySnapshot[]
 }
 
 const POSITION_COLS: Column<Position>[] = [
-  { key: 'symbol', header: 'Symbol' },
+  { key: 'symbol', header: 'Company', render: (r) => symbolCell(r) },
   { key: 'instrument', header: 'Type', render: (r) => <Badge variant="info">{r.instrument}</Badge> },
   { key: 'quantity', header: 'Qty', numeric: true },
   { key: 'avg_cost', header: 'Avg Cost', numeric: true, render: (r) => fmtMoney(r.avg_cost as number) },
