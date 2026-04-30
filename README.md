@@ -243,7 +243,6 @@ ranking:
   min_dollar_volume: 20_000_000  # liquidity gate for equity_eligible
 
 scoring:
-  enabled: true
   config_path: "trader/composite_scorer/config/scoring_config.yaml"
   use_cache: false
 
@@ -336,7 +335,7 @@ market_AI/
     market_data.py        # Historical bars with in-memory cache
     indicators.py         # EMA, SMA, RSI, MACD, ATR
     universe.py           # Ticker universe: seed, verify, get_verified_universe()
-    scoring.py            # Legacy scoring adapters reused by 7-factor ranking and fallback
+    scoring.py            # Existing factor helpers reused as 7-factor adapter inputs
     fundamental_scorer.py # yfinance parser/scorer; 3-tier cache (memory → fundamental_snapshots DB → yfinance)
     fundamentals_refresh.py # Shared refresh helper used by scheduler + API + CLI
     ranking.py            # rank_symbols() - runs 7-factor pipeline per symbol, sets equity_eligible/options_eligible
@@ -594,7 +593,7 @@ cd frontend && pnpm test
 - **No automated exits** — the exit threshold (`exit_threshold`) and `max_holding_days` are tracked in config but position exit orders are not yet submitted automatically. Manual close via dashboard or IBKR.
 - **No EUR/USD FX conversion** — all risk calculations are in USD.
 - **IV Rank** requires the IBKR historical-volatility market data entitlement; falls back to "unknown" regime when unavailable (gate warns, does not block).
-- **Fundamental score** uses yfinance. If yfinance returns no usable metrics for a symbol, the 7-factor Quality/Value/Growth adapters fall back to neutral/missing confidence as appropriate. Successful results are persisted to `fundamental_snapshots` for `fundamentals.ttl_days` (default 7); the scheduler force-refreshes every symbol weekly. Manual refresh: dashboard button on `/rankings` or `python cli.py fundamentals refresh [--symbol]`.
+- **Fundamental score** uses yfinance. If yfinance returns no usable metrics for a symbol, the 7-factor Quality/Value/Growth factors mark neutral/missing components with reduced confidence as appropriate. Successful results are persisted to `fundamental_snapshots` for `fundamentals.ttl_days` (default 7); the scheduler force-refreshes every symbol weekly. Manual refresh: dashboard button on `/rankings` or `python cli.py fundamentals refresh [--symbol]`.
 - **IBKR market data subscription** — paper accounts without live US data subscriptions default to delayed quotes (`ibkr.market_data_type: 3`). If you see Error 10089/354, that knob isn't being applied; if you see Error 200 ("no security definition") storms, the underlying-price fetch returned NaN — both are now handled, but a real subscription is still needed for live trading.
 - **`data/sp500.csv`** exists as a reference file (~180 stocks with sectors) but is not yet auto-ingested — the live universe is still seeded from the embedded `SEED_TICKERS` list in `trader/universe.py`.
 - **`close_all` control** currently activates the kill switch only; actual IBKR position-closing orders are not yet wired.

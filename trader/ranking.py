@@ -25,7 +25,6 @@ from trader.scoring import (
     compute_momentum_trend_factor,
     compute_risk_factor,
     compute_fundamentals_factor,
-    compute_composite,
 )
 
 log = get_logger(__name__)
@@ -123,26 +122,19 @@ def rank_symbols(
     now: Optional[datetime] = None,
     client=None,
 ) -> List[RankedSymbol]:
-    """Score and rank universe symbols using a composite of:
+    """Score and rank universe symbols with the 7-factor composite scorer.
 
-    sentiment + momentum/trend + risk + fundamentals
+    Existing sentiment, momentum/trend, risk, and fundamentals helpers feed the
+    scorer as adapter inputs.
 
-    Weights redistribute proportionally when a factor is missing.
     Liquidity is a hard eligibility gate and does not contribute to score_total.
-    Score is in [0, 1]: >= enter_threshold → bullish, <= (1-enter_threshold) → bearish.
+    Score is in [0, 1].
     """
     from trader.market_data import get_latest_bars
 
     cfg = get_config()
     rc = cfg.ranking
     now = now or datetime.now(timezone.utc)
-
-    nominal_weights = {
-        "sentiment":        rc.w_sentiment,
-        "momentum_trend":   rc.w_momentum_trend,
-        "risk":             rc.w_risk,
-        "fundamentals":     rc.w_fundamentals,
-    }
 
     market_snap = _get_market_snap()
 
@@ -180,15 +172,12 @@ def rank_symbols(
             "risk":           risk_factor,
             "fundamentals":   fund_factor,
         }
-        total_score, weights_used = compute_composite(factors, nominal_weights)
-        composite_7factor = None
-        if _composite_scoring_enabled(cfg):
-            composite_7factor = _score_7factor(item.symbol, df, factors)
-            total_score = round(composite_7factor.score / 100.0, 4)
-            weights_used = {
-                name: info["weight"]
-                for name, info in composite_7factor.breakdown.items()
-            }
+        composite_7factor = _score_7factor(item.symbol, df, factors)
+        total_score = round(composite_7factor.score / 100.0, 4)
+        weights_used = {
+            name: info["weight"]
+            for name, info in composite_7factor.breakdown.items()
+        }
 
         # ── Eligibility gates ─────────────────────────────────────────────
         base_eligible, base_reasons = _check_eligibility(item)
@@ -217,7 +206,7 @@ def rank_symbols(
             "fundamentals":   fund_factor,
             "weights_used":   weights_used,
             "total_score":    total_score,
-            **({"composite_7factor": composite_7factor.to_dict()} if composite_7factor is not None else {}),
+            "composite_7factor": composite_7factor.to_dict(),
             "eligibility": {
                 "equity_eligible":   equity_eligible,
                 "options_eligible":  options_eligible,
@@ -249,13 +238,6 @@ def rank_symbols(
         sum(1 for r in results if r.bias),
     )
     return results
-
-
-def _composite_scoring_enabled(cfg) -> bool:
-    scoring_cfg = getattr(cfg, "scoring", None)
-    enabled = getattr(scoring_cfg, "enabled", False)
-    return enabled if isinstance(enabled, bool) else False
-
 
 def _score_7factor(symbol: str, df, factors: Dict[str, dict]):
     global _COMPOSITE_SCORER

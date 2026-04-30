@@ -108,48 +108,8 @@ def _parse_json(s, default=None):
         return default
 
 
-_SCORING_FACTORS = ("sentiment", "momentum_trend", "risk", "fundamentals")
-_FACTOR_ALIASES = {
-    "momentum_trend": ("momentum", "trend"),
-}
-
-
-def _factor_value(components: dict, name: str) -> float | None:
-    for key in (name, *_FACTOR_ALIASES.get(name, ())):
-        factor = components.get(key)
-        if not isinstance(factor, dict):
-            continue
-        if _factor_unavailable(name, factor):
-            return None
-        value = factor.get("value_0_1")
-        if isinstance(value, (int, float)):
-            return float(value)
-    return None
-
-
-def _factor_unavailable(name: str, factor: dict) -> bool:
-    status = factor.get("status")
-    if status in {"missing", "disabled", "error"}:
-        return True
-    if status != "neutral":
-        return False
-    if name != "fundamentals":
-        return False
-
-    metrics = factor.get("metrics")
-    if not isinstance(metrics, dict):
-        return True
-    pillars = metrics.get("pillars")
-    if not isinstance(pillars, dict):
-        return True
-    return not any(
-        isinstance(pillar, dict) and pillar.get("metrics")
-        for pillar in pillars.values()
-    )
-
-
 def _normalize_ranking(components: dict, score_total: float, eligible: bool, reasons: List[str]):
-    """Normalize legacy ranking rows where liquidity was persisted as a score factor."""
+    """Expose persisted 7-factor ranking rows without recomputing old scores."""
     components = dict(components)
     composite = components.get("composite_7factor")
     if isinstance(composite, dict):
@@ -164,47 +124,6 @@ def _normalize_ranking(components: dict, score_total: float, eligible: bool, rea
                 for name, info in factors.items()
                 if isinstance(info, dict)
             }
-
-        liquidity = components.get("liquidity")
-        if isinstance(liquidity, dict) and liquidity.get("eligible") is False:
-            eligible = False
-            for reason in liquidity.get("reasons", []):
-                if reason not in reasons:
-                    reasons.append(reason)
-        return components, score_total, eligible, reasons
-
-    for name in _SCORING_FACTORS:
-        factor = components.get(name)
-        if isinstance(factor, dict) and _factor_unavailable(name, factor):
-            factor = dict(factor)
-            factor["value_0_1"] = None
-            if factor.get("status") == "neutral":
-                factor["status"] = "missing"
-                factor.setdefault("reason", "no_usable_fundamental_metrics")
-            components[name] = factor
-
-    weights = components.get("weights_used")
-    if isinstance(weights, dict):
-        raw_weights = {
-            name: float(weights.get(name, 0.0) or sum(
-                float(weights.get(alias, 0.0) or 0.0)
-                for alias in _FACTOR_ALIASES.get(name, ())
-            ))
-            for name in _SCORING_FACTORS
-            if _factor_value(components, name) is not None
-        }
-        total_weight = sum(raw_weights.values())
-        if total_weight > 0:
-            normalized_weights = {
-                name: round(raw_weights.get(name, 0.0) / total_weight, 4)
-                for name in _SCORING_FACTORS
-            }
-            score_total = round(sum(
-                normalized_weights[name] * (_factor_value(components, name) or 0.0)
-                for name in _SCORING_FACTORS
-            ), 4)
-            components["weights_used"] = normalized_weights
-            components["total_score"] = score_total
 
     liquidity = components.get("liquidity")
     if isinstance(liquidity, dict) and liquidity.get("eligible") is False:

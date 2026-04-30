@@ -5,17 +5,10 @@ import { fmtTs } from '@/lib/formatters';
 import { KPI } from '@/components/KPI';
 import { Card, CardHead, CardBody } from '@/components/Card';
 import { DataTable, type Column } from '@/components/DataTable';
-import { ScoreBar, FactorBar } from '@/components/ScoreBar';
+import { ScoreBar } from '@/components/ScoreBar';
 import { Badge } from '@/components/Badge';
 import { symbolCell } from '@/lib/cells';
 import type { RankingRow, PlanRow, RankingComponents, RankingFactor, Composite7Factor } from '@/types/api';
-
-const SCORE_FACTOR_KEYS: [string, string][] = [
-  ['sentiment', 'Sentiment'],
-  ['momentum_trend', 'Momentum'],
-  ['risk', 'Risk'],
-  ['fundamentals', 'Fundamentals'],
-];
 
 const COMPOSITE_FACTOR_KEYS: [string, string][] = [
   ['quality', 'Quality'],
@@ -27,53 +20,10 @@ const COMPOSITE_FACTOR_KEYS: [string, string][] = [
   ['risk', 'Risk Penalty'],
 ];
 
-const SCORE_FACTOR_LABELS: Record<string, string> = {
-  quality: 'Quality',
-  value: 'Value',
-  sentiment: 'Sentiment',
-  momentum_trend: 'Momentum',
-  momentum: 'Momentum',
-  growth: 'Growth',
-  trend: 'Trend',
-  technical: 'Technical',
-  risk: 'Risk',
-  fundamentals: 'Fundamentals',
-};
-
-const SCORE_FACTOR_WEIGHT_KEYS = new Set(Object.keys(SCORE_FACTOR_LABELS));
-
-const SCORE_FACTOR_ALIASES: Record<string, string[]> = {
-  momentum_trend: ['momentum', 'trend'],
-  momentum: ['momentum_trend'],
-  trend: ['momentum_trend'],
-};
-
 function isFactor(value: unknown): value is RankingFactor {
   return value !== null && typeof value === 'object' && (
     'value_0_1' in value || 'status' in value || 'eligible' in value || 'metrics' in value
   );
-}
-
-function factorValue(factor: unknown): number | null {
-  if (!isFactor(factor)) return null;
-  const value = factor?.value_0_1;
-  return Number.isFinite(value) ? value as number : null;
-}
-
-function componentFactorValue(components: RankingComponents, key: string): number | null {
-  const direct = factorValue(components[key]);
-  if (direct != null) return direct;
-
-  for (const alias of SCORE_FACTOR_ALIASES[key] ?? []) {
-    const aliased = factorValue(components[alias]);
-    if (aliased != null) return aliased;
-  }
-
-  return null;
-}
-
-function pct(value: number | null): string {
-  return value == null ? '--' : String(Math.round(Math.min(Math.max(value, 0), 1) * 100));
 }
 
 function scoreColor(value: number | null): string {
@@ -94,74 +44,22 @@ function composite7Factor(components: RankingComponents): Composite7Factor | nul
 
 function ScoreFormula({ components, total }: { components: RankingComponents; total: number }) {
   const composite = composite7Factor(components);
-  if (composite) {
-    const terms = COMPOSITE_FACTOR_KEYS
-      .map(([key, label]) => {
-        const factor = composite.factors[key];
-        if (!factor) return null;
-        const sign = key === 'risk' ? '-' : '+';
-        return `${sign} ${label} ${Math.round(factor.score)} x ${(factor.weight * 100).toFixed(1)}%`;
-      })
-      .filter((term): term is string => term !== null);
-
-    return (
-      <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--ink-2)' }}>
-        <span style={{ color: 'var(--ink-3)' }}>Formula: </span>
-        <span className="mono">
-          {terms.join(' ')} = {Math.round(composite.composite_score)}
-          <span style={{ color: 'var(--ink-3)' }}> ({composite.regime}, confidence {(composite.confidence * 100).toFixed(0)}%)</span>
-        </span>
-      </div>
-    );
-  }
-
-  const weights = components.weights_used ?? {};
-  type TermData = { label: string; value: number; weight: number };
-  const weightedEntries = Object.entries(weights)
-    .filter(([key, weight]) => SCORE_FACTOR_WEIGHT_KEYS.has(key) && Number.isFinite(weight) && weight > 0);
-  const scoringWeightSum = weightedEntries.reduce((sum, [, weight]) => sum + weight, 0);
-  const weightedKeys = weightedEntries.map(([key]) => key);
-  const displayKeys = weightedKeys.length ? weightedKeys : SCORE_FACTOR_KEYS.map(([key]) => key);
-  const termData = displayKeys
-    .map((key): TermData | null => {
-      const value = componentFactorValue(components, key);
-      const rawWeight = weights[key] ?? 0;
-      const weight = scoringWeightSum > 0 ? rawWeight / scoringWeightSum : rawWeight;
-      if (value == null || !Number.isFinite(weight) || weight <= 0) return null;
-      return { label: SCORE_FACTOR_LABELS[key] ?? key, value, weight };
-    })
-    .filter((t): t is TermData => t !== null);
-
-  if (!termData.length) return null;
-
-  const includedLabels = new Set(termData.map(t => t.label));
-  const missingTerms = SCORE_FACTOR_KEYS
-    .filter(([key, label]) => !includedLabels.has(label) && isFactor(components[key]))
+  if (!composite) return null;
+  const terms = COMPOSITE_FACTOR_KEYS
     .map(([key, label]) => {
-      const factor = components[key] as RankingFactor;
-      const status = factor.status ?? 'missing';
-      return `${label} ${status}`;
-    });
-
-  // Compute result from the displayed weighted terms; effective weights should sum to 1.
-  const weightSum = termData.reduce((s, t) => s + t.weight, 0);
-  const computedTotal = Math.round(termData.reduce((s, t) => s + t.value * t.weight, 0) * 100);
-  const hasHiddenContribution = Math.abs(Math.round(total * 100) - computedTotal) > 1;
-  const terms = termData.map(t => `${t.label} ${pct(t.value)} x ${(t.weight * 100).toFixed(1)}%`);
-  const weightsNote = weightSum < 0.99
-    ? ` [visible weights sum ${(weightSum * 100).toFixed(0)}%; score includes another weighted factor]`
-    : '';
+      const factor = composite.factors[key];
+      if (!factor) return null;
+      const sign = key === 'risk' ? '-' : '+';
+      return `${sign} ${label} ${Math.round(factor.score)} x ${(factor.weight * 100).toFixed(1)}%`;
+    })
+    .filter((term): term is string => term !== null);
 
   return (
     <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--ink-2)' }}>
       <span style={{ color: 'var(--ink-3)' }}>Formula: </span>
       <span className="mono">
-        {terms.join(' + ')} = {computedTotal}
-        {hasHiddenContribution && <span style={{ color: 'var(--warn)' }}> (stored score: {pct(total)})</span>}
-        {weightsNote && <span style={{ color: 'var(--warn)' }}>{weightsNote}</span>}
-        {missingTerms.length > 0 && (
-          <span style={{ color: 'var(--ink-3)' }}> ({missingTerms.join(', ')}; weights redistributed)</span>
-        )}
+        {terms.join(' ')} = {Math.round(total * 100)}
+        <span style={{ color: 'var(--ink-3)' }}> ({composite.regime}, confidence {(composite.confidence * 100).toFixed(0)}%)</span>
       </span>
     </div>
   );
@@ -173,7 +71,7 @@ function LiquidityGate({ factor }: { factor: unknown }) {
   const metrics = factor.metrics ?? {};
   const adv = typeof metrics.adv_dollar_20d === 'number' ? `$${Math.round(metrics.adv_dollar_20d).toLocaleString()}` : null;
   const price = typeof metrics.last_price === 'number' ? `$${metrics.last_price.toFixed(2)}` : null;
-  const detail = [price && `Price ${price}`, adv && `ADV ${adv}`, ...(factor.reasons ?? [])].filter(Boolean).join(' · ');
+  const detail = [price && `Price ${price}`, adv && `ADV ${adv}`, ...(factor.reasons ?? [])].filter(Boolean).join(' - ');
 
   return (
     <div className="factor-bar-row">
@@ -204,63 +102,47 @@ function FactorBreakdown({
   });
   const composite = composite7Factor(components);
 
-  if (composite) {
-    return (
-      <div style={{ padding: '8px 12px 12px' }}>
-        {COMPOSITE_FACTOR_KEYS.map(([k, label]) => {
-          const factor = composite.factors[k];
-          const value = factor ? factor.score / 100 : null;
-          const displayPct = value == null ? 0 : Math.round(Math.min(Math.max(value, 0), 1) * 100);
-          return (
-            <div key={k} className="factor-bar-row">
-              <span className="factor-bar-name">{label}</span>
-              <div className="factor-bar-track">
-                <div className="factor-bar-fill" style={{ width: `${displayPct}%`, background: scoreColor(value) }} />
-              </div>
-              <span className="factor-bar-val" title={`weight ${(factor?.weight ?? 0) * 100}%`}>
-                {factor ? `${factor.contribution >= 0 ? '+' : ''}${factor.contribution.toFixed(2)}` : '--'}
-              </span>
-            </div>
-          );
-        })}
-        <LiquidityGate factor={components.liquidity} />
-        <ScoreFormula components={components} total={total} />
-      </div>
-    );
-  }
-
   return (
     <div style={{ padding: '8px 12px 12px' }}>
-      {SCORE_FACTOR_KEYS.map(([k, label]) => {
-        const factor = components[k];
-        const isFundamentals = k === 'fundamentals';
+      {!composite && (
+        <div style={{ fontSize: 11.5, color: 'var(--warn)', marginBottom: 8 }}>
+          Missing 7-factor composite payload for this persisted ranking row.
+        </div>
+      )}
+      {COMPOSITE_FACTOR_KEYS.map(([k, label]) => {
+        const factor = composite?.factors[k];
+        const value = factor ? factor.score / 100 : null;
+        const displayPct = value == null ? 0 : Math.round(Math.min(Math.max(value, 0), 1) * 100);
         return (
-          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <FactorBar name={label} value={factorValue(factor)} status={isFactor(factor) ? factor.status : 'missing'} />
+          <div key={k} className="factor-bar-row">
+            <span className="factor-bar-name">{label}</span>
+            <div className="factor-bar-track">
+              <div className="factor-bar-fill" style={{ width: `${displayPct}%`, background: scoreColor(value) }} />
             </div>
-            {isFundamentals && (
-              <button
-                type="button"
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); refreshOne.mutate(); }}
-                disabled={refreshOne.isPending}
-                style={{
-                  background: 'transparent',
-                  border: '1px solid var(--bg-3)',
-                  color: 'var(--accent)',
-                  fontSize: 11,
-                  padding: '2px 8px',
-                  borderRadius: 4,
-                  cursor: refreshOne.isPending ? 'wait' : 'pointer',
-                }}
-                title={`Recalculate fundamentals for ${symbol}`}
-              >
-                {refreshOne.isPending ? 'Refreshing…' : 'Refresh'}
-              </button>
-            )}
+            <span className="factor-bar-val" title={`weight ${(factor?.weight ?? 0) * 100}%`}>
+              {factor ? `${factor.contribution >= 0 ? '+' : ''}${factor.contribution.toFixed(2)}` : '--'}
+            </span>
           </div>
         );
       })}
+      <button
+        type="button"
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); refreshOne.mutate(); }}
+        disabled={refreshOne.isPending}
+        style={{
+          background: 'transparent',
+          border: '1px solid var(--bg-3)',
+          color: 'var(--accent)',
+          fontSize: 11,
+          padding: '2px 8px',
+          borderRadius: 4,
+          cursor: refreshOne.isPending ? 'wait' : 'pointer',
+          marginTop: 6,
+        }}
+        title={`Recalculate fundamentals for ${symbol}`}
+      >
+        {refreshOne.isPending ? 'Refreshing...' : 'Refresh Fundamentals'}
+      </button>
       <LiquidityGate factor={components.liquidity} />
       <ScoreFormula components={components} total={total} />
     </div>
@@ -290,8 +172,8 @@ const PLAN_COLS: Column<PlanRow>[] = [
   { key: 'symbol', header: 'Company', render: (r) => symbolCell(r) },
   { key: 'bias', header: 'Bias', render: (r) => <Badge variant={r.bias === 'bullish' ? 'pos' : 'neg'}>{r.bias}</Badge> },
   { key: 'strategy', header: 'Strategy' },
-  { key: 'expiry', header: 'Expiry', render: (r) => r.expiry ?? '—' },
-  { key: 'dte', header: 'DTE', numeric: true, render: (r) => r.dte != null ? String(r.dte) : '—' },
+  { key: 'expiry', header: 'Expiry', render: (r) => r.expiry ?? '-' },
+  { key: 'dte', header: 'DTE', numeric: true, render: (r) => r.dte != null ? String(r.dte) : '-' },
   { key: 'status', header: 'Status', render: (r) => <Badge variant={r.status === 'pending' ? 'warn' : r.status === 'submitted' ? 'info' : 'neutral'} dot>{r.status}</Badge> },
 ];
 
@@ -307,7 +189,7 @@ export function Rankings() {
 
   const [activeTab, setActiveTab] = useState<'all' | 'bullish' | 'bearish'>('all');
 
-  if (rankLoading || planLoading) return <div className="loading-state">Loading rankings…</div>;
+  if (rankLoading || planLoading) return <div className="loading-state">Loading rankings...</div>;
 
   const bullish = rankings.filter((r) => r.eligible && r.score_total >= 0.55).slice(0, 10);
   const bearish = rankings.filter((r) => r.eligible && r.score_total <= 0.45).sort((a, b) => a.score_total - b.score_total).slice(0, 10);
@@ -329,7 +211,7 @@ export function Rankings() {
 
       <div className="grid-2" style={{ marginBottom: 'var(--gap)' }}>
         <Card>
-          <CardHead title="Top Bullish" subtitle="eligible, score ≥ 0.55" />
+          <CardHead title="Top Bullish" subtitle="eligible, score >= 0.55" />
           <CardBody flush>
             <DataTable
               data={bullish as unknown as Record<string, unknown>[]}
@@ -339,7 +221,7 @@ export function Rankings() {
           </CardBody>
         </Card>
         <Card>
-          <CardHead title="Top Bearish" subtitle="eligible, score ≤ 0.45" />
+          <CardHead title="Top Bearish" subtitle="eligible, score <= 0.45" />
           <CardBody flush>
             <DataTable
               data={bearish as unknown as Record<string, unknown>[]}
@@ -355,7 +237,7 @@ export function Rankings() {
           title="Full Rankings"
           subtitle={
             refreshAll.isSuccess
-              ? `${displayed.length} shown · refreshed ${refreshAll.data.refreshed} (missing ${refreshAll.data.missing}) in ${refreshAll.data.duration_s}s`
+              ? `${displayed.length} shown - refreshed ${refreshAll.data.refreshed} (missing ${refreshAll.data.missing}) in ${refreshAll.data.duration_s}s`
               : `${displayed.length} shown`
           }
           right={
@@ -375,7 +257,7 @@ export function Rankings() {
                 }}
                 title="Force-refresh yfinance fundamentals for every symbol in the universe"
               >
-                {refreshAll.isPending ? 'Refreshing…' : 'Refresh Fundamentals'}
+                {refreshAll.isPending ? 'Refreshing...' : 'Refresh Fundamentals'}
               </button>
               <div className="seg-ctrl">
                 {(['all', 'bullish', 'bearish'] as const).map((t) => (

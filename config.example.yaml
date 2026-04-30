@@ -125,7 +125,6 @@ ranking:
   dte_fallback_min: 14
 
 scoring:
-  enabled: true
   config_path: "trader/composite_scorer/config/scoring_config.yaml"
   use_cache: false
 

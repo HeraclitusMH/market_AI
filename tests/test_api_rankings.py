@@ -1,7 +1,7 @@
 from api.v1.rankings import _normalize_ranking
 
 
-def test_normalize_ranking_excludes_legacy_liquidity_weight_from_score():
+def test_normalize_ranking_does_not_recompute_old_score():
     components = {
         "sentiment": {"value_0_1": 0.57, "status": "ok"},
         "risk": {"value_0_1": 0.75, "status": "ok"},
@@ -19,97 +19,11 @@ def test_normalize_ranking_excludes_legacy_liquidity_weight_from_score():
         components, 0.72, True, []
     )
 
-    assert score_total == 0.642
-    assert normalized["total_score"] == 0.642
-    assert "liquidity" not in normalized["weights_used"]
-    assert normalized["weights_used"] == {
-        "sentiment": 0.6,
-        "momentum_trend": 0.0,
-        "risk": 0.4,
-        "fundamentals": 0.0,
-    }
+    assert score_total == 0.72
+    assert "total_score" not in normalized
+    assert normalized["weights_used"]["liquidity"] == 0.2308
     assert eligible is True
     assert reasons == []
-
-
-def test_normalize_ranking_maps_legacy_momentum_weight_to_momentum_trend():
-    components = {
-        "sentiment": {"value_0_1": 0.57, "status": "ok"},
-        "momentum": {"value_0_1": 0.97, "status": "ok"},
-        "risk": {"value_0_1": 0.75, "status": "ok"},
-        "fundamentals": {"value_0_1": None, "status": "missing"},
-        "weights_used": {
-            "sentiment": 0.4615,
-            "momentum": 0.2308,
-            "risk": 0.3077,
-            "fundamentals": 0.0,
-        },
-    }
-
-    normalized, score_total, _, _ = _normalize_ranking(components, 0.72, True, [])
-
-    assert score_total == 0.7177
-    assert normalized["weights_used"] == {
-        "sentiment": 0.4615,
-        "momentum_trend": 0.2308,
-        "risk": 0.3077,
-        "fundamentals": 0.0,
-    }
-
-
-def test_normalize_ranking_treats_neutral_empty_fundamentals_as_missing():
-    components = {
-        "sentiment": {"value_0_1": 0.6, "status": "ok"},
-        "momentum_trend": {"value_0_1": 0.7, "status": "ok"},
-        "risk": {"value_0_1": 0.8, "status": "ok"},
-        "fundamentals": {
-            "value_0_1": 0.5,
-            "status": "neutral",
-            "metrics": {
-                "total_score": 50,
-                "pillars": {
-                    "valuation": {"metrics": {}, "missing": True},
-                    "profitability": {"metrics": {}, "missing": True},
-                },
-            },
-        },
-        "weights_used": {
-            "sentiment": 0.3529,
-            "momentum_trend": 0.2941,
-            "risk": 0.2353,
-            "fundamentals": 0.1176,
-        },
-    }
-
-    normalized, score_total, _, _ = _normalize_ranking(components, 0.663, True, [])
-
-    assert normalized["fundamentals"]["value_0_1"] is None
-    assert normalized["fundamentals"]["status"] == "missing"
-    assert normalized["fundamentals"]["reason"] == "no_usable_fundamental_metrics"
-    assert normalized["weights_used"]["fundamentals"] == 0.0
-    assert score_total == 0.6867
-
-
-def test_normalize_ranking_keeps_neutral_risk_with_numeric_value():
-    components = {
-        "sentiment": {"value_0_1": 0.6, "status": "ok"},
-        "momentum_trend": {"value_0_1": 0.7, "status": "ok"},
-        "risk": {"value_0_1": 0.75, "status": "neutral", "metrics": {}},
-        "fundamentals": {"value_0_1": None, "status": "missing"},
-        "weights_used": {
-            "sentiment": 0.3529,
-            "momentum_trend": 0.2941,
-            "risk": 0.2353,
-            "fundamentals": 0.1176,
-        },
-    }
-
-    normalized, score_total, _, _ = _normalize_ranking(components, 0.659, True, [])
-
-    assert normalized["risk"]["value_0_1"] == 0.75
-    assert normalized["risk"]["status"] == "neutral"
-    assert normalized["weights_used"]["risk"] == 0.2667
-    assert score_total == 0.6733
 
 
 def test_normalize_ranking_keeps_7factor_composite_authoritative():
@@ -157,3 +71,15 @@ def test_normalize_ranking_keeps_7factor_composite_authoritative():
     }
     assert eligible is True
     assert reasons == []
+
+
+def test_normalize_ranking_still_applies_liquidity_gate_without_composite():
+    components = {
+        "liquidity": {"eligible": False, "reasons": ["low_adv_dollar_1000"]},
+    }
+
+    _, score_total, eligible, reasons = _normalize_ranking(components, 0.42, True, [])
+
+    assert score_total == 0.42
+    assert eligible is False
+    assert reasons == ["low_adv_dollar_1000"]

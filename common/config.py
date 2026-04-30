@@ -179,7 +179,6 @@ class RankingConfig(BaseModel):
 
 
 class CompositeScoringConfig(BaseModel):
-    enabled: bool = True
     config_path: str = "trader/composite_scorer/config/scoring_config.yaml"
     use_cache: bool = False
 

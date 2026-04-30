@@ -47,6 +47,30 @@ def _ranking_cfg():
     return cfg
 
 
+def _composite_result(score: float):
+    result = MagicMock()
+    result.score = score
+    result.breakdown = {
+        "quality": {"weight": 0.2},
+        "value": {"weight": 0.15},
+        "momentum": {"weight": 0.15},
+        "growth": {"weight": 0.15},
+        "sentiment": {"weight": 0.15},
+        "technical": {"weight": 0.1},
+        "risk": {"weight": 0.1},
+    }
+    result.to_dict.return_value = {
+        "composite_score": score,
+        "regime": "rotation_choppy",
+        "confidence": 0.8,
+        "factors": {
+            name: {"score": score, "weight": info["weight"], "contribution": 0.0, "components": {}}
+            for name, info in result.breakdown.items()
+        },
+    }
+    return result
+
+
 # ── Recency logic ──────────────────────────────────────────────────────
 
 def test_apply_recency_fresh():
@@ -199,15 +223,16 @@ def test_rank_symbols_liquidity_does_not_contribute_to_score():
          patch("trader.ranking.compute_fundamentals_factor", return_value={"value_0_1": None, "status": "missing"}), \
          patch("trader.ranking.compute_liquidity_factor", return_value={"eligible": True, "value_0_1": 0.0, "status": "ok", "reasons": []}), \
          patch("trader.ranking.compute_optionability_factor", return_value={"eligible": False, "value_0_1": 0.0, "status": "unknown", "reasons": []}), \
+         patch("trader.ranking._score_7factor", return_value=_composite_result(68.67)), \
          patch("trader.ranking._check_eligibility", return_value=(True, [])), \
          patch("trader.ranking._persist_rankings"):
         ranked = rank_symbols(items)
 
-    # Liquidity's 0.0 value is ignored. Only sentiment/momentum/risk participate.
-    expected = (0.30 / 0.75) * 0.6 + (0.25 / 0.75) * 0.7 + (0.20 / 0.75) * 0.8
-    assert ranked[0].score_total == pytest.approx(expected, abs=0.001)
+    # The 7-factor composite is authoritative; liquidity remains a gate only.
+    assert ranked[0].score_total == pytest.approx(0.6867, abs=0.001)
     assert "liquidity" not in ranked[0].components["weights_used"]
     assert ranked[0].components["liquidity"]["value_0_1"] == 0.0
+    assert ranked[0].components["composite_7factor"]["composite_score"] == 68.67
 
 
 def test_rank_symbols_liquidity_failure_makes_symbol_ineligible():
@@ -224,6 +249,7 @@ def test_rank_symbols_liquidity_failure_makes_symbol_ineligible():
          patch("trader.ranking.compute_fundamentals_factor", return_value={"value_0_1": None, "status": "missing"}), \
          patch("trader.ranking.compute_liquidity_factor", return_value={"eligible": False, "value_0_1": 1.0, "status": "ok", "reasons": ["low_adv_dollar_1000"]}), \
          patch("trader.ranking.compute_optionability_factor", return_value={"eligible": False, "value_0_1": 0.0, "status": "unknown", "reasons": []}), \
+         patch("trader.ranking._score_7factor", return_value=_composite_result(100.0)), \
          patch("trader.ranking._check_eligibility", return_value=(True, [])), \
          patch("trader.ranking._persist_rankings"):
         ranked = rank_symbols(items)

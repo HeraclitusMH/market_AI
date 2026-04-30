@@ -324,9 +324,9 @@ flowchart TD
     `cfg.fundamentals.enabled=True`.
 - **Core logic** (`trader/ranking.py::rank_symbols` + `trader/composite_scorer/`):
   1. For each symbol, fetch bars (try/except — missing bars → factor "missing").
-  2. Build reusable legacy adapters with `trader/scoring.py`: sentiment, momentum/trend,
+  2. Build reusable adapter inputs with `trader/scoring.py`: sentiment, momentum/trend,
      risk, liquidity, optionability, and fundamentals. These avoid duplicate data
-     fetches and remain the fallback if `cfg.scoring.enabled=False`.
+     fetches while the 7-factor scorer remains the only ranking formula.
   3. Call `CompositeScorer.score(symbol, market_data, stock_data)` to compute:
      Quality, Value, Momentum, Growth, Sentiment, Technical Structure, and Risk Penalty.
      Risk contribution is negative; final score is shifted/clamped back to 0-100 then
@@ -338,7 +338,7 @@ flowchart TD
   6. `options_eligible = optionability.eligible`.
   7. Bias: `score ≥ enter_threshold → bullish`; `score ≤ 1-enter_threshold → bearish`.
   8. Persist all rows to `symbol_rankings` with full `components_json`.
-- **Legacy adapter details** (`trader/scoring.py`):
+- **Adapter input details** (`trader/scoring.py`):
   - `compute_sentiment_factor(market_snap, sector_snap, ticker_snap)` → `[0,1]`.
      Internally applies recency weighting (`>72h → stale`; `24-72h → ×0.5`).
   - `compute_momentum_trend_factor(df)` — SMA200/EMA20/EMA50 trend subscore
@@ -353,7 +353,7 @@ flowchart TD
      `FundamentalScorer`, requests yfinance quote data, computes a 0-100
      breakdown, and returns `value_0_1` for composite adapters.
 - **Key parameters/config.**
-  - `cfg.scoring.{enabled, config_path, use_cache}` — 7-factor scorer switch/config.
+  - `cfg.scoring.{config_path, use_cache}` — 7-factor scorer config.
   - `trader/composite_scorer/config/scoring_config.yaml` — regime weights, default weights,
     normalization settings, and factor TTLs.
   - `cfg.ranking.{w_market, w_sector, w_ticker}` — sentiment sub-weights.
@@ -375,9 +375,10 @@ flowchart TD
   - `cfg.ranking.fallback_trade_broad_etf` (default `False`) — ETF fallback when no candidates.
 - **Logging/metrics.** `log.info("Ranked N symbols (E eligible, B with bias)")`.
 - **Failure modes.** Missing bars reduce confidence and force neutral/missing technical,
-  momentum, or risk components. Fundamental-data gaps fall back to yfinance pillar adapters
+  momentum, or risk components. Fundamental-data gaps use yfinance pillar adapters
   or neutral/missing confidence. If `composite_7factor` is absent on older persisted rows,
-  the API keeps the legacy normalization path for backwards compatibility.
+  the API keeps the stored score and marks the composite payload as missing; it does not
+  recompute the old formula.
 
 ---
 
@@ -641,7 +642,7 @@ flowchart TD
 | `SentimentSnapshot` | ORM row `(scope, key, score∈[-1,1], summary, sources_json)` | `trader/sentiment/factory.py::_persist_snapshots` | ranking, strategy, UI | DB `sentiment_snapshots` | `scope ∈ {market, sector, ticker}` |
 | `SentimentLlmItem` | ORM `(id=sha256 prefix, processed_at, url)` | Claude provider | dedup inside provider | DB `sentiment_llm_items` | TTL = `dedup_cache_days` (default 14) |
 | `SentimentLlmUsage` | ORM `(prompt_tokens, completion_tokens, cost_usd_est, cost_eur_est, status)` | Claude provider | `trader/sentiment/budget.py` | DB `sentiment_llm_usage` | Source of truth for budget cap |
-| `RankedSymbol` | dataclass `(symbol, sector, score_total, components{sentiment,momentum_trend,risk,liquidity,optionability,fundamentals,composite_7factor}, equity_eligible, options_eligible, eligible, reasons, sources, bias)` | `trader/ranking.py::rank_symbols` | `OptionsSwingBot.select_trades` (gates on `options_eligible`), `EquitySwingBot.select_trades` (gates on `equity_eligible`), UI, planner | in-memory + `symbol_rankings` row per cycle | `bias ∈ {bullish, bearish, None}`; `composite_7factor` is authoritative for API/UI when present |
+| `RankedSymbol` | dataclass `(symbol, sector, score_total, components{sentiment,momentum_trend,risk,liquidity,optionability,fundamentals,composite_7factor}, equity_eligible, options_eligible, eligible, reasons, sources, bias)` | `trader/ranking.py::rank_symbols` | `OptionsSwingBot.select_trades` (gates on `options_eligible`), `EquitySwingBot.select_trades` (gates on `equity_eligible`), UI, planner | in-memory + `symbol_rankings` row per cycle | `bias ∈ {bullish, bearish, None}`; `composite_7factor` is authoritative for API/UI |
 | `CompositeResult` / `FactorResult` | dataclasses for 7-factor scoring result and per-factor score/confidence/components | `trader/composite_scorer/composite_scorer.py::CompositeScorer.score` and factor modules | `rank_symbols`, `components_json.composite_7factor`, Rankings UI | in-memory + embedded in `symbol_rankings.components_json` | Score is 0-100 internally; ranking stores divided [0,1]; risk contribution is subtractive |
 | `FundamentalResult` | TypedDict `(symbol, total_score, pillars, missing_fields, cached, timestamp)` | `trader/fundamental_scorer.py::FundamentalScorer.get_score` | `compute_fundamentals_factor`, Quality/Value/Growth adapters, `components_json.fundamentals`, logs/debugging | process-local in-memory cache + `fundamental_snapshots` DB | Score is 0-100; adapters reuse pillars when richer statement data is missing |
 | `SignalIntent` | dataclass `(symbol, direction, instrument, score, max_risk_usd, explanation, components, regime)` | `score_symbol` / `_plan_to_signal` | `execute_signal`, `generate_signals` | `signal_snapshots` (for generate_signals only) | `direction ∈ {long, bearish}` |
@@ -763,7 +764,7 @@ flowchart TD
 | 34 | Allowed exchanges + liquidity thresholds for security master | `cfg.securities.{allowed_exchanges, min_price, min_avg_dollar_volume_20d}`; filters applied in `_load_ticker_aliases` JOIN | B |
 | 35 | 7-factor composite weights | `trader/composite_scorer/config/scoring_config.yaml`; regime-specific weights selected by `RegimeDetector`; `cfg.scoring.config_path` can point elsewhere | E |
 | 36 | Momentum adapter and technical structure | Momentum adapter reuses `trader/scoring.py::compute_momentum_trend_factor`; 7-factor Technical lives in `trader/composite_scorer/factors/technical.py` | E |
-| 37 | Risk penalty | Legacy `compute_risk_factor` is adapted when richer data is absent; 7-factor subtractive penalty lives in `trader/composite_scorer/factors/risk.py` | E |
+| 37 | Risk penalty | `compute_risk_factor` can supply adapter inputs when richer data is absent; 7-factor subtractive penalty lives in `trader/composite_scorer/factors/risk.py` | E |
 | 38 | Liquidity eligibility gate | `trader/scoring.py::compute_liquidity_factor`; gate: price ≥ min_price AND ADV ≥ min_dollar_volume | E |
 | 39 | Options eligibility gate (safe-by-default) | `trader/scoring.py::compute_optionability_factor`; reads `SecurityMaster.options_eligible`; returns `eligible=False` when no DB record | E |
 | 40 | Fundamentals factor | `trader/scoring.py::compute_fundamentals_factor` wraps `trader/fundamental_scorer.py::FundamentalScorer`; yfinance source; missing when unavailable; `cfg.fundamentals.*` | E |

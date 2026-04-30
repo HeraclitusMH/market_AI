@@ -8,15 +8,33 @@ vi.mock('@/lib/api', () => ({
   api: {
     getRankings: vi.fn().mockResolvedValue([]),
     getTradePlans: vi.fn().mockResolvedValue([]),
+    refreshFundamentals: vi.fn().mockResolvedValue({ status: 'success' }),
   },
 }));
+
+function composite(score = 72) {
+  return {
+    composite_score: score,
+    regime: 'rotation_choppy',
+    confidence: 0.88,
+    factors: {
+      quality: { score: 70, weight: 0.2, contribution: 14, components: {} },
+      value: { score: 65, weight: 0.15, contribution: 9.75, components: {} },
+      momentum: { score: 80, weight: 0.1, contribution: 8, components: {} },
+      growth: { score: 60, weight: 0.15, contribution: 9, components: {} },
+      sentiment: { score: 75, weight: 0.2, contribution: 15, components: {} },
+      technical: { score: 85, weight: 0.15, contribution: 12.75, components: {} },
+      risk: { score: 35, weight: 0.05, contribution: -1.75, components: {} },
+    },
+  };
+}
 
 it('renders Rankings without crashing', () => {
   const { container } = render(<Rankings />, { wrapper: Wrapper });
   expect(container).toBeTruthy();
 });
 
-it('renders factor breakdown scores from value_0_1 objects', async () => {
+it('renders factor breakdown scores from the 7-factor composite payload', async () => {
   vi.mocked(api.getRankings).mockResolvedValueOnce([
     {
       id: 1,
@@ -36,7 +54,8 @@ it('renders factor breakdown scores from value_0_1 objects', async () => {
           metrics: { last_price: 180, adv_dollar_20d: 50_000_000 },
         },
         fundamentals: { value_0_1: null, status: 'missing' },
-        weights_used: { sentiment: 0.4, momentum_trend: 0.3333, risk: 0.2667, fundamentals: 0 },
+        weights_used: { quality: 0.2, value: 0.15, momentum: 0.1, growth: 0.15, sentiment: 0.2, technical: 0.15, risk: 0.05 },
+        composite_7factor: composite(72),
       },
     },
   ]);
@@ -45,21 +64,20 @@ it('renders factor breakdown scores from value_0_1 objects', async () => {
 
   expect(await screen.findAllByText('AAPL')).toHaveLength(2);
   expect(screen.getByText('Sentiment')).toBeInTheDocument();
-  expect(screen.getByText('80')).toBeInTheDocument();
+  expect(screen.getByText('+15.00')).toBeInTheDocument();
   expect(screen.getByText('Liquidity Gate')).toBeInTheDocument();
   expect(screen.getByText('Pass')).toBeInTheDocument();
   expect(screen.getByText(/Formula:/)).toBeInTheDocument();
-  expect(screen.getByText(/Sentiment 80 x 40\.0%/)).toBeInTheDocument();
-  expect(screen.getByText(/Fundamentals missing; weights redistributed/)).toBeInTheDocument();
+  expect(screen.getByText(/Sentiment 75 x 20\.0%/)).toBeInTheDocument();
+  expect(screen.getByText(/Risk Penalty 35 x 5\.0%/)).toBeInTheDocument();
   expect(screen.queryByText(/Liquidity.*x/)).not.toBeInTheDocument();
-  expect(screen.getByText('Missing')).toBeInTheDocument();
 
   await waitFor(() => {
     expect(screen.queryByText('NaN')).not.toBeInTheDocument();
   });
 });
 
-it('includes legacy weighted momentum aliases in the score formula', async () => {
+it('does not render the old weighted factor formula when composite payload is missing', async () => {
   vi.mocked(api.getRankings).mockResolvedValueOnce([
     {
       id: 1,
@@ -81,10 +99,11 @@ it('includes legacy weighted momentum aliases in the score formula', async () =>
   render(<Rankings />, { wrapper: Wrapper });
 
   expect(await screen.findAllByText('SPY')).toHaveLength(2);
-  expect(screen.getByText(/Sentiment 57 x 46\.2%/)).toBeInTheDocument();
-  expect(screen.getByText(/Momentum 97 x 23\.1%/)).toBeInTheDocument();
-  expect(screen.getByText(/Risk 75 x 30\.8%/)).toBeInTheDocument();
-  expect(screen.queryByText(/stored score/)).not.toBeInTheDocument();
+  expect(screen.getByText(/Missing 7-factor composite payload/)).toBeInTheDocument();
+  expect(screen.queryByText(/Sentiment 57 x 46\.2%/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Momentum 97 x 23\.1%/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Risk 75 x 30\.8%/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Formula:/)).not.toBeInTheDocument();
 });
 
 it('excludes liquidity weights from the score formula', async () => {
@@ -102,6 +121,7 @@ it('excludes liquidity weights from the score formula', async () => {
         liquidity: { value_0_1: 1, status: 'ok', eligible: true },
         fundamentals: { value_0_1: null, status: 'missing' },
         weights_used: { sentiment: 0.4615, risk: 0.3077, liquidity: 0.2308, fundamentals: 0 },
+        composite_7factor: composite(64),
       },
     },
   ]);
@@ -109,8 +129,7 @@ it('excludes liquidity weights from the score formula', async () => {
   render(<Rankings />, { wrapper: Wrapper });
 
   expect(await screen.findAllByText('SPY')).toHaveLength(2);
-  expect(screen.getByText(/Sentiment 57 x 60\.0%/)).toBeInTheDocument();
-  expect(screen.getByText(/Risk 75 x 40\.0%/)).toBeInTheDocument();
+  expect(screen.getByText(/Sentiment 75 x 20\.0%/)).toBeInTheDocument();
+  expect(screen.getByText(/Risk Penalty 35 x 5\.0%/)).toBeInTheDocument();
   expect(screen.queryByText(/liquidity 100 x/i)).not.toBeInTheDocument();
-  expect(screen.queryByText(/stored score/)).not.toBeInTheDocument();
 });
