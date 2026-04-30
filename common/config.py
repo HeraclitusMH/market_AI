@@ -178,6 +178,12 @@ class RankingConfig(BaseModel):
     dte_fallback_min: int = 14
 
 
+class CompositeScoringConfig(BaseModel):
+    enabled: bool = True
+    config_path: str = "trader/composite_scorer/config/scoring_config.yaml"
+    use_cache: bool = False
+
+
 class OptionsBotConfig(BaseModel):
     enabled: bool = True
 
@@ -324,6 +330,7 @@ class AppConfig(BaseModel):
     features: FeaturesConfig = FeaturesConfig()
     sentiment: SentimentConfig = SentimentConfig()
     ranking: RankingConfig = RankingConfig()
+    scoring: CompositeScoringConfig = CompositeScoringConfig()
     fundamentals: FundamentalsConfig = FundamentalsConfig()
     bots: BotsConfig = BotsConfig()
     securities: SecuritiesConfig = SecuritiesConfig()

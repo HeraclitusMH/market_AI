@@ -29,7 +29,7 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **ATR-based equity sizing** — `stop = entry - atr_stop_multiplier × ATR(14)`; `shares = floor(nav × risk_per_trade_pct% / stop_distance)`. Capped to available cash and sector concentration limit.
 - **Portfolio isolation via `portfolio_id`** — `Order`, `Position`, `Trade` rows carry `portfolio_id` ("options_swing" or "equity_swing"). Each bot's risk/position checks filter by its own portfolio_id. Migration: `alembic/versions/0004_portfolio_id.py`.
 - **Bot plugin pattern** — `BaseBot` ABC defines `build_candidates / score_candidate / select_trades / execute_intent`. `run()` orchestrates the full cycle (regime → universe → rank → score → select → execute). Both bots share universe, regime check, and composite ranking score.
-- **Multi-factor composite scoring** — `rank_symbols()` computes a unified [0,1] score per symbol from sentiment, momentum/trend, risk, and fundamentals. Missing factors redistribute weight; liquidity is an eligibility gate only. Score drives bias (≥0.55 → bullish, ≤0.45 → bearish) and bot selection thresholds.
+- **7-factor composite scoring** — `rank_symbols()` uses `trader/composite_scorer/CompositeScorer` when `cfg.scoring.enabled=True` (default). It computes Quality, Value, Momentum, Growth, Sentiment, Technical Structure, and subtractive Risk Penalty with regime-adaptive weights from `trader/composite_scorer/config/scoring_config.yaml`. `components_json.composite_7factor` is authoritative for API/UI display. The older `trader/scoring.py::compute_composite()` path remains as compatibility/fallback.
 - **yfinance fundamental scoring** — `trader/fundamental_scorer.py` fetches yfinance quote data, normalizes configured metrics to 0-100, rolls them into valuation/profitability/growth/financial-health pillars, and exposes the result through `compute_fundamentals_factor()` as `value_0_1` for the existing composite scorer. Three-tier cache: in-process (`cache_ttl_hours`, default 24h) → DB `fundamental_snapshots` (`ttl_days`, default 7) → yfinance fetch. `get_score(symbol, force_refresh=True)` bypasses both caches.
 - **Weekly fundamentals refresh** — `trader/fundamentals_refresh.py::refresh_fundamentals(symbols=None, force=True)` is the single entry point shared by the scheduler, API endpoint, and CLI. When called with no symbols, it pulls the verified universe and force-refreshes every ticker. Scheduler tick runs every `fundamentals.refresh_days` (default 7). The API route imports this helper lazily so missing optional dependency `yfinance` returns a `503` from `/api/v1/fundamentals/refresh` instead of crashing FastAPI at startup.
 - **IBKR delayed market data** — `IBKRClient.connect()` calls `reqMarketDataType(cfg.ibkr.market_data_type)` (default `3` = delayed) so paper accounts without live US subscriptions get delayed quotes instead of Error 10089/354 storms. `_fetch_underlying_price` reads `delayedLast`/`delayedClose` in addition to `last`/`close`. When the underlying is still unavailable, `_select_strikes_in_range` bails with `[]` instead of returning the full chain (which previously triggered Error 200 floods on strikes that don't exist for the requested expiry).
@@ -63,7 +63,8 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **Technical indicators** → `trader/indicators.py` (EMA, SMA, RSI, MACD, ATR + `compute_indicators()`)
 - **Market data** → `trader/market_data.py` (`fetch_bars()`, `get_latest_bars()`, in-memory cache; `_TF_MAP["1D"]` = `"1 Y"` duration to supply enough bars for momentum/SMA200)
 - **Strategy & scoring** → `trader/strategy.py` (`check_regime()` SPY-based regime, `score_symbol()` per ticker, `generate_signals()` legacy entry)
-- **Multi-factor scoring** → `trader/scoring.py` (`compute_composite()`, `compute_sentiment_factor()`, `compute_liquidity_factor()`, `compute_momentum_trend_factor()`, `compute_risk_factor()`, `compute_optionability_factor()`, `compute_fundamentals_factor()`)
+- **7-factor composite scoring** → `trader/composite_scorer/` (`CompositeScorer`, factor modules, regime detector, normalizer, YAML weights). `trader/ranking.py::_score_7factor()` adapts existing bar/sentiment/fundamental/risk outputs into this scorer.
+- **Legacy scoring adapters** → `trader/scoring.py` (`compute_composite()`, `compute_sentiment_factor()`, `compute_liquidity_factor()`, `compute_momentum_trend_factor()`, `compute_risk_factor()`, `compute_optionability_factor()`, `compute_fundamentals_factor()`). Still used to build reusable inputs and for legacy fallback.
 - **Fundamental scoring** → `trader/fundamental_scorer.py` (`FundamentalScorer`, `FundamentalResult`; yfinance, three-tier cache: memory → `fundamental_snapshots` DB → yfinance; `force_refresh` param; missing-factor redistribution)
 - **Fundamentals refresh helper** → `trader/fundamentals_refresh.py` (`refresh_fundamentals(symbols=None, force=True)` — shared by scheduler/API/CLI)
 - **Risk engine** → `trader/risk.py` (`check_can_trade()`, `compute_max_risk_for_trade()`, `record_equity_snapshot()`, `log_event()`)
@@ -170,7 +171,7 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 - Risk engine: drawdown stop, position limits, cash reservation, kill switch, approve mode
 - Sentiment: RSS lexicon + Claude LLM + mock providers, DB persistence, recency weighting
 - Strategy: SPY regime filter, legacy 4-factor `score_symbol()` (still used by equity bot `score_candidate`)
-- **Multi-factor composite scoring** (`trader/scoring.py`): [0,1] score per symbol from sentiment, momentum/trend, risk, and fundamentals; liquidity is an eligibility gate only
+- **7-factor composite scoring** (`trader/composite_scorer/` + `trader/ranking.py`): [0,1] score per symbol from Quality, Value, Momentum, Growth, Sentiment, Technical Structure, and subtractive Risk Penalty; regime weights adapt via `RegimeDetector`; liquidity remains an eligibility gate only
 - **FundamentalScorer** (`trader/fundamental_scorer.py`): yfinance parser/scorer with configured metric bounds/pillars, missing-factor redistribution, three-tier cache (memory → `fundamental_snapshots` DB → yfinance), `force_refresh` param
 - **Fundamentals manual refresh**: `POST /api/v1/fundamentals/refresh` + Rankings page "Refresh Fundamentals" button (all) and per-row Refresh button (one); CLI `python cli.py fundamentals refresh [--symbol]`
 - `equity_eligible` and `options_eligible` eligibility gates
@@ -179,7 +180,7 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 - EquitySwingBot: ATR-based sizing, sector concentration cap, risk-off cash/defensive modes, portfolio isolation
 - Unified CLI with continuous and single-cycle modes
 - **Security master** (`trader/securities/`): company-name→ticker deterministic matching
-- 205 pytest tests + 11 vitest smoke tests all passing (momentum fix and name enrichment require no new tests — covered by existing scorer and schema tests)
+- 242 pytest tests + Rankings vitest/build checks passing after the 7-factor scoring/API/UI update
 
 ### Not Yet Tested End-to-End
 - Live IBKR connection (requires TWS/Gateway running)
@@ -212,3 +213,7 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 - [2026-04-30] Momentum fix + company names in UI.
   - **Momentum fix**: `trader/market_data.py` `_TF_MAP["1D"]` changed from `"60 D"` to `"1 Y"` — prior 60-day window (~42 trading bars) was below the 63-bar minimum required by `compute_momentum_trend_factor()`, causing the factor to always return `status: "missing"` and have its weight redistributed away.
   - **Company names**: all six `/api/v1/` symbol-row endpoints now look up `SecurityMaster.name` and include it as `name` in responses (`PositionOut`, `OrderOut`, `FillOut`, `SignalOut`, `RankingRow`, `PlanRow` updated). `RankedSymbol` gains `name` field populated from `UniverseItem.name`. New `frontend/src/lib/cells.tsx::symbolCell()` renders "Apple [AAPL]" across all five pages (Overview, Positions, Orders, Signals, Rankings); column headers renamed "Symbol" → "Company".
+- [2026-04-30] 7-factor composite scoring and dashboard display.
+  - Added `trader/composite_scorer/` with Quality, Value, Momentum, Growth, Sentiment, Technical, subtractive Risk, normalization, regime smoothing, `CompositeScorer`, `CachedFactor`, result dataclasses, and `config/scoring_config.yaml`.
+  - Added `common.config.CompositeScoringConfig` and wired `trader/ranking.py` to persist authoritative `components_json.composite_7factor` while reusing legacy factor adapters for inputs/fallback.
+  - Fixed `/api/v1/rankings` and legacy `/api/rankings/latest` to preserve 7-factor rows; Rankings UI now renders the seven factors and subtractive risk formula. Verified with 242 pytest tests, Rankings vitest, frontend build, Docker rebuild/restart, and live `/api/v1/rankings` response.

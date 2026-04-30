@@ -30,6 +30,8 @@ from trader.scoring import (
 
 log = get_logger(__name__)
 
+_COMPOSITE_SCORER = None
+
 
 @dataclass
 class RankedSymbol:
@@ -179,6 +181,14 @@ def rank_symbols(
             "fundamentals":   fund_factor,
         }
         total_score, weights_used = compute_composite(factors, nominal_weights)
+        composite_7factor = None
+        if _composite_scoring_enabled(cfg):
+            composite_7factor = _score_7factor(item.symbol, df, factors)
+            total_score = round(composite_7factor.score / 100.0, 4)
+            weights_used = {
+                name: info["weight"]
+                for name, info in composite_7factor.breakdown.items()
+            }
 
         # ── Eligibility gates ─────────────────────────────────────────────
         base_eligible, base_reasons = _check_eligibility(item)
@@ -207,6 +217,7 @@ def rank_symbols(
             "fundamentals":   fund_factor,
             "weights_used":   weights_used,
             "total_score":    total_score,
+            **({"composite_7factor": composite_7factor.to_dict()} if composite_7factor is not None else {}),
             "eligibility": {
                 "equity_eligible":   equity_eligible,
                 "options_eligible":  options_eligible,
@@ -238,6 +249,38 @@ def rank_symbols(
         sum(1 for r in results if r.bias),
     )
     return results
+
+
+def _composite_scoring_enabled(cfg) -> bool:
+    scoring_cfg = getattr(cfg, "scoring", None)
+    enabled = getattr(scoring_cfg, "enabled", False)
+    return enabled if isinstance(enabled, bool) else False
+
+
+def _score_7factor(symbol: str, df, factors: Dict[str, dict]):
+    global _COMPOSITE_SCORER
+    from trader.composite_scorer import CompositeScorer
+
+    cfg = get_config()
+    scoring_cfg = getattr(cfg, "scoring", None)
+    config_path = getattr(scoring_cfg, "config_path", None)
+    use_cache = getattr(scoring_cfg, "use_cache", False)
+    use_cache = use_cache if isinstance(use_cache, bool) else False
+    if _COMPOSITE_SCORER is None:
+        if config_path:
+            from trader.composite_scorer.composite_scorer import load_scoring_config
+
+            _COMPOSITE_SCORER = CompositeScorer(load_scoring_config(config_path), use_cache=use_cache)
+        else:
+            _COMPOSITE_SCORER = CompositeScorer(use_cache=use_cache)
+    stock_data = {
+        "bars": df,
+        "sentiment_factor": factors.get("sentiment"),
+        "momentum_trend_factor": factors.get("momentum_trend"),
+        "risk_factor": factors.get("risk"),
+        "fundamentals_factor": factors.get("fundamentals"),
+    }
+    return _COMPOSITE_SCORER.score(symbol, {}, stock_data)
 
 
 # ── Candidate selection ───────────────────────────────────────────────────────

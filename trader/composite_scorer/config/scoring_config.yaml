@@ -1,0 +1,56 @@
+regime_weights:
+  bull_low_vol:
+    quality: 0.15
+    value: 0.10
+    momentum: 0.20
+    growth: 0.20
+    sentiment: 0.15
+    technical: 0.10
+    risk: 0.10
+  bear_high_vol:
+    quality: 0.25
+    value: 0.20
+    momentum: 0.10
+    growth: 0.05
+    sentiment: 0.10
+    technical: 0.10
+    risk: 0.20
+  rotation_choppy:
+    quality: 0.20
+    value: 0.15
+    momentum: 0.10
+    growth: 0.15
+    sentiment: 0.20
+    technical: 0.15
+    risk: 0.05
+  recovery:
+    quality: 0.10
+    value: 0.25
+    momentum: 0.20
+    growth: 0.15
+    sentiment: 0.15
+    technical: 0.10
+    risk: 0.05
+
+default_weights:
+  quality: 0.20
+  value: 0.15
+  momentum: 0.15
+  growth: 0.15
+  sentiment: 0.15
+  technical: 0.10
+  risk: 0.10
+
+normalization:
+  method: percentile_rank
+  output_range: [0, 100]
+  winsorize_percentile: 0.02
+
+factor_ttls:
+  quality: 604800
+  value: 604800
+  momentum: 64800
+  growth: 604800
+  sentiment: 43200
+  technical: 64800
+  risk: 64800

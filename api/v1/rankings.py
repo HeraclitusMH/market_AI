@@ -103,6 +103,28 @@ def _factor_unavailable(name: str, factor: dict) -> bool:
 def _normalize_ranking(components: dict, score_total: float, eligible: bool, reasons: List[str]):
     """Normalize legacy ranking rows where liquidity was persisted as a score factor."""
     components = dict(components)
+    composite = components.get("composite_7factor")
+    if isinstance(composite, dict):
+        composite_score = composite.get("composite_score")
+        if isinstance(composite_score, (int, float)):
+            score_total = round(float(composite_score) / 100.0, 4)
+            components["total_score"] = score_total
+        factors = composite.get("factors")
+        if isinstance(factors, dict):
+            components["weights_used"] = {
+                name: float(info.get("weight", 0.0))
+                for name, info in factors.items()
+                if isinstance(info, dict)
+            }
+
+        liquidity = components.get("liquidity")
+        if isinstance(liquidity, dict) and liquidity.get("eligible") is False:
+            eligible = False
+            for reason in liquidity.get("reasons", []):
+                if reason not in reasons:
+                    reasons.append(reason)
+        return components, score_total, eligible, reasons
+
     for name in _SCORING_FACTORS:
         factor = components.get(name)
         if isinstance(factor, dict) and _factor_unavailable(name, factor):

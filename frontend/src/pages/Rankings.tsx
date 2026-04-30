@@ -8,7 +8,7 @@ import { DataTable, type Column } from '@/components/DataTable';
 import { ScoreBar, FactorBar } from '@/components/ScoreBar';
 import { Badge } from '@/components/Badge';
 import { symbolCell } from '@/lib/cells';
-import type { RankingRow, PlanRow, RankingComponents, RankingFactor } from '@/types/api';
+import type { RankingRow, PlanRow, RankingComponents, RankingFactor, Composite7Factor } from '@/types/api';
 
 const SCORE_FACTOR_KEYS: [string, string][] = [
   ['sentiment', 'Sentiment'],
@@ -17,11 +17,25 @@ const SCORE_FACTOR_KEYS: [string, string][] = [
   ['fundamentals', 'Fundamentals'],
 ];
 
+const COMPOSITE_FACTOR_KEYS: [string, string][] = [
+  ['quality', 'Quality'],
+  ['value', 'Value'],
+  ['momentum', 'Momentum'],
+  ['growth', 'Growth'],
+  ['sentiment', 'Sentiment'],
+  ['technical', 'Technical'],
+  ['risk', 'Risk Penalty'],
+];
+
 const SCORE_FACTOR_LABELS: Record<string, string> = {
+  quality: 'Quality',
+  value: 'Value',
   sentiment: 'Sentiment',
   momentum_trend: 'Momentum',
   momentum: 'Momentum',
+  growth: 'Growth',
   trend: 'Trend',
+  technical: 'Technical',
   risk: 'Risk',
   fundamentals: 'Fundamentals',
 };
@@ -62,7 +76,45 @@ function pct(value: number | null): string {
   return value == null ? '--' : String(Math.round(Math.min(Math.max(value, 0), 1) * 100));
 }
 
+function scoreColor(value: number | null): string {
+  if (value == null) return 'var(--ink-3)';
+  const v = Math.min(Math.max(value, 0), 1);
+  if (v >= 0.7) return 'var(--pos)';
+  if (v <= 0.35) return 'var(--neg)';
+  return 'var(--warn)';
+}
+
+function isComposite7Factor(value: unknown): value is Composite7Factor {
+  return value !== null && typeof value === 'object' && 'composite_score' in value && 'factors' in value;
+}
+
+function composite7Factor(components: RankingComponents): Composite7Factor | null {
+  return isComposite7Factor(components.composite_7factor) ? components.composite_7factor : null;
+}
+
 function ScoreFormula({ components, total }: { components: RankingComponents; total: number }) {
+  const composite = composite7Factor(components);
+  if (composite) {
+    const terms = COMPOSITE_FACTOR_KEYS
+      .map(([key, label]) => {
+        const factor = composite.factors[key];
+        if (!factor) return null;
+        const sign = key === 'risk' ? '-' : '+';
+        return `${sign} ${label} ${Math.round(factor.score)} x ${(factor.weight * 100).toFixed(1)}%`;
+      })
+      .filter((term): term is string => term !== null);
+
+    return (
+      <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--ink-2)' }}>
+        <span style={{ color: 'var(--ink-3)' }}>Formula: </span>
+        <span className="mono">
+          {terms.join(' ')} = {Math.round(composite.composite_score)}
+          <span style={{ color: 'var(--ink-3)' }}> ({composite.regime}, confidence {(composite.confidence * 100).toFixed(0)}%)</span>
+        </span>
+      </div>
+    );
+  }
+
   const weights = components.weights_used ?? {};
   type TermData = { label: string; value: number; weight: number };
   const weightedEntries = Object.entries(weights)
@@ -150,6 +202,32 @@ function FactorBreakdown({
     mutationFn: () => api.refreshFundamentals(symbol),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['rankings'] }),
   });
+  const composite = composite7Factor(components);
+
+  if (composite) {
+    return (
+      <div style={{ padding: '8px 12px 12px' }}>
+        {COMPOSITE_FACTOR_KEYS.map(([k, label]) => {
+          const factor = composite.factors[k];
+          const value = factor ? factor.score / 100 : null;
+          const displayPct = value == null ? 0 : Math.round(Math.min(Math.max(value, 0), 1) * 100);
+          return (
+            <div key={k} className="factor-bar-row">
+              <span className="factor-bar-name">{label}</span>
+              <div className="factor-bar-track">
+                <div className="factor-bar-fill" style={{ width: `${displayPct}%`, background: scoreColor(value) }} />
+              </div>
+              <span className="factor-bar-val" title={`weight ${(factor?.weight ?? 0) * 100}%`}>
+                {factor ? `${factor.contribution >= 0 ? '+' : ''}${factor.contribution.toFixed(2)}` : '--'}
+              </span>
+            </div>
+          );
+        })}
+        <LiquidityGate factor={components.liquidity} />
+        <ScoreFormula components={components} total={total} />
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: '8px 12px 12px' }}>

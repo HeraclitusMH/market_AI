@@ -110,3 +110,50 @@ def test_normalize_ranking_keeps_neutral_risk_with_numeric_value():
     assert normalized["risk"]["status"] == "neutral"
     assert normalized["weights_used"]["risk"] == 0.2667
     assert score_total == 0.6733
+
+
+def test_normalize_ranking_keeps_7factor_composite_authoritative():
+    components = {
+        "sentiment": {"value_0_1": 0.6, "status": "ok"},
+        "momentum_trend": {"value_0_1": 0.7, "status": "ok"},
+        "risk": {"value_0_1": 0.8, "status": "ok"},
+        "fundamentals": {"value_0_1": 0.5, "status": "ok"},
+        "weights_used": {
+            "sentiment": 0.3,
+            "momentum_trend": 0.25,
+            "risk": 0.2,
+            "fundamentals": 0.1,
+        },
+        "composite_7factor": {
+            "composite_score": 73.25,
+            "regime": "rotation_choppy",
+            "confidence": 0.88,
+            "factors": {
+                "quality": {"score": 70, "weight": 0.2, "contribution": 14, "components": {}},
+                "value": {"score": 65, "weight": 0.15, "contribution": 9.75, "components": {}},
+                "momentum": {"score": 80, "weight": 0.1, "contribution": 8, "components": {}},
+                "growth": {"score": 60, "weight": 0.15, "contribution": 9, "components": {}},
+                "sentiment": {"score": 75, "weight": 0.2, "contribution": 15, "components": {}},
+                "technical": {"score": 85, "weight": 0.15, "contribution": 12.75, "components": {}},
+                "risk": {"score": 35, "weight": 0.05, "contribution": -1.75, "components": {}},
+            },
+        },
+    }
+
+    normalized, score_total, eligible, reasons = _normalize_ranking(
+        components, 0.62, True, []
+    )
+
+    assert score_total == 0.7325
+    assert normalized["total_score"] == 0.7325
+    assert normalized["weights_used"] == {
+        "quality": 0.2,
+        "value": 0.15,
+        "momentum": 0.1,
+        "growth": 0.15,
+        "sentiment": 0.2,
+        "technical": 0.15,
+        "risk": 0.05,
+    }
+    assert eligible is True
+    assert reasons == []

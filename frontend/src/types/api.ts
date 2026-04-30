@@ -109,9 +109,10 @@ export interface RankingRow {
 }
 
 export interface RankingComponents {
-  [key: string]: RankingFactor | Record<string, number> | Record<string, unknown> | number | undefined;
+  [key: string]: RankingFactor | Composite7Factor | Record<string, number> | Record<string, unknown> | number | undefined;
   weights_used?: Record<string, number>;
   total_score?: number;
+  composite_7factor?: Composite7Factor;
 }
 
 export interface RankingFactor {
@@ -122,6 +123,22 @@ export interface RankingFactor {
   metrics?: Record<string, unknown>;
   components?: Record<string, unknown>;
   raw_score?: number;
+}
+
+export interface Composite7Factor {
+  symbol?: string;
+  composite_score: number;
+  regime: string;
+  confidence: number;
+  factors: Record<string, CompositeFactor>;
+  timestamp?: string;
+}
+
+export interface CompositeFactor {
+  score: number;
+  weight: number;
+  contribution: number;
+  components: Record<string, unknown>;
 }
 
 export interface PlanRow {

@@ -124,6 +124,11 @@ ranking:
   dte_target: 30
   dte_fallback_min: 14
 
+scoring:
+  enabled: true
+  config_path: "trader/composite_scorer/config/scoring_config.yaml"
+  use_cache: false
+
 fundamentals:
   enabled: true         # set false to disable yfinance fundamental scoring
   ttl_days: 7           # DB cache TTL in days; rows older than this are recomputed

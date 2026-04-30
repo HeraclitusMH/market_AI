@@ -14,8 +14,8 @@ Both bots can run together or independently. Each has its own position namespace
 
 ## Features
 
-- **Multi-factor composite scoring** — [0,1] score per symbol from sentiment, momentum/trend, risk, and fundamentals. Missing factors redistribute weight; liquidity is an eligibility gate only.
-- **yfinance fundamental score** — optional scorer normalizes valuation, profitability, growth, and financial-health ratios to a 0-100 breakdown, then feeds the existing composite as `fundamentals`. Persisted to `fundamental_snapshots` (default 7-day TTL) and refreshed weekly by the scheduler. Manual refresh via dashboard button (all symbols or per-row) or `python cli.py fundamentals refresh`.
+- **7-factor composite scoring** — [0,1] score per symbol from Quality, Value, Momentum, Growth, Sentiment, Technical Structure, and subtractive Risk Penalty. Weights adapt by market regime from `trader/composite_scorer/config/scoring_config.yaml`; liquidity is an eligibility gate only.
+- **yfinance fundamental score** — optional scorer normalizes valuation, profitability, growth, and financial-health ratios to a 0-100 breakdown, then feeds Quality/Value/Growth adapters when richer statement data is unavailable. Persisted to `fundamental_snapshots` (default 7-day TTL) and refreshed weekly by the scheduler. Manual refresh via dashboard button (all symbols or per-row) or `python cli.py fundamentals refresh`.
 - **Eligibility gates** — `equity_eligible` (liquidity + IBKR-verified contract) and `options_eligible` (from `SecurityMaster`; safe-by-default=False). Each bot hard-blocks symbols that fail its gate.
 - **Swing strategy** (2–20 day holds) — technical analysis (EMA, SMA, RSI, MACD, ATR) + market/sector/ticker sentiment
 - **Defined risk only** — options bot trades debit spreads exclusively (max loss = net debit paid)
@@ -238,15 +238,14 @@ bots:
     risk_off_mode: "cash"        # "cash" or "defensive"
 
 ranking:
-  # Composite factor weights (missing factors redistribute weight proportionally).
-  # Liquidity is an eligibility gate only and does not contribute to score.
-  w_sentiment: 0.30
-  w_momentum_trend: 0.25
-  w_risk: 0.20
-  w_fundamentals: 0.10
   # Score threshold: >= enter_threshold → bullish; <= (1-enter_threshold) → bearish
   enter_threshold: 0.55
   min_dollar_volume: 20_000_000  # liquidity gate for equity_eligible
+
+scoring:
+  enabled: true
+  config_path: "trader/composite_scorer/config/scoring_config.yaml"
+  use_cache: false
 
 fundamentals:
   enabled: true                  # set false to disable yfinance fundamental scoring
@@ -332,14 +331,15 @@ market_AI/
     greeks/               # Greek fetching, IV rank, strike selection, gate, logger
     sentiment/            # RSS lexicon + Claude LLM + mock providers
     securities/           # Company→ticker matching: normalize, master import, alias matcher
+    composite_scorer/     # 7-factor scorer: factors, regime detector, normalizer, YAML weights
     ibkr_client.py        # IBKR connection (singleton)
     market_data.py        # Historical bars with in-memory cache
     indicators.py         # EMA, SMA, RSI, MACD, ATR
     universe.py           # Ticker universe: seed, verify, get_verified_universe()
-    scoring.py            # Multi-factor scoring: compute_composite(), liquidity/momentum/risk/sentiment/optionability/fundamentals factors
+    scoring.py            # Legacy scoring adapters reused by 7-factor ranking and fallback
     fundamental_scorer.py # yfinance parser/scorer; 3-tier cache (memory → fundamental_snapshots DB → yfinance)
     fundamentals_refresh.py # Shared refresh helper used by scheduler + API + CLI
-    ranking.py            # rank_symbols() — runs factor pipeline per symbol, sets equity_eligible/options_eligible
+    ranking.py            # rank_symbols() - runs 7-factor pipeline per symbol, sets equity_eligible/options_eligible
     strategy.py           # Regime check, score_symbol(), generate_signals()
     risk.py               # Risk engine: drawdown, position limits, cash reservation
     execution.py          # Debit spread order construction + submit
@@ -395,7 +395,7 @@ The dashboard is a React 18 SPA (`frontend/`) served by FastAPI once built.
 | `/positions` | Open positions — filterable (all/equity/options/winners/losers), per-row sparkline |
 | `/orders` | Orders + Fills tabs, status badges, mono timestamps |
 | `/signals` | Signals with filter tabs, inline ScoreBar distribution |
-| `/rankings` | Top Bullish / Bearish panels, full ranking table with factor breakdowns, trade plans |
+| `/rankings` | Top Bullish / Bearish panels, full ranking table with 7-factor breakdowns, trade plans |
 | `/sentiment` | 60h market trend chart, sectors & tickers tables, headlines list, budget gauge, Refresh button |
 | `/risk` | Drawdown + position-slots donuts, 90d chart, limits card |
 | `/controls` | Trading / Kill switch / Options / Approve mode cards; two-step Close All confirmation |
@@ -580,7 +580,7 @@ The `security_master` table is auto-seeded from `data/us_listed_master.csv` when
 python -m pytest tests/ -v
 
 # Focused fundamentals + composite scoring tests
-python -m pytest tests\test_fundamental_scorer.py tests\test_scoring.py -q
+python -m pytest tests\test_fundamental_scorer.py tests\test_scoring.py tests\test_composite_scorer.py -q
 
 # Frontend smoke tests (11 tests)
 cd frontend && pnpm test
@@ -594,7 +594,7 @@ cd frontend && pnpm test
 - **No automated exits** — the exit threshold (`exit_threshold`) and `max_holding_days` are tracked in config but position exit orders are not yet submitted automatically. Manual close via dashboard or IBKR.
 - **No EUR/USD FX conversion** — all risk calculations are in USD.
 - **IV Rank** requires the IBKR historical-volatility market data entitlement; falls back to "unknown" regime when unavailable (gate warns, does not block).
-- **Fundamental score** uses yfinance. If yfinance returns no usable metrics for a symbol, fundamentals are marked missing and their composite weight is redistributed. Successful results are persisted to `fundamental_snapshots` for `fundamentals.ttl_days` (default 7); the scheduler force-refreshes every symbol weekly. Manual refresh: dashboard button on `/rankings` or `python cli.py fundamentals refresh [--symbol]`.
+- **Fundamental score** uses yfinance. If yfinance returns no usable metrics for a symbol, the 7-factor Quality/Value/Growth adapters fall back to neutral/missing confidence as appropriate. Successful results are persisted to `fundamental_snapshots` for `fundamentals.ttl_days` (default 7); the scheduler force-refreshes every symbol weekly. Manual refresh: dashboard button on `/rankings` or `python cli.py fundamentals refresh [--symbol]`.
 - **IBKR market data subscription** — paper accounts without live US data subscriptions default to delayed quotes (`ibkr.market_data_type: 3`). If you see Error 10089/354, that knob isn't being applied; if you see Error 200 ("no security definition") storms, the underlying-price fetch returned NaN — both are now handled, but a real subscription is still needed for live trading.
 - **`data/sp500.csv`** exists as a reference file (~180 stocks with sectors) but is not yet auto-ingested — the live universe is still seeded from the embedded `SEED_TICKERS` list in `trader/universe.py`.
 - **`close_all` control** currently activates the kill switch only; actual IBKR position-closing orders are not yet wired.
