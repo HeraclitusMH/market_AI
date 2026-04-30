@@ -482,11 +482,31 @@ body {
 
 .table-wrapper tr:last-child td { border-bottom: none; }
 .table-wrapper tbody tr:hover td { background: var(--bg-3); }
+.table-wrapper tbody tr.expanded-detail-row:hover td { background: var(--bg-1); }
 
 .table-wrapper td.num, .table-wrapper th.num {
   text-align: right;
   font-family: 'JetBrains Mono', monospace;
   font-variant-numeric: tabular-nums;
+}
+
+/* ── Expandable rows ────────────────────────────────────────── */
+.expand-toggle-cell {
+  width: 32px;
+  padding: 8px 4px !important;
+  cursor: pointer;
+  color: var(--ink-4);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.expand-toggle-cell:hover { color: var(--ink-2); }
+
+.expanded-detail-row > td {
+  border-top: none;
+  white-space: normal;
+  padding: 0 !important;
+  background: var(--bg-1);
 }
 
 /* ── Toggle ─────────────────────────────────────────────────── */

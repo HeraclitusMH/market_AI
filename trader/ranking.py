@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import statistics
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
@@ -115,6 +116,44 @@ def _persist_rankings(results: List[RankedSymbol], now: datetime) -> None:
             ))
 
 
+# ── Sector medians ───────────────────────────────────────────────────────────
+
+_SECTOR_MEDIAN_FIELDS = {
+    "enterprise_to_ebitda": "sector_median_ev_ebitda",
+    "price_to_book":        "sector_median_price_to_book",
+    "price_to_sales":       "sector_median_price_to_sales",
+}
+
+
+def _compute_sector_medians(
+    universe: List,
+    fund_factors: Dict[str, dict],
+) -> Dict[str, dict]:
+    """Return per-sector median multiples so ValueFactor can score relative to peers."""
+    buckets: Dict[str, Dict[str, list]] = {}
+    for item in universe:
+        fm = fund_factors.get(item.symbol, {}).get("fundamental_metrics", {})
+        sector = fm.get("sector") or item.sector
+        if not sector:
+            continue
+        bucket = buckets.setdefault(sector, {k: [] for k in _SECTOR_MEDIAN_FIELDS})
+        for src in _SECTOR_MEDIAN_FIELDS:
+            v = fm.get(src)
+            if isinstance(v, (int, float)) and v > 0:
+                bucket[src].append(float(v))
+
+    result: Dict[str, dict] = {}
+    for sector, bucket in buckets.items():
+        medians: dict = {}
+        for src, dest in _SECTOR_MEDIAN_FIELDS.items():
+            vals = bucket[src]
+            if vals:
+                medians[dest] = statistics.median(vals)
+        if medians:
+            result[sector] = medians
+    return result
+
+
 # ── Main ranking function ─────────────────────────────────────────────────────
 
 def rank_symbols(
@@ -137,6 +176,13 @@ def rank_symbols(
     now = now or datetime.now(timezone.utc)
 
     market_snap = _get_market_snap()
+
+    # ── Pre-fetch fundamentals for all symbols so sector medians can be computed ──
+    all_fund_factors: Dict[str, dict] = {
+        item.symbol: compute_fundamentals_factor(item.symbol, cfg, client)
+        for item in universe
+    }
+    sector_medians = _compute_sector_medians(universe, all_fund_factors)
 
     results: List[RankedSymbol] = []
     for item in universe:
@@ -162,8 +208,13 @@ def rank_symbols(
         # ── Options eligibility ───────────────────────────────────────────
         opt_factor = compute_optionability_factor(item.symbol, client)
 
-        # ── Fundamentals (stub) ───────────────────────────────────────────
-        fund_factor = compute_fundamentals_factor(item.symbol, cfg, client)
+        # ── Fundamentals: use pre-fetched result, attach sector medians ───
+        fund_factor = all_fund_factors[item.symbol]
+        fm = dict(fund_factor.get("fundamental_metrics", {}))
+        peer_sector = fm.get("sector") or item.sector
+        if peer_sector and peer_sector in sector_medians:
+            fm.update(sector_medians[peer_sector])
+        fund_factor = {**fund_factor, "fundamental_metrics": fm}
 
         # ── Composite ─────────────────────────────────────────────────────
         factors = {
@@ -261,6 +312,7 @@ def _score_7factor(symbol: str, df, factors: Dict[str, dict]):
         "momentum_trend_factor": factors.get("momentum_trend"),
         "risk_factor": factors.get("risk"),
         "fundamentals_factor": factors.get("fundamentals"),
+        "fundamental_metrics": factors.get("fundamentals", {}).get("fundamental_metrics", {}),
     }
     return _COMPOSITE_SCORER.score(symbol, {}, stock_data)
 

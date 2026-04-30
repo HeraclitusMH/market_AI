@@ -45,22 +45,35 @@ function composite7Factor(components: RankingComponents): Composite7Factor | nul
 function ScoreFormula({ components, total }: { components: RankingComponents; total: number }) {
   const composite = composite7Factor(components);
   if (!composite) return null;
+
   const terms = COMPOSITE_FACTOR_KEYS
     .map(([key, label]) => {
       const factor = composite.factors[key];
       if (!factor) return null;
-      const sign = key === 'risk' ? '-' : '+';
-      return `${sign} ${label} ${Math.round(factor.score)} x ${(factor.weight * 100).toFixed(1)}%`;
+      return { key, label, factor, isRisk: key === 'risk' };
     })
-    .filter((term): term is string => term !== null);
+    .filter((t): t is NonNullable<typeof t> => t !== null);
 
   return (
-    <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--ink-2)' }}>
-      <span style={{ color: 'var(--ink-3)' }}>Formula: </span>
-      <span className="mono">
-        {terms.join(' ')} = {Math.round(total * 100)}
-        <span style={{ color: 'var(--ink-3)' }}> ({composite.regime}, confidence {(composite.confidence * 100).toFixed(0)}%)</span>
-      </span>
+    <div style={{ marginTop: 10 }}>
+      <span style={{ fontSize: 10.5, color: 'var(--ink-4)', marginRight: 6 }}>Formula</span>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px 8px', alignItems: 'center', marginTop: 3 }}>
+        {terms.map(({ key, label, factor, isRisk }) => (
+          <span
+            key={key}
+            className="mono"
+            style={{ fontSize: 10.5, whiteSpace: 'nowrap', color: isRisk ? 'var(--neg)' : 'var(--ink-2)' }}
+          >
+            {isRisk ? '−' : '+'} {label} {Math.round(factor.score)} × {(factor.weight * 100).toFixed(0)}%
+          </span>
+        ))}
+        <span className="mono" style={{ fontSize: 10.5, whiteSpace: 'nowrap', color: 'var(--ink-1)', fontWeight: 600 }}>
+          = {Math.round(total * 100)}
+        </span>
+        <span style={{ fontSize: 10.5, whiteSpace: 'nowrap', color: 'var(--ink-4)' }}>
+          {composite.regime} · {(composite.confidence * 100).toFixed(0)}% conf
+        </span>
+      </div>
     </div>
   );
 }
@@ -155,15 +168,6 @@ const RANKING_COLS: Column<RankingRow>[] = [
   {
     key: 'eligible', header: 'Eligible', sortable: false,
     render: (r) => <Badge variant={r.eligible ? 'pos' : 'neutral'} dot>{r.eligible ? 'Yes' : 'No'}</Badge>,
-  },
-  {
-    key: '_factors', header: 'Factors', sortable: false,
-    render: (r) => (
-      <details style={{ cursor: 'pointer' }}>
-        <summary style={{ fontSize: 11.5, color: 'var(--accent)' }}>View breakdown</summary>
-        <FactorBreakdown components={r.components} total={r.score_total} symbol={r.symbol} />
-      </details>
-    ),
   },
 ];
 
@@ -273,6 +277,10 @@ export function Rankings() {
           <DataTable
             data={displayed as unknown as Record<string, unknown>[]}
             columns={RANKING_COLS as unknown as Column<Record<string, unknown>>[]}
+            expandRow={(r) => {
+              const row = r as unknown as RankingRow;
+              return <FactorBreakdown components={row.components} total={row.score_total} symbol={row.symbol} />;
+            }}
             emptyMessage="No rankings"
           />
         </CardBody>

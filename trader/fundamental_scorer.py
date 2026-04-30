@@ -24,6 +24,7 @@ class FundamentalResult(TypedDict):
     cached: bool
     timestamp: str
     source: str
+    value_metrics: dict  # raw yfinance fields for ValueFactor (FCF yield, PEG, etc.)
 
 
 _NEGATIVE_IS_ZERO_FIELDS = {"PEEXCLXOR", "EVCUR2EBITDA"}
@@ -113,7 +114,7 @@ class FundamentalScorer:
                 return result
 
         try:
-            ratios = self._fetch_ratios(normalized_symbol)
+            ratios, value_metrics = self._fetch_ratios(normalized_symbol)
             if not ratios:
                 log.warning(
                     "No yfinance fundamental ratios available for %s; returning neutral score %.1f.",
@@ -122,7 +123,7 @@ class FundamentalScorer:
                 )
                 result = self._neutral_result(normalized_symbol, now, list(self._configured_fields()))
             else:
-                result = self._score_from_ratios(normalized_symbol, ratios, now, "yfinance")
+                result = self._score_from_ratios(normalized_symbol, ratios, value_metrics, now, "yfinance")
         except Exception as exc:
             log.exception("Unexpected fundamental scoring failure for %s", normalized_symbol)
             result = self._neutral_result(normalized_symbol, now, list(self._configured_fields()))
@@ -203,23 +204,24 @@ class FundamentalScorer:
         except Exception as exc:
             log.debug("DB fundamental cache write failed for %s: %s", symbol, exc)
 
-    def _fetch_ratios(self, symbol: str) -> Dict[str, float]:
-        """Fetch and map yfinance fundamentals for a stock symbol."""
+    def _fetch_ratios(self, symbol: str) -> tuple[Dict[str, float], dict]:
+        """Fetch and map yfinance fundamentals. Returns (internal_ratios, value_metrics)."""
         provider = str(getattr(self.fundamentals_cfg, "provider", "yfinance") or "yfinance").lower()
         if provider != "yfinance":
             log.warning("Unsupported fundamentals provider %s", provider)
-            return {}
+            return {}, {}
         try:
             info = self._fetch_yfinance_info(symbol)
             ratios = self._parse_yfinance_info(info)
+            value_metrics = self._parse_value_metrics(info)
             if ratios:
                 log.info("Fetched %d yfinance fundamental ratios for %s", len(ratios), symbol)
             else:
                 log.warning("yfinance returned no usable fundamental ratios for %s", symbol)
-            return ratios
+            return ratios, value_metrics
         except Exception as exc:
             log.warning("yfinance fundamental request failed for %s: %s", symbol, exc)
-            return {}
+            return {}, {}
 
     def _fetch_yfinance_info(self, symbol: str) -> dict:
         if self.client is not None and hasattr(self.client, "get_info"):
@@ -251,6 +253,35 @@ class FundamentalScorer:
             for field, value in candidates.items()
             if field in self._configured_fields() and value is not None
         }
+
+    def _parse_value_metrics(self, info: dict) -> dict:
+        """Extract raw yfinance fields for use by ValueFactor (FCF yield, PEG, sector-relative)."""
+        vm: dict = {}
+        ev_ebitda = _number(info.get("enterpriseToEbitda"))
+        if ev_ebitda is not None:
+            vm["enterprise_to_ebitda"] = ev_ebitda
+        fcf = _number(info.get("freeCashflow"))
+        if fcf is not None:
+            vm["free_cash_flow_ttm"] = fcf
+        mktcap = _number(info.get("marketCap"))
+        if mktcap is not None and mktcap > 0:
+            vm["market_cap"] = mktcap
+        fpe = _number(info.get("forwardPE"))
+        if fpe is not None and fpe > 0:
+            vm["forward_pe"] = fpe
+        eg = _number(info.get("earningsGrowth"))
+        if eg is not None and eg > 0:
+            vm["eps_growth_next_year"] = eg * 100  # convert decimal → % for PEG calculation
+        pb = _number(info.get("priceToBook"))
+        if pb is not None:
+            vm["price_to_book"] = pb
+        ps = _number(info.get("priceToSalesTrailing12Months"))
+        if ps is not None:
+            vm["price_to_sales"] = ps
+        sector = info.get("sector")
+        if isinstance(sector, str) and sector:
+            vm["sector"] = sector
+        return vm
 
     def _normalize(self, value: Optional[float], worst: float, best: float) -> Optional[float]:
         """Normalize a raw metric to a clamped 0..100 score."""
@@ -319,6 +350,7 @@ class FundamentalScorer:
         self,
         symbol: str,
         ratios: Dict[str, float],
+        value_metrics: dict,
         timestamp: datetime,
         source: str = "yfinance",
     ) -> FundamentalResult:
@@ -343,6 +375,7 @@ class FundamentalScorer:
             "cached": False,
             "timestamp": timestamp.isoformat().replace("+00:00", "Z"),
             "source": source,
+            "value_metrics": value_metrics,
         }
 
     def _neutral_result(
@@ -368,6 +401,7 @@ class FundamentalScorer:
             "cached": False,
             "timestamp": timestamp.isoformat().replace("+00:00", "Z"),
             "source": "none",
+            "value_metrics": {},
         }
 
     def _configured_fields(self) -> set[str]:

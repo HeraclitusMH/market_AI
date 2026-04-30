@@ -595,6 +595,7 @@ def compute_fundamentals_factor(symbol: str, cfg=None, client=None) -> dict:
         "value_0_1": None if status == "missing" else round(result["total_score"] / 100.0, 4),
         "metrics": result,
         "status": status,
+        "fundamental_metrics": result.get("value_metrics", {}),
         **({"reason": "no_usable_fundamental_metrics"} if status == "missing" else {}),
     }
 
