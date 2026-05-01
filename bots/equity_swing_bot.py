@@ -40,6 +40,15 @@ class EquitySwingBot(BaseBot):
             log.info("[equity_swing] Risk-off + cash mode — no new candidates.")
             return []
 
+        # Enhanced regime: block entries when regime explicitly disallows them
+        regime_state = context.regime_state
+        if regime_state is not None and not regime_state.allows_new_equity_entries:
+            log.info(
+                "[equity_swing] Regime %s blocks new equity entries (allows_new_equity_entries=False).",
+                regime_state.level.value if hasattr(regime_state, "level") else str(regime_state),
+            )
+            return []
+
         candidates = []
         for item in context.universe:
             if item.symbol == "SPY":
@@ -131,6 +140,18 @@ class EquitySwingBot(BaseBot):
 
         sector_values = _get_sector_values()
 
+        # Apply regime score threshold adjustment if available
+        regime_state = context.regime_state
+        score_adj = 0.0
+        if regime_state is not None and hasattr(regime_state, "score_threshold_adjustment"):
+            score_adj = regime_state.score_threshold_adjustment
+        effective_threshold = equity_cfg.long_entry_threshold + score_adj
+
+        # Apply regime sizing factor if available
+        sizing_factor = 1.0
+        if regime_state is not None and hasattr(regime_state, "sizing_factor"):
+            sizing_factor = regime_state.sizing_factor
+
         # Build a lookup: symbol → RankedSymbol for equity_eligible check
         ranked_lookup = {rs.symbol: rs for rs in context.ranked}
 
@@ -145,8 +166,8 @@ class EquitySwingBot(BaseBot):
                 log.debug("[equity_swing] %s skipped: equity_eligible=False", candidate.symbol)
                 continue
 
-            # Entry threshold filter (composite score in [0,1])
-            if breakdown.final_score < equity_cfg.long_entry_threshold:
+            # Entry threshold filter (composite score in [0,1]) with regime adjustment
+            if breakdown.final_score < effective_threshold:
                 continue
 
             # Only long entries in v1 (direction=="long" from score_symbol)
@@ -177,6 +198,7 @@ class EquitySwingBot(BaseBot):
                 equity_cfg=equity_cfg,
                 regime=context.regime,
                 bot_id=self.bot_id,
+                sizing_factor=sizing_factor,
             )
             if intent is None:
                 continue
@@ -318,6 +340,7 @@ def _size_equity_trade(
     equity_cfg,
     regime: str,
     bot_id: str,
+    sizing_factor: float = 1.0,
 ) -> Optional["TradeIntent"]:
     if entry_price <= 0:
         return None
@@ -328,7 +351,9 @@ def _size_equity_trade(
     stop_price = entry_price - stop_distance
     risk_per_share = max(stop_distance, 0.01)
 
-    risk_amount = nav * equity_cfg.risk_per_trade_pct / 100
+    # Apply regime sizing factor (e.g. 0.5 in risk_reduced, 0.0 in risk_off)
+    effective_sizing = max(0.0, min(1.0, sizing_factor))
+    risk_amount = nav * equity_cfg.risk_per_trade_pct / 100 * effective_sizing
     if risk_amount <= 0:
         return None
 

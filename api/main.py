@@ -12,6 +12,7 @@ from common.db import create_tables, get_db
 from common.models import BotState
 
 from api.routes import health, state, controls, signals, sentiment, trades, rankings as rankings_route
+from api.routes.regime import router as regime_router
 from api.v1 import router as v1_router
 
 UI_DIR = Path(__file__).resolve().parent.parent / "ui"
@@ -27,6 +28,7 @@ app.include_router(signals.router)
 app.include_router(sentiment.router)
 app.include_router(trades.router)
 app.include_router(rankings_route.router)
+app.include_router(regime_router)
 app.include_router(v1_router)
 
 # --- React SPA assets ---

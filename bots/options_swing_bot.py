@@ -69,6 +69,15 @@ class OptionsSwingBot(BaseBot):
             log.info("[options_swing] Bot is disabled — no trades selected.")
             return []
 
+        # Enhanced regime: block new options entries when regime disallows them
+        regime_state = getattr(context, "regime_state", None)
+        if regime_state is not None and not regime_state.allows_new_options_entries:
+            log.info(
+                "[options_swing] Regime %s blocks new options entries",
+                regime_state.level.value if hasattr(regime_state, "level") else str(regime_state),
+            )
+            return []
+
         # Use the ranking pipeline's candidate selection then filter by options_eligible
         candidates_from_ranking = select_candidates(context.ranked)
         scored_map = {c.symbol: bd for c, bd in ranked}

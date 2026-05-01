@@ -62,6 +62,7 @@ class BotContext:
     mode: str                 # "paper" | "live"
     now: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     portfolio_id: Optional[str] = None
+    regime_state: Optional[Any] = None  # RegimeState (enhanced regime, backward compat)
 
 
 @dataclass
@@ -177,8 +178,11 @@ class BaseBot(ABC):
         errors: List[str] = []
         executed = 0
 
+        regime_state = None
         try:
-            regime = check_regime(client)
+            regime_result = check_regime(client)
+            regime = str(regime_result)
+            regime_state = regime_result
         except Exception as e:
             log.error("[%s] Regime check failed: %s", self.bot_id, e)
             regime = "risk_off"
@@ -208,6 +212,7 @@ class BaseBot(ABC):
             mode=mode,
             now=datetime.now(timezone.utc),
             portfolio_id=getattr(self, "bot_id", None),
+            regime_state=regime_state,
         )
 
         # === PHASE: EXIT MANAGEMENT (runs before new entries) ===

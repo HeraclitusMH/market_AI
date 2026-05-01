@@ -17,6 +17,9 @@ from trader.universe import get_active_symbols
 
 log = get_logger(__name__)
 
+# Module-level RegimeEngine singleton (lazy-initialized on first call)
+_regime_engine = None
+
 
 @dataclass
 class SignalIntent:
@@ -30,17 +33,19 @@ class SignalIntent:
     regime: str
 
 
-def check_regime(client=None) -> str:
-    """Check market regime using SPY. Returns 'risk_on' or 'risk_off'."""
+def _legacy_check_regime(client=None):
+    """Binary legacy regime check. Returns a RegimeState wrapping 'risk_on' or 'risk_off'."""
+    from trader.regime.models import RegimeLevel, RegimeState
+
     cfg = get_config()
     df = get_latest_bars("SPY", "1D", client)
     if df.empty or len(df) < 50:
         log.warning("Insufficient SPY data for regime check.")
-        return "risk_off"
+        return RegimeState(level=RegimeLevel.RISK_OFF, composite_score=25.0)
 
     ind = compute_indicators(df)
     if not ind.get("valid"):
-        return "risk_off"
+        return RegimeState(level=RegimeLevel.RISK_OFF, composite_score=25.0)
 
     above_sma200 = ind.get("above_sma200", False)
     trend_up = ind.get("trend_up", False)
@@ -48,8 +53,52 @@ def check_regime(client=None) -> str:
     vol_ok = rv < cfg.strategy.regime.vol_threshold
 
     if above_sma200 and trend_up and vol_ok:
-        return "risk_on"
-    return "risk_off"
+        return RegimeState(level=RegimeLevel.RISK_ON, composite_score=75.0)
+    return RegimeState(level=RegimeLevel.RISK_OFF, composite_score=25.0)
+
+
+def _get_regime_engine():
+    """Lazy-initialize and return the module-level RegimeEngine singleton."""
+    global _regime_engine
+    if _regime_engine is not None:
+        return _regime_engine
+
+    cfg = get_config()
+    from trader.regime.engine import RegimeEngine
+    engine = RegimeEngine(config=cfg.regime)
+    try:
+        with get_db() as session:
+            engine.initialize(session)
+    except Exception as e:
+        log.warning("[REGIME] Engine initialization failed (%s); engine marked initialized anyway.", e)
+        engine._initialized = True  # allow evaluate() to proceed with defaults
+
+    _regime_engine = engine
+    return _regime_engine
+
+
+def check_regime(client=None, session=None, universe_bars=None):
+    """Check market regime.
+
+    When cfg.regime.enabled=True, delegates to the 4-pillar RegimeEngine with
+    hysteresis. Falls back to the legacy binary SPY-only check otherwise.
+
+    Returns a RegimeState (compatible with existing code via __eq__ / __str__).
+    """
+    cfg = get_config()
+
+    if not cfg.regime.enabled:
+        return _legacy_check_regime(client)
+
+    try:
+        engine = _get_regime_engine()
+        return engine.evaluate(
+            universe_bars=universe_bars or {},
+            client=client,
+        )
+    except Exception as e:
+        log.error("[REGIME] Engine evaluate failed: %s. Falling back to legacy.", e)
+        return _legacy_check_regime(client)
 
 
 def score_symbol(symbol: str, sector: str, regime: str, client=None) -> Optional[SignalIntent]:

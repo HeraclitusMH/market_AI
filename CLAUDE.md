@@ -11,11 +11,11 @@ Automated swing trading bot for Interactive Brokers (IBKR) targeting US stocks/E
 Seven top-level packages plus data, scripts, and frontend — flat layout, no `src/` directory. Installed as editable package via `pyproject.toml`.
 
 - **`common/`** — shared config, DB engine, ORM models, Pydantic schemas, logging, time utils
-- **`trader/`** — trading engine: IBKR client, market data, indicators, sentiment, strategy, risk, execution, scheduler, Greeks sub-package
+- **`trader/`** — trading engine: IBKR client, market data, indicators, sentiment, strategy, risk, execution, scheduler, Greeks sub-package, regime sub-package, exits
 - **`bots/`** — bot plugin layer: `BaseBot` ABC + `OptionsSwingBot` + `EquitySwingBot`
 - **`execution/`** — order routing: `equity_execution.py` (STK orders) + `options_execution.py` (shim to existing pipeline)
 - **`api/`** — FastAPI app with JSON APIs and React SPA browser-route fallback
-- **`api/v1/`** — versioned JSON endpoints (overview, positions, orders, fills, signals, rankings, trade-plans, sentiment, risk, controls, config). Controls return `{ ok, bot: BotState }`. All prefixed `/api/v1/`.
+- **`api/v1/`** — versioned JSON endpoints (overview, positions, orders, fills, signals, rankings, trade-plans, sentiment, risk, controls, config, regime). Controls return `{ ok, bot: BotState }`. All prefixed `/api/v1/`.
 - **`ui/`** — `static/dist/` built React SPA output
 - **`frontend/`** — React 18 + Vite + TypeScript + Tailwind SPA. Build output goes to `ui/static/dist/`. Dev server on port 5173 proxies `/api` to FastAPI.
 - **`scripts/`** — `init_db.py` (DB setup), `run_all.py` (starts API + trader as subprocesses)
@@ -24,11 +24,12 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 
 ### Key Design Decisions
 
+- **3-state market regime model** — `trader/regime/` package replaces the old binary `check_regime`. `RegimeEngine` evaluates 4 pillars (Trend 30%, Breadth 25%, Volatility 25%, Credit Stress 20%) to produce a 0–100 composite score, then runs it through `RegimeStateMachine` with asymmetric hysteresis: 2 confirmations to degrade, 3 to recover, no state skipping. States: `risk_on` → full sizing; `risk_reduced` → half sizing, no new options entries, +0.10 score threshold; `risk_off` → no new entries. Falls back to legacy binary SPY check when `cfg.regime.enabled=False`. `RegimeState` supports `== "risk_on"` string comparison for backward compatibility.
 - **Debit spreads only (OptionsSwingBot)** — bull call spreads + bear put spreads. No naked shorts. Max loss = net debit paid.
 - **EquitySwingBot long-only (v1)** — buys stock shares; no shorting unless `long_only: false` in config.
-- **ATR-based equity sizing** — `stop = entry - atr_stop_multiplier × ATR(14)`; `shares = floor(nav × risk_per_trade_pct% / stop_distance)`. Capped to available cash and sector concentration limit.
+- **ATR-based equity sizing** — `stop = entry - (atr_stop_multiplier × stop_tightening_factor) × ATR(14)`; `shares = floor(nav × risk_per_trade_pct% / stop_distance) × sizing_factor`. Both `stop_tightening_factor` and `sizing_factor` come from `context.regime_state` (1.0 in `risk_on`, reduced in `risk_reduced`/`risk_off`). Capped to available cash and sector concentration limit.
 - **Portfolio isolation via `portfolio_id`** — `Order`, `Position`, `Trade` rows carry `portfolio_id` ("options_swing" or "equity_swing"). Each bot's risk/position checks filter by its own portfolio_id. Migration: `alembic/versions/0004_portfolio_id.py`.
-- **Bot plugin pattern** — `BaseBot` ABC defines `build_candidates / score_candidate / select_trades / execute_intent`. `run()` orchestrates the full cycle (regime → universe → rank → score → select → execute). Both bots share universe, regime check, and composite ranking score.
+- **Bot plugin pattern** — `BaseBot` ABC defines `build_candidates / score_candidate / select_trades / execute_intent / execute_exit_intent`. `run()` orchestrates the full cycle (regime → universe → rank → **exit phase** → score → select → execute). Both bots share universe, regime check, and composite ranking score. `BotContext` carries both `regime: str` (backward compat) and `regime_state: RegimeState` (full object).
 - **7-factor composite scoring** — `rank_symbols()` always uses `trader/composite_scorer/CompositeScorer`. It computes Quality, Value, Momentum, Growth, Sentiment, Technical Structure, and subtractive Risk Penalty with regime-adaptive weights from `trader/composite_scorer/config/scoring_config.yaml`. `components_json.composite_7factor` is authoritative for API/UI display; the API and Rankings page no longer recompute or display the old 4-factor formula.
 - **yfinance fundamental scoring** — `trader/fundamental_scorer.py` fetches yfinance quote data, normalizes configured metrics to 0-100, rolls them into valuation/profitability/growth/financial-health pillars, and exposes the result through `compute_fundamentals_factor()` as `value_0_1` for the composite scorer. Three-tier cache: in-process (`cache_ttl_hours`, default 24h) → DB `fundamental_snapshots` (`ttl_days`, default 7) → yfinance fetch. `get_score(symbol, force_refresh=True)` bypasses both caches. `FundamentalResult` includes a `value_metrics` dict (raw yfinance fields: `enterprise_to_ebitda`, `free_cash_flow_ttm`, `market_cap`, `forward_pe`, `eps_growth_next_year`, `price_to_book`, `price_to_sales`, `sector`) extracted by `_parse_value_metrics()` for use by `ValueFactor`.
 - **ValueFactor uses relative-to-peer scoring** — `trader/composite_scorer/factors/fundamental.py::ValueFactor` computes FCF yield (`free_cash_flow_ttm / market_cap`), PEG ratio (`forward_pe / eps_growth_next_year`), and sector-relative EV/EBITDA / P/B discounts vs. peer medians. `eps_growth_next_year` is only populated when positive to prevent misleading PEG from negative growth. Falls back to absolute valuation pillar score only when `fundamental_metrics` is fully absent.
@@ -56,15 +57,32 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 ## Where to Find Things
 
 ### Config & DB
-- **Config schema & loader** → `common/config.py` (all Pydantic models incl. `BotsConfig`, `EquityBotConfig`, `OptionsBotConfig`)
-- **DB models (19 tables)** → `common/models.py` (BotState, EquitySnapshot, Universe, SentimentSnapshot, SignalSnapshot, Order, Fill, Position, Trade, EventLog, ContractVerificationCache, SymbolRanking, FundamentalSnapshot, TradePlan, SentimentLlmItem, SentimentLlmUsage, SecurityMaster, SecurityAlias, RssEntityMatch)
+- **Config schema & loader** → `common/config.py` (all Pydantic models incl. `BotsConfig`, `EquityBotConfig`, `OptionsBotConfig`, `RegimeConfig` and 11 sub-models)
+- **DB models (20 tables)** → `common/models.py` (BotState, EquitySnapshot, Universe, SentimentSnapshot, SignalSnapshot, Order, Fill, Position, Trade, EventLog, ContractVerificationCache, SymbolRanking, FundamentalSnapshot, TradePlan, SentimentLlmItem, SentimentLlmUsage, SecurityMaster, SecurityAlias, RssEntityMatch, **RegimeSnapshot**, TradeManagement)
 - **API response schemas** → `common/schema.py`
+
+### Regime Detection (all in `trader/regime/` sub-package)
+- **Models** → `trader/regime/models.py` (`RegimeLevel` enum, `PillarScore` dataclass, `RegimeState` dataclass with backward-compat `__eq__`/`__str__`/`.regime` property)
+- **Pillar indicators** → `trader/regime/indicators.py` (`compute_trend_score`, `compute_breadth_score`, `compute_volatility_score`, `compute_credit_stress_score`)
+- **State machine** → `trader/regime/state_machine.py` (`RegimeStateMachine` — hysteresis, no state skipping, asymmetric confirmation counts)
+- **Engine** → `trader/regime/engine.py` (`RegimeEngine` — orchestrates pillars, confidence-weighted composite, state machine, DB persistence; module-level singleton in `trader/strategy.py::_regime_engine`)
+- **Re-exports** → `trader/regime/__init__.py`
+- **DB table** → `common/models.py::RegimeSnapshot` (persists every evaluation; used for restart state recovery)
+- **API** → `api/routes/regime.py` (`GET /api/v1/regime/current`, `GET /api/v1/regime/history?days=30`)
+- **Config** → `common/config.py::RegimeConfig` (+ `RegimeWeights`, `RegimeTrendConfig`, `RegimeBreadthConfig`, `RegimeVolatilityConfig`, `RegimeCreditStressConfig`, `RegimeThresholds`, `RegimeHysteresis`, `RegimeEffectsConfig`, `RegimeFallbackConfig`)
+- **Frontend** → `frontend/src/pages/Regime.tsx` (current score/effects, pillars, 30-day history chart/table) and `frontend/src/components/RegimeSummaryCard.tsx` (shared current-regime card used on Overview/Risk)
+
+### Exit Management
+- **Exit manager** → `trader/exits.py` (`ExitManager`, 8 equity rules + 8 options rules, priority-ordered)
+- **TradeManagement table** → `common/models.py::TradeManagement` (one row per open position; created on order placement, deleted on full close)
+- **BaseBot hook** → `bots/base_bot.py::BaseBot._run_exit_phase()` — called before `build_candidates` each cycle
+- **Config** → `common/config.py::ExitConfig` / `EquityExitConfig` / `OptionsExitConfig`; `cfg.exits.*`
 
 ### Core Trading
 - **IBKR connection** → `trader/ibkr_client.py` (singleton via `get_ibkr_client()`)
 - **Technical indicators** → `trader/indicators.py` (EMA, SMA, RSI, MACD, ATR + `compute_indicators()`)
 - **Market data** → `trader/market_data.py` (`fetch_bars()`, `get_latest_bars()`, in-memory cache; `_TF_MAP["1D"]` = `"1 Y"` duration to supply enough bars for momentum/SMA200)
-- **Strategy & scoring** → `trader/strategy.py` (`check_regime()` SPY-based regime, `score_symbol()` per ticker, `generate_signals()` legacy entry)
+- **Strategy & scoring** → `trader/strategy.py` (`check_regime()` — delegates to `RegimeEngine` when `cfg.regime.enabled=True`, returns `RegimeState`; `score_symbol()` per ticker, `generate_signals()` legacy entry)
 - **7-factor composite scoring** → `trader/composite_scorer/` (`CompositeScorer`, factor modules, regime detector, normalizer, YAML weights). `trader/ranking.py::_score_7factor()` adapts existing bar/sentiment/fundamental/risk outputs into this scorer.
 - **Scoring adapter inputs** → `trader/scoring.py` (`compute_sentiment_factor()`, `compute_liquidity_factor()`, `compute_momentum_trend_factor()`, `compute_risk_factor()`, `compute_optionability_factor()`, `compute_fundamentals_factor()`). Used by ranking to build reusable inputs for the 7-factor scorer; `rank_symbols()` does not use `compute_composite()`. `compute_fundamentals_factor()` returns `"fundamental_metrics"` at top level (raw value_metrics from `FundamentalResult`) so `ValueFactor` can read it from `stock_data`.
 - **Fundamental scoring** → `trader/fundamental_scorer.py` (`FundamentalScorer`, `FundamentalResult`; yfinance, three-tier cache: memory → `fundamental_snapshots` DB → yfinance; `force_refresh` param; missing-factor redistribution; `_parse_value_metrics()` extracts raw fields into `value_metrics` dict stored in `FundamentalResult`)
@@ -85,9 +103,9 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **Re-exports** → `trader/greeks/__init__.py` (import everything from here)
 
 ### Bot Layer
-- **Bot plugin interface** → `bots/base_bot.py` (`BaseBot` ABC, `Candidate`, `ScoreBreakdown`, `TradeIntent`, `BotContext`, `BotRunResult`)
-- **Options bot** → `bots/options_swing_bot.py` (wraps `plan_trade()` + `execute_signal()` pipeline)
-- **Equity bot** → `bots/equity_swing_bot.py` (ATR sizing, sector cap, `_size_equity_trade()`, `_count_equity_positions()`)
+- **Bot plugin interface** → `bots/base_bot.py` (`BaseBot` ABC, `Candidate`, `ScoreBreakdown`, `TradeIntent`, `BotContext`, `BotRunResult`). `BotContext` carries `regime: str` (backward compat) + `regime_state: RegimeState` (full object).
+- **Options bot** → `bots/options_swing_bot.py` (wraps `plan_trade()` + `execute_signal()` pipeline; blocks all new entries when `regime_state.allows_new_options_entries=False`)
+- **Equity bot** → `bots/equity_swing_bot.py` (ATR sizing, sector cap, `_size_equity_trade()`, `_count_equity_positions()`; applies `regime_state.sizing_factor` and `score_threshold_adjustment`; blocks entries when `allows_new_equity_entries=False`)
 - **Equity execution** → `execution/equity_execution.py` (`place_equity_order()`, portfolio_id="equity_swing")
 - **Options execution shim** → `execution/options_execution.py` (`execute_options_intent()` — `TradeIntent` → `SignalIntent`)
 
@@ -111,10 +129,11 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **FastAPI app** → `api/main.py` — includes all routers and serves the React SPA for browser routes (returns `ui/static/dist/index.html` if built)
 - **Legacy API routes** → `api/routes/` (health, state, controls, signals, sentiment, trades, rankings) — unchanged, kept for backward compat
 - **JSON API v1** → `api/v1/` — 11 modules, master router at `api/v1/__init__.py`, all mounted under `/api/v1/`. Controls POST endpoints return `{ ok: bool, bot: BotState }`. Includes `fundamentals.py` (`POST /api/v1/fundamentals/refresh[?symbol=]`).
+- **Regime API** → `api/routes/regime.py` (`GET /api/v1/regime/current`, `GET /api/v1/regime/history?days=30`; registered in `api/main.py`). `/current` includes current level, composite score, pillars, data quality, hysteresis flag, transition, and configured per-state effects (`allows_new_*`, sizing, stop tightening, threshold adjustment).
 - **SPA workspace** → `frontend/` — Vite 5, React 18, TypeScript strict, Tailwind 3, TanStack Query 5, Zustand 4, Recharts 2, lucide-react, @fontsource/inter + jetbrains-mono
 - **SPA entry** → `frontend/src/main.tsx` → `App.tsx` → React Router
-- **SPA pages** → `frontend/src/pages/` (Overview, Positions, Orders, Signals, Rankings, Sentiment, Risk, Controls, Config)
-- **SPA components** → `frontend/src/components/` (AppShell, Sidebar, Topbar, Card, KPI, Badge, Sparkline, LineChart, Donut, ScoreBar, DataTable, Toggle, Button, SegmentedControl, TweaksPanel)
+- **SPA pages** → `frontend/src/pages/` (Overview, Positions, Orders, Signals, Rankings, Sentiment, Regime, Risk, Controls, Config)
+- **SPA components** → `frontend/src/components/` (AppShell, Sidebar, Topbar, Card, KPI, Badge, Sparkline, LineChart, Donut, ScoreBar, DataTable, Toggle, Button, SegmentedControl, TweaksPanel, RegimeSummaryCard)
 - **API client** → `frontend/src/lib/api.ts` (typed fetch wrappers keyed by `api.*` functions)
 - **Symbol cell helper** → `frontend/src/lib/cells.tsx` (`symbolCell(r)` — renders "Apple [AAPL]" with name bold and ticker dimmed; used in all table "Company" columns)
 - **Bot state store** → `frontend/src/store/botStore.ts` (Zustand; updated from every control POST response and overview poll)
@@ -125,8 +144,8 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 ### Entry Points & Data
 - **Unified CLI** → `cli.py` (Click; commands below)
 - **SP500 reference** → `data/sp500.csv` (~180 stocks, `symbol,name,sector`)
-- **Alembic migrations** → `alembic/versions/` (0001–0006; 0006 = `fundamental_snapshots`)
-- **Python tests** → `tests/` (pytest suite; focused fundamental/scoring run: 37 passing)
+- **Alembic migrations** → `alembic/versions/` (0001–0006; 0006 = `fundamental_snapshots`; `regime_snapshots` + `trade_management` tables auto-created via `create_tables()`)
+- **Python tests** → `tests/` (pytest suite; 331 passing — incl. `tests/test_regime.py` with 37 regime-specific tests)
 - **Frontend tests** → `frontend/src/test/pages/` (11 vitest smoke tests, one per page + helpers)
 
 ## Commands
@@ -166,12 +185,13 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 
 ### Working
 - Full config system with YAML + Pydantic validation (`BotsConfig` + per-bot configs, `FundamentalsConfig`)
-- SQLite DB with 18 tables; Postgres-ready via alembic
+- SQLite DB with 20 tables; Postgres-ready via alembic
 - FastAPI with legacy API routes (14 endpoints) + new `/api/v1/` JSON layer (10 endpoints)
-- **React SPA** (`frontend/`) — 9 pages, dark design system, TanStack Query polling, Zustand bot store, Recharts charts, Tweaks panel; built to `ui/static/dist/`, served on root-level browser routes
+- **React SPA** (`frontend/`) — 10 pages, dark design system, TanStack Query polling, Zustand bot store, Recharts charts, Tweaks panel; built to `ui/static/dist/`, served on root-level browser routes. Regime is surfaced on `/regime`, Overview, Risk, Rankings, and Signals.
 - Indicator calculations (EMA, SMA, RSI, MACD, ATR) — deterministic, tested
 - Risk engine: drawdown stop, position limits, cash reservation, kill switch, approve mode
 - Sentiment: RSS lexicon + Claude LLM + mock providers, DB persistence, recency weighting
+- **3-state regime model** (`trader/regime/`): `RegimeEngine` with 4 pillars (Trend/Breadth/Volatility/Credit Stress), confidence-weighted composite score, asymmetric hysteresis state machine, DB persistence to `regime_snapshots`, restart recovery; `check_regime()` returns `RegimeState` backward-compatible with string comparisons
 - Strategy: SPY regime filter, legacy 4-factor `score_symbol()` (still used by equity bot `score_candidate`)
 - **7-factor composite scoring** (`trader/composite_scorer/` + `trader/ranking.py`): [0,1] score per symbol from Quality, Value, Momentum, Growth, Sentiment, Technical Structure, and subtractive Risk Penalty; regime weights adapt via `RegimeDetector`; liquidity remains an eligibility gate only
 - **FundamentalScorer** (`trader/fundamental_scorer.py`): yfinance parser/scorer with configured metric bounds/pillars, missing-factor redistribution, three-tier cache (memory → `fundamental_snapshots` DB → yfinance), `force_refresh` param
@@ -182,7 +202,8 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 - EquitySwingBot: ATR-based sizing, sector concentration cap, risk-off cash/defensive modes, portfolio isolation
 - Unified CLI with continuous and single-cycle modes
 - **Security master** (`trader/securities/`): company-name→ticker deterministic matching
-- 240 pytest tests passing (after ValueFactor / sector-median fix)
+- **Exit management** (`trader/exits.py`): `ExitManager` with 8 equity + 8 options rules; `TradeManagement` table tracks open-position lifecycle; `BaseBot._run_exit_phase()` fires before new entries each cycle
+- 331 pytest tests passing (37 new regime tests)
 
 ### Not Yet Tested End-to-End
 - Live IBKR connection (requires TWS/Gateway running)
@@ -196,7 +217,8 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 - IV Rank requires IBKR historical-volatility entitlement; falls back to "unknown" (gate warns, does not block)
 - Fundamental scoring uses yfinance. If yfinance has no usable fields for a symbol, fundamentals are missing and composite weight is redistributed. Once a symbol has data, results are persisted to `fundamental_snapshots` for `fundamentals.ttl_days` (default 7) so restarts don't re-hammer yfinance.
 - IBKR market-data subscription required for live data — paper accounts default to delayed (`ibkr.market_data_type: 3`). Set to `1` only when a live US data subscription is active.
-- Position exit logic (trailing stop, max_holding_days) is config-specified but not yet automated — manual via dashboard
+- VIX is a CBOE index; `fetch_bars("VIX", ...)` uses `Stock(...)` contract which silently fails on IBKR. The volatility pillar falls back to realized-vol only (reduced confidence). Fix: add `Index("VIX", "CBOE")` contract support to `trader/market_data.py`.
+- Position exit logic is fully implemented (`trader/exits.py`); wiring to live IBKR close orders not yet end-to-end tested.
 
 ## Session Log
 
@@ -226,3 +248,11 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
   - Root cause: `ValueFactor.calculate()` read `data["fundamental_metrics"]` but `stock_data` only had `"fundamentals_factor"` → all sub-scores were None → fell back to absolute pillar score → high-multiple tech always clamped to 0.
   - `FundamentalScorer._parse_value_metrics(info)` added to extract raw yfinance fields (`enterprise_to_ebitda`, `free_cash_flow_ttm`, `market_cap`, `forward_pe`, `eps_growth_next_year` in %, `price_to_book`, `price_to_sales`, `sector`). `_fetch_ratios()` now returns `(ratios, value_metrics)` tuple; `FundamentalResult` gains `value_metrics: dict` field stored through all cache paths.
   - `compute_fundamentals_factor()` exposes `"fundamental_metrics"` at top level. `rank_symbols()` pre-fetches all fund_factors, computes per-sector median multiples via `_compute_sector_medians()`, attaches them to each symbol's `fundamental_metrics`, and passes them through `_score_7factor()` into `stock_data["fundamental_metrics"]`. ValueFactor now scores FCF yield, PEG, and sector-relative discounts. 240 tests passing.
+- [2026-05-01] Enhanced market regime model: replaced binary `check_regime` with a full 3-state engine.
+  - New `trader/regime/` package: `models.py` (`RegimeLevel` enum, `PillarScore`, `RegimeState` with backward-compat `__eq__`/`__str__`), `indicators.py` (4 pillar functions), `state_machine.py` (asymmetric hysteresis — 2 confirmations to degrade, 3 to recover, no state skipping), `engine.py` (`RegimeEngine` singleton, confidence-weighted composite score, DB persistence).
+  - New `RegimeSnapshot` ORM table (20th table); state persisted every cycle for restart recovery.
+  - `common/config.py`: renamed old `RegimeConfig` → `RegimeStrategyConfig`; added 12 new Pydantic models under new top-level `RegimeConfig` (weights, per-pillar params, thresholds, hysteresis, per-state effects, fallback). `AppConfig` gains `regime: RegimeConfig`.
+  - `check_regime()` now returns `RegimeState`; downstream bots receive both `context.regime: str` (backward compat) and `context.regime_state: RegimeState`. `EquitySwingBot` applies `sizing_factor` + `score_threshold_adjustment`; `OptionsSwingBot` blocks entries on `allows_new_options_entries=False`.
+  - New `api/routes/regime.py`: `GET /api/v1/regime/current` + `/history?days=30`.
+  - `tests/test_regime.py`: 37 tests across 6 classes covering all pillars, state machine, backward compat, composite scoring. Total: 331 passing.
+- [2026-05-01] Frontend regime integration: added typed `api.getRegimeCurrent/getRegimeHistory`, `/regime` SPA page, sidebar nav, shared `RegimeSummaryCard`, and current-regime indicators on Overview, Risk, Rankings, and Signals. `/api/v1/regime/current` now returns configured per-state downstream effects for UI display.

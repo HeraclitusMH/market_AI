@@ -6,6 +6,7 @@ import { Orders } from '@/pages/Orders';
 import { Signals } from '@/pages/Signals';
 import { Rankings } from '@/pages/Rankings';
 import { Sentiment } from '@/pages/Sentiment';
+import { Regime } from '@/pages/Regime';
 import { Risk } from '@/pages/Risk';
 import { Controls } from '@/pages/Controls';
 import { Config } from '@/pages/Config';
@@ -23,6 +24,7 @@ const router = createBrowserRouter(
         { path: 'signals', element: <Signals /> },
         { path: 'rankings', element: <Rankings /> },
         { path: 'sentiment', element: <Sentiment /> },
+        { path: 'regime', element: <Regime /> },
         { path: 'risk', element: <Risk /> },
         { path: 'controls', element: <Controls /> },
         { path: 'config', element: <Config /> },

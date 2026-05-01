@@ -9,6 +9,7 @@ import { SegmentedControl } from '@/components/SegmentedControl';
 import { symbolCell } from '@/lib/cells';
 import { ScoreBar } from '@/components/ScoreBar';
 import { actionBadge } from '@/components/Badge';
+import { regimeLabel } from '@/components/RegimeSummaryCard';
 import type { Signal } from '@/types/api';
 
 type Filter = 'all' | 'buy' | 'hold' | 'bearish';
@@ -39,6 +40,7 @@ function applyFilter(data: Signal[], filter: Filter): Signal[] {
 
 export function Signals() {
   const { data = [], isLoading } = useQuery({ queryKey: ['signals'], queryFn: () => api.getSignals(100), refetchInterval: 20_000 });
+  const { data: currentRegime } = useQuery({ queryKey: ['regimeCurrent'], queryFn: api.getRegimeCurrent, refetchInterval: 20_000 });
   const [filter, setFilter] = useState<Filter>('all');
 
   const filtered = useMemo(() => applyFilter(data, filter), [data, filter]);
@@ -56,7 +58,7 @@ export function Signals() {
         <KPI label="Total Signals" value={String(data.length)} />
         <KPI label="Avg Score" value={(avgScore * 100).toFixed(0)} sub="/ 100" />
         <KPI label="Bullish" value={String(bullCount)} color="pos" />
-        <KPI label="Bearish" value={String(bearCount)} color="neg" />
+        <KPI label="Regime" value={regimeLabel(currentRegime?.level)} sub={`${bearCount} bearish`} />
       </div>
 
       <Card>

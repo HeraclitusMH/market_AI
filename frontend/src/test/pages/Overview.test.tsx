@@ -15,6 +15,7 @@ vi.mock('@/lib/api', () => ({
       sentiment_llm_budget: null,
       recent_events: [],
     }),
+    getRegimeCurrent: vi.fn().mockResolvedValue({ level: 'risk_on', composite_score: 72 }),
   },
 }));
 

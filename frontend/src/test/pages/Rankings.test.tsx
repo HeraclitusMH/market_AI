@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 import { Wrapper } from '../helpers';
 import { Rankings } from '@/pages/Rankings';
@@ -8,7 +8,7 @@ vi.mock('@/lib/api', () => ({
   api: {
     getRankings: vi.fn().mockResolvedValue([]),
     getTradePlans: vi.fn().mockResolvedValue([]),
-    refreshFundamentals: vi.fn().mockResolvedValue({ status: 'success' }),
+    getRegimeCurrent: vi.fn().mockResolvedValue({ level: 'risk_on', composite_score: 70 }),
   },
 }));
 
@@ -63,13 +63,14 @@ it('renders factor breakdown scores from the 7-factor composite payload', async 
   render(<Rankings />, { wrapper: Wrapper });
 
   expect(await screen.findAllByText('AAPL')).toHaveLength(2);
+  fireEvent.click(screen.getAllByText('AAPL')[1].closest('tr') as HTMLElement);
   expect(screen.getByText('Sentiment')).toBeInTheDocument();
   expect(screen.getByText('+15.00')).toBeInTheDocument();
   expect(screen.getByText('Liquidity Gate')).toBeInTheDocument();
   expect(screen.getByText('Pass')).toBeInTheDocument();
-  expect(screen.getByText(/Formula:/)).toBeInTheDocument();
-  expect(screen.getByText(/Sentiment 75 x 20\.0%/)).toBeInTheDocument();
-  expect(screen.getByText(/Risk Penalty 35 x 5\.0%/)).toBeInTheDocument();
+  expect(screen.getByText('Formula')).toBeInTheDocument();
+  expect(screen.getAllByText((_, el) => Boolean(el?.textContent?.includes('Sentiment 75') && el.textContent.includes('20%'))).length).toBeGreaterThan(0);
+  expect(screen.getAllByText((_, el) => Boolean(el?.textContent?.includes('Risk Penalty 35') && el.textContent.includes('5%'))).length).toBeGreaterThan(0);
   expect(screen.queryByText(/Liquidity.*x/)).not.toBeInTheDocument();
 
   await waitFor(() => {
@@ -99,11 +100,12 @@ it('does not render the old weighted factor formula when composite payload is mi
   render(<Rankings />, { wrapper: Wrapper });
 
   expect(await screen.findAllByText('SPY')).toHaveLength(2);
+  fireEvent.click(screen.getAllByText('SPY')[1].closest('tr') as HTMLElement);
   expect(screen.getByText(/Missing 7-factor composite payload/)).toBeInTheDocument();
   expect(screen.queryByText(/Sentiment 57 x 46\.2%/)).not.toBeInTheDocument();
   expect(screen.queryByText(/Momentum 97 x 23\.1%/)).not.toBeInTheDocument();
   expect(screen.queryByText(/Risk 75 x 30\.8%/)).not.toBeInTheDocument();
-  expect(screen.queryByText(/Formula:/)).not.toBeInTheDocument();
+  expect(screen.queryByText('Formula')).not.toBeInTheDocument();
 });
 
 it('excludes liquidity weights from the score formula', async () => {
@@ -129,7 +131,8 @@ it('excludes liquidity weights from the score formula', async () => {
   render(<Rankings />, { wrapper: Wrapper });
 
   expect(await screen.findAllByText('SPY')).toHaveLength(2);
-  expect(screen.getByText(/Sentiment 75 x 20\.0%/)).toBeInTheDocument();
-  expect(screen.getByText(/Risk Penalty 35 x 5\.0%/)).toBeInTheDocument();
+  fireEvent.click(screen.getAllByText('SPY')[1].closest('tr') as HTMLElement);
+  expect(screen.getAllByText((_, el) => Boolean(el?.textContent?.includes('Sentiment 75') && el.textContent.includes('20%'))).length).toBeGreaterThan(0);
+  expect(screen.getAllByText((_, el) => Boolean(el?.textContent?.includes('Risk Penalty 35') && el.textContent.includes('5%'))).length).toBeGreaterThan(0);
   expect(screen.queryByText(/liquidity 100 x/i)).not.toBeInTheDocument();
 });

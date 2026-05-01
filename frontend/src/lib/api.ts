@@ -1,6 +1,7 @@
 import type {
   BotState, OverviewData, Position, Order, Fill, Signal,
   SentimentData, RiskData, RankingRow, PlanRow, ConfigData, ControlResponse,
+  RegimeCurrent, RegimeHistoryRow,
 } from '@/types/api';
 
 const BASE = '/api/v1';
@@ -32,6 +33,8 @@ export const api = {
     get<PlanRow[]>(`/trade-plans?limit=${limit}${status ? `&status=${status}` : ''}`),
   getSentiment:   () => get<SentimentData>('/sentiment'),
   getRisk:        () => get<RiskData>('/risk'),
+  getRegimeCurrent: () => get<RegimeCurrent>('/regime/current'),
+  getRegimeHistory: (days = 30) => get<RegimeHistoryRow[]>(`/regime/history?days=${days}`),
   getConfig:      () => get<ConfigData>('/config'),
 
   postControl: (action: string) => post<ControlResponse>(`/controls/${action}`),

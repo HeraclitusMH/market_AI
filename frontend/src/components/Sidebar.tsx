@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, TrendingUp, ListOrdered, Zap, BarChart2,
-  MessageSquare, ShieldAlert, Settings2, Sliders,
+  MessageSquare, ShieldAlert, Settings2, Sliders, Activity,
 } from 'lucide-react';
 import { useBotStore } from '@/store/botStore';
 
@@ -27,6 +27,7 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
       { to: '/signals', icon: <Zap size={15} />, label: 'Signals' },
       { to: '/rankings', icon: <BarChart2 size={15} />, label: 'Rankings' },
       { to: '/sentiment', icon: <MessageSquare size={15} />, label: 'Sentiment' },
+      { to: '/regime', icon: <Activity size={15} />, label: 'Regime' },
     ],
   },
   {

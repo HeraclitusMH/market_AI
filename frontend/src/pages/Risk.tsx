@@ -7,9 +7,11 @@ import { KPI } from '@/components/KPI';
 import { Card, CardHead, CardBody } from '@/components/Card';
 import { LineChart } from '@/components/LineChart';
 import { Donut } from '@/components/Donut';
+import { RegimeSummaryCard } from '@/components/RegimeSummaryCard';
 
 export function Risk() {
   const { data, isLoading } = useQuery({ queryKey: ['risk'], queryFn: api.getRisk, refetchInterval: 20_000 });
+  const { data: regime } = useQuery({ queryKey: ['regimeCurrent'], queryFn: api.getRegimeCurrent, refetchInterval: 20_000 });
   const setBot = useBotStore((s) => s.setBot);
 
   useEffect(() => { if (data?.bot) setBot(data.bot); }, [data?.bot, setBot]);
@@ -43,6 +45,10 @@ export function Risk() {
         <KPI label="Max Risk / Trade" value={fmtPct(rc.max_risk_per_trade_pct)} />
         <KPI label="Cash" value={fmtMoney(eq?.cash ?? 0)} />
         <KPI label="Net Liquidation" value={fmtMoney(eq?.net_liquidation ?? 0)} />
+      </div>
+
+      <div className="grid-full">
+        <RegimeSummaryCard regime={regime} />
       </div>
 
       <div className="grid-2">

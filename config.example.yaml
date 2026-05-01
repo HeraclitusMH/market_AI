@@ -265,3 +265,70 @@ sentiment:
     hard_stop_on_budget: true
     daily_budget_fraction: 0.12
     max_tokens_per_item_estimate: 300
+
+regime:
+  enabled: true
+  trend_symbol: "SPY"
+  volatility_symbol: "VIX"
+  credit_stress_symbols:
+    high_yield: "HYG"
+    investment_grade: "LQD"
+  weights:
+    trend: 0.30
+    breadth: 0.25
+    volatility: 0.25
+    credit_stress: 0.20
+  trend:
+    sma_period: 200
+    ema_fast: 20
+    ema_slow: 50
+  breadth:
+    ma_period: 50
+    strong_threshold: 0.70
+    moderate_threshold: 0.50
+    weak_threshold: 0.30
+    min_symbols_required: 20
+    use_universe: true
+  volatility:
+    realized_vol_period: 20
+    vix_low: 15.0
+    vix_moderate: 20.0
+    vix_elevated: 25.0
+    vix_high: 30.0
+    realized_vol_low: 12.0
+    realized_vol_moderate: 18.0
+    realized_vol_elevated: 25.0
+  credit_stress:
+    lookback_days: 20
+    ratio_sma_period: 50
+    mild_deviation_pct: 0.02
+    severe_deviation_pct: 0.05
+  thresholds:
+    risk_on_min: 65
+    risk_off_max: 35
+  hysteresis:
+    degrade_confirmations: 2
+    recover_confirmations: 3
+    min_hold_cycles: 1
+  effects:
+    risk_on:
+      sizing_factor: 1.0
+      allows_new_equity_entries: true
+      allows_new_options_entries: true
+      stop_tightening_factor: 1.0
+      score_threshold_adjustment: 0.0
+    risk_reduced:
+      sizing_factor: 0.50
+      allows_new_equity_entries: true
+      allows_new_options_entries: false
+      stop_tightening_factor: 0.75
+      score_threshold_adjustment: 0.10
+    risk_off:
+      sizing_factor: 0.0
+      allows_new_equity_entries: false
+      allows_new_options_entries: false
+      stop_tightening_factor: 0.50
+      score_threshold_adjustment: 0.20
+  fallback:
+    on_insufficient_data: "risk_reduced"
+    on_ibkr_offline: "risk_reduced"

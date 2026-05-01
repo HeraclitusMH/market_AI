@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { fmtTs } from '@/lib/formatters';
 import { KPI } from '@/components/KPI';
@@ -7,6 +7,7 @@ import { Card, CardHead, CardBody } from '@/components/Card';
 import { DataTable, type Column } from '@/components/DataTable';
 import { ScoreBar } from '@/components/ScoreBar';
 import { Badge } from '@/components/Badge';
+import { regimeLabel } from '@/components/RegimeSummaryCard';
 import { symbolCell } from '@/lib/cells';
 import type { RankingRow, PlanRow, RankingComponents, RankingFactor, Composite7Factor } from '@/types/api';
 
@@ -102,17 +103,10 @@ function LiquidityGate({ factor }: { factor: unknown }) {
 function FactorBreakdown({
   components,
   total,
-  symbol,
 }: {
   components: RankingComponents;
   total: number;
-  symbol: string;
 }) {
-  const queryClient = useQueryClient();
-  const refreshOne = useMutation({
-    mutationFn: () => api.refreshFundamentals(symbol),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['rankings'] }),
-  });
   const composite = composite7Factor(components);
 
   return (
@@ -138,24 +132,6 @@ function FactorBreakdown({
           </div>
         );
       })}
-      <button
-        type="button"
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); refreshOne.mutate(); }}
-        disabled={refreshOne.isPending}
-        style={{
-          background: 'transparent',
-          border: '1px solid var(--bg-3)',
-          color: 'var(--accent)',
-          fontSize: 11,
-          padding: '2px 8px',
-          borderRadius: 4,
-          cursor: refreshOne.isPending ? 'wait' : 'pointer',
-          marginTop: 6,
-        }}
-        title={`Recalculate fundamentals for ${symbol}`}
-      >
-        {refreshOne.isPending ? 'Refreshing...' : 'Refresh Fundamentals'}
-      </button>
       <LiquidityGate factor={components.liquidity} />
       <ScoreFormula components={components} total={total} />
     </div>
@@ -182,14 +158,9 @@ const PLAN_COLS: Column<PlanRow>[] = [
 ];
 
 export function Rankings() {
-  const queryClient = useQueryClient();
   const { data: rankings = [], isLoading: rankLoading } = useQuery({ queryKey: ['rankings'], queryFn: () => api.getRankings(100), refetchInterval: 30_000 });
   const { data: plans = [], isLoading: planLoading } = useQuery({ queryKey: ['tradePlans'], queryFn: () => api.getTradePlans(50), refetchInterval: 30_000 });
-
-  const refreshAll = useMutation({
-    mutationFn: () => api.refreshFundamentals(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['rankings'] }),
-  });
+  const { data: currentRegime } = useQuery({ queryKey: ['regimeCurrent'], queryFn: api.getRegimeCurrent, refetchInterval: 20_000 });
 
   const [activeTab, setActiveTab] = useState<'all' | 'bullish' | 'bearish'>('all');
 
@@ -210,7 +181,7 @@ export function Rankings() {
         <KPI label="Symbols Ranked" value={String(rankings.length)} />
         <KPI label="Eligible" value={String(eligible)} />
         <KPI label="Avg Score" value={(avgScore * 100).toFixed(0)} sub="/ 100" />
-        <KPI label="Trade Plans" value={String(plans.length)} />
+        <KPI label="Regime" value={regimeLabel(currentRegime?.level)} sub={`${plans.length} trade plans`} />
       </div>
 
       <div className="grid-2" style={{ marginBottom: 'var(--gap)' }}>
@@ -239,30 +210,9 @@ export function Rankings() {
       <Card style={{ marginBottom: 'var(--gap)' }}>
         <CardHead
           title="Full Rankings"
-          subtitle={
-            refreshAll.isSuccess
-              ? `${displayed.length} shown - refreshed ${refreshAll.data.refreshed} (missing ${refreshAll.data.missing}) in ${refreshAll.data.duration_s}s`
-              : `${displayed.length} shown`
-          }
+          subtitle={`${displayed.length} shown`}
           right={
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={() => refreshAll.mutate()}
-                disabled={refreshAll.isPending}
-                style={{
-                  background: 'transparent',
-                  border: '1px solid var(--bg-3)',
-                  color: 'var(--accent)',
-                  fontSize: 12,
-                  padding: '4px 10px',
-                  borderRadius: 4,
-                  cursor: refreshAll.isPending ? 'wait' : 'pointer',
-                }}
-                title="Force-refresh yfinance fundamentals for every symbol in the universe"
-              >
-                {refreshAll.isPending ? 'Refreshing...' : 'Refresh Fundamentals'}
-              </button>
               <div className="seg-ctrl">
                 {(['all', 'bullish', 'bearish'] as const).map((t) => (
                   <button key={t} className={`seg-ctrl-item${activeTab === t ? ' active' : ''}`} onClick={() => setActiveTab(t)}>
@@ -279,7 +229,7 @@ export function Rankings() {
             columns={RANKING_COLS as unknown as Column<Record<string, unknown>>[]}
             expandRow={(r) => {
               const row = r as unknown as RankingRow;
-              return <FactorBreakdown components={row.components} total={row.score_total} symbol={row.symbol} />;
+              return <FactorBreakdown components={row.components} total={row.score_total} />;
             }}
             emptyMessage="No rankings"
           />

@@ -347,3 +347,26 @@ class TradeManagement(Base):
 
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+
+class RegimeSnapshot(Base):
+    """Persisted regime evaluation result for history and restart recovery."""
+    __tablename__ = "regime_snapshots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, nullable=False, default=utcnow, index=True)
+    level = Column(String(20), nullable=False)
+    composite_score = Column(Float, nullable=False)
+    previous_level = Column(String(20), nullable=True)
+    transition = Column(String(20), nullable=True)
+    trend_score = Column(Float, nullable=True)
+    breadth_score = Column(Float, nullable=True)
+    volatility_score = Column(Float, nullable=True)
+    credit_stress_score = Column(Float, nullable=True)
+    raw_suggested_level = Column(String(20), nullable=True)
+    consecutive_confirmations = Column(Integer, default=0)
+    cycles_in_current_state = Column(Integer, default=0)
+    hysteresis_active = Column(Boolean, default=False)
+    components_json = Column(Text, nullable=True)
+    data_quality = Column(String(20), default="full")
+    warnings_json = Column(Text, nullable=True)

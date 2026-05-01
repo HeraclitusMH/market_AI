@@ -11,6 +11,7 @@ import { Sparkline } from '@/components/Sparkline';
 import { symbolCell } from '@/lib/cells';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { Badge } from '@/components/Badge';
+import { RegimeSummaryCard } from '@/components/RegimeSummaryCard';
 import type { Position, EventLog, EquitySnapshot } from '@/types/api';
 
 const TIME_RANGES = [
@@ -50,6 +51,7 @@ const POSITION_COLS: Column<Position>[] = [
 
 export function Overview() {
   const { data, isLoading } = useQuery({ queryKey: ['overview'], queryFn: api.getOverview, refetchInterval: 15_000 });
+  const { data: regime } = useQuery({ queryKey: ['regimeCurrent'], queryFn: api.getRegimeCurrent, refetchInterval: 20_000 });
   const setBot = useBotStore((s) => s.setBot);
   const [range, setRange] = useState('30D');
 
@@ -97,6 +99,10 @@ export function Overview() {
           value={fmtPct(eq?.drawdown_pct ?? 0)}
           color={(eq?.drawdown_pct ?? 0) > 5 ? 'neg' : 'neutral'}
         />
+      </div>
+
+      <div className="grid-full">
+        <RegimeSummaryCard regime={regime} />
       </div>
 
       <div className="grid-2">

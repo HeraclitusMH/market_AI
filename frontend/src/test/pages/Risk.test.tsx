@@ -13,6 +13,7 @@ vi.mock('@/lib/api', () => ({
       positions_used: 0,
       positions_max: 5,
     }),
+    getRegimeCurrent: vi.fn().mockResolvedValue({ level: 'risk_reduced', composite_score: 52 }),
   },
 }));
 

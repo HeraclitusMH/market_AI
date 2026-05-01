@@ -17,9 +17,10 @@
 - There are **two orchestrators**: the CLI (`cli.py`) triggers single or continuous
   bot runs; the legacy `trader/scheduler.py::Scheduler` provides a daemon that combines
   sync, sentiment refresh, ranking, planning, and rebalance on cadence.
-- **Market regime** is gated by SPY: a single daily check produces `risk_on` or
-  `risk_off`. `risk_off` closes the equity bot (cash mode) or restricts it to
-  defensive sectors, and suppresses new long entries.
+- **Market regime** is a 3-state engine (`risk_on`, `risk_reduced`, `risk_off`):
+  four pillars (trend, breadth, volatility, credit stress) produce a 0-100 composite,
+  then an asymmetric hysteresis state machine resolves transitions. The resolved state
+  controls new-entry permissions, equity sizing, stop tightening, and score thresholds.
 - **Universe** = embedded `SEED_TICKERS` (~50 large-cap US stocks + sector ETFs) +
   RSS/LLM-discovered tickers, each verified against IBKR `reqContractDetails` with
   24h caching. `data/sp500.csv` exists but is **not yet auto-ingested**.
@@ -57,16 +58,17 @@
   `mentioned_companies` (raw names, not guessed tickers); the RSS provider scans
   headlines with word-boundary alias matching. Both paths produce `scope="ticker"`
   `SentimentSnapshot` rows identical to the sector/market rows.
-- **Persistence** is SQLite/Postgres via SQLAlchemy; 18 tables. Key time-series:
+- **Persistence** is SQLite/Postgres via SQLAlchemy; 20 tables. Key time-series:
   `equity_snapshots`, `sentiment_snapshots`, `symbol_rankings`, `signal_snapshots`,
-  `orders`, `fills`, `positions`, `trades`, `events_log`, `trade_plans`.
+  `regime_snapshots`, `orders`, `fills`, `positions`, `trades`, `events_log`,
+  `trade_plans`.
 - **Idempotency**: `intent_id = {symbol}_{direction}_{yyyymmdd}_{uuid8}` guards
   against duplicate submission across restarts. Planner cooldown (`rc.cooldown_hours`)
   prevents re-proposing the same symbol.
 - **Broker**: IBKR via `ib_insync`; singleton client in `trader/ibkr_client.py`.
   Live connection is optional — most phases tolerate offline mode with cached data.
 - **Observability**: structured `events_log` table, Python logging, and an
-  FastAPI dashboard (`/overview`, `/rankings`, `/sentiment`, `/risk`, `/controls`, …).
+  FastAPI/React dashboard (`/overview`, `/rankings`, `/sentiment`, `/regime`, `/risk`, `/controls`, …).
 
 ---
 
@@ -90,7 +92,7 @@ flowchart TD
   SYNC -->|writes| DB_EQUITY["(equity_snapshots, positions, orders, fills)"]
 
   subgraph AnalysisPerCycle
-    REGIME["check_regime() — SPY daily"]
+    REGIME["check_regime()\n3-state RegimeEngine"]
     UNI["get_verified_universe()"]
     RANK["rank_symbols()\n7-factor composite"]
     SCORE["score_symbol() — 4-factor"]
@@ -286,26 +288,42 @@ flowchart TD
 
 ### Phase D — Market Regime Check
 
-- **Purpose.** Single global switch; controls whether the equity bot takes entries
-  and whether `score_symbol` labels a name `long` vs `bearish`.
+- **Purpose.** Produce a global risk posture and downstream trading effects for
+  both bots: entry permissions, sizing, stop tightening, and threshold adjustment.
 - **Trigger / cadence.** Per bot cycle (once, via `BaseBot.run`).
-- **Upstream inputs.** Daily SPY bars (`trader/market_data.fetch_bars("SPY", "1D")`)
-  with in-memory cache honouring `cfg.safety.data_stale_minutes`.
-- **Core logic** (`trader/strategy.py::check_regime`):
-  1. Fetch ≥ 50 daily bars; if insufficient, return `risk_off`.
-  2. Compute indicators (EMA20, EMA50, SMA200, ATR14, realised vol).
-  3. **risk_on** iff `close > SMA200` **AND** `EMA20 > EMA50` **AND** 20-day
-     realised vol < `cfg.strategy.regime.vol_threshold` (default 25%).
-- **Key parameters/config.** `cfg.strategy.regime.vol_threshold`,
-  `cfg.strategy.weights` (not used by regime but consumed by `score_symbol`).
-- **Outputs/artifacts.** `regime: "risk_on" | "risk_off"` (Python string).
-- **Downstream consumers.** `BaseBot.build_candidates`, `score_symbol`,
-  `EquitySwingBot` risk-off branching (cash vs defensive sectors).
+- **Upstream inputs.**
+  - Daily SPY bars for trend (`cfg.regime.trend_symbol`, default `SPY`).
+  - Universe breadth bars for `% above 50-MA`.
+  - VIX / term structure / realised volatility inputs for volatility.
+  - HYG/LQD ratio for credit stress.
+- **Core logic** (`trader/strategy.py::check_regime` -> `trader/regime/engine.py::RegimeEngine`):
+  1. Compute pillar scores in `trader/regime/indicators.py`: trend, breadth,
+     volatility, credit stress.
+  2. Combine pillars with confidence-weighted `cfg.regime.weights` into a 0-100 score.
+  3. Convert score to raw state using `cfg.regime.thresholds`
+     (`risk_on_min`, `risk_off_max`).
+  4. Resolve the raw state through `RegimeStateMachine`: 2 confirmations to degrade,
+     3 confirmations to recover, no state skipping.
+  5. Attach `cfg.regime.effects.<level>` to the returned `RegimeState`.
+  6. Persist a `RegimeSnapshot` for history and restart recovery.
+- **Key parameters/config.** `cfg.regime.*`: weights, pillar settings, thresholds,
+  hysteresis, effects, and fallback. `cfg.strategy.regime.vol_threshold` is the
+  legacy binary fallback path when `cfg.regime.enabled=False`.
+- **Outputs/artifacts.** `RegimeState` with `level`, `composite_score`, `pillars`,
+  `transition`, `data_quality`, and effects. It remains backward-compatible with
+  string checks such as `state == "risk_on"`.
+- **Downstream consumers.** `BaseBot` stores both `context.regime: str` and
+  `context.regime_state: RegimeState`; `EquitySwingBot` applies `sizing_factor` and
+  `score_threshold_adjustment`; `OptionsSwingBot` blocks entries when
+  `allows_new_options_entries=False`; `/api/v1/regime/*` and the React Regime UI read
+  persisted snapshots.
 - **Decision gates.**
-  - Insufficient SPY data → `risk_off` (fail-safe).
-  - Indicators invalid (`valid=False`) → `risk_off`.
-- **Failure modes.** IBKR unavailable + cache empty → `fetch_bars` returns empty
-  DataFrame → `risk_off`.
+  - `cfg.regime.enabled=False` -> legacy binary SPY regime check.
+  - Data quality `"fallback"` -> use `cfg.regime.fallback.on_insufficient_data`
+    (default `risk_reduced`), but only degrade from the resolved state.
+  - Hysteresis active -> hold current state until confirmation count is met.
+- **Failure modes.** Missing pillar data lowers confidence; full fallback data quality
+  resolves to configured fallback instead of a panic `risk_off` jump.
 
 ---
 
@@ -394,7 +412,7 @@ flowchart TD
   - `TradeManagement` rows (DB) — one per open position, filtered by `portfolio_id`.
   - Current market prices via `trader/market_data.fetch_bars(symbol, "1D")`.
   - Current scores from `context.ranked` (list of `RankedSymbol`).
-  - `context.regime` (`risk_on` | `risk_off`).
+  - `context.regime` (`risk_on` | `risk_reduced` | `risk_off`) and `context.regime_state`.
   - For options: IBKR `GreeksService` for spread mid-price, IV, and net delta.
 - **Core logic** (`trader/exits.py::ExitManager.evaluate_all_positions`):
   1. Query all `TradeManagement` rows for the current `portfolio_id`.
@@ -679,7 +697,7 @@ flowchart TD
 ### Phase N — Approval UI / Dashboard
 
 - **Purpose.** Human approval of `pending_approval` orders; visibility into
-  rankings, sentiment, risk, events.
+  rankings, sentiment, current/historical regime, risk, and events.
 - **Trigger / cadence.** FastAPI request-driven (`api/main.py`).
 - **Core logic.** React SPA under `frontend/` powered by JSON endpoints in
   `api/v1/`; FastAPI serves the built assets from `ui/static/dist/`.
@@ -699,6 +717,8 @@ flowchart TD
 | `SentimentLlmUsage` | ORM `(prompt_tokens, completion_tokens, cost_usd_est, cost_eur_est, status)` | Claude provider | `trader/sentiment/budget.py` | DB `sentiment_llm_usage` | Source of truth for budget cap |
 | `RankedSymbol` | dataclass `(symbol, sector, score_total, components{sentiment,momentum_trend,risk,liquidity,optionability,fundamentals,composite_7factor}, equity_eligible, options_eligible, eligible, reasons, sources, bias)` | `trader/ranking.py::rank_symbols` | `OptionsSwingBot.select_trades` (gates on `options_eligible`), `EquitySwingBot.select_trades` (gates on `equity_eligible`), UI, planner | in-memory + `symbol_rankings` row per cycle | `bias ∈ {bullish, bearish, None}`; `composite_7factor` is authoritative for API/UI |
 | `CompositeResult` / `FactorResult` | dataclasses for 7-factor scoring result and per-factor score/confidence/components | `trader/composite_scorer/composite_scorer.py::CompositeScorer.score` and factor modules | `rank_symbols`, `components_json.composite_7factor`, Rankings UI | in-memory + embedded in `symbol_rankings.components_json` | Score is 0-100 internally; ranking stores divided [0,1]; risk contribution is subtractive |
+| `RegimeState` | dataclass `(level, composite_score, previous_level, transition, pillars, effects, data_quality, warnings)` | `trader/regime/engine.py::RegimeEngine.evaluate` | `BaseBot`, `EquitySwingBot`, `OptionsSwingBot`, `score_symbol`, API/UI | in-memory + persisted as `RegimeSnapshot` | Backward-compatible with `str(state)` and `state == "risk_on"` |
+| `RegimeSnapshot` | ORM row `(timestamp, level, composite_score, pillar scores, transition, hysteresis, components_json, data_quality)` | `RegimeEngine._persist_snapshot` | restart recovery, `/api/v1/regime/current`, `/api/v1/regime/history`, React Regime UI | DB `regime_snapshots` | One row per regime evaluation cycle |
 | `FundamentalResult` | TypedDict `(symbol, total_score, pillars, missing_fields, cached, timestamp)` | `trader/fundamental_scorer.py::FundamentalScorer.get_score` | `compute_fundamentals_factor`, Quality/Value/Growth adapters, `components_json.fundamentals`, logs/debugging | process-local in-memory cache + `fundamental_snapshots` DB | Score is 0-100; adapters reuse pillars when richer statement data is missing |
 | `SignalIntent` | dataclass `(symbol, direction, instrument, score, max_risk_usd, explanation, components, regime)` | `score_symbol` / `_plan_to_signal` | `execute_signal`, `generate_signals` | `signal_snapshots` (for generate_signals only) | `direction ∈ {long, bearish}` |
 | `Candidate` | dataclass `(symbol, sector, source, verified)` | `BaseBot.build_candidates` | `score_candidate` | in-memory | |
@@ -737,7 +757,7 @@ flowchart TD
 
 ### Run loop (per `BaseBot.run`)
 
-1. `check_regime(client)` → `"risk_on"|"risk_off"` (errors demoted to `risk_off`).
+1. `check_regime(client)` → `RegimeState` (`risk_on` | `risk_reduced` | `risk_off`; backward-compatible with strings).
 2. `get_verified_universe(client)` → `List[UniverseItem]`.
 3. `rank_symbols(universe)` → `List[RankedSymbol]` + DB write.
 4. **`_run_exit_phase(context)`** → evaluate + execute exits for all open positions (Phase F).
@@ -788,7 +808,7 @@ flowchart TD
 | 2 | How RSS-discovered tickers are added to the universe | `trader/universe.py::get_verified_universe`; `get_recent_ticker_scores` in `trader/sentiment/scoring.py` | C |
 | 3 | Liquidity / price thresholds for universe activation | `cfg.universe.min_price`, `cfg.universe.min_dollar_volume`; `trader/universe.py::refresh_universe` | C |
 | 4 | IBKR contract verification (OTC/PINK rejection, currency) | `trader/universe.py::verify_contract` | C |
-| 5 | Market regime definition | `trader/strategy.py::check_regime` (+ `cfg.strategy.regime.vol_threshold`) | D |
+| 5 | Market regime definition | `trader/strategy.py::check_regime`; `trader/regime/engine.py`; `trader/regime/indicators.py`; `trader/regime/state_machine.py`; `cfg.regime.*` | D |
 | 6 | 4-factor scoring (weights, RSI buckets, vol buckets) | `trader/strategy.py::score_symbol` (+ `cfg.strategy.weights`) | F |
 | 7 | Sentiment weight & recency penalty | `trader/scoring.py::_compute_score`, `_apply_recency` (+ `cfg.ranking.w_market/w_sector/w_ticker`); re-exported from `trader/ranking.py` | E |
 | 8 | Bullish/bearish bias threshold | `cfg.ranking.enter_threshold` (default 0.55); `≥threshold → bullish`, `≤1-threshold → bearish` in `rank_symbols`; `select_candidates` sizes the split | E |
@@ -840,8 +860,9 @@ flowchart TD
 - **Greeks logger** — `trader/greeks/logger.py::GreeksLogger` writes chain-fetch,
   strike-selection, gate results, and entry-time Greeks. Writes are intertwined
   with `events_log` and the trade's `payload_json`.
-- **Dashboard** — `/overview` (events + NAV), `/rankings` (latest ranking + recent
-  plans), `/sentiment` (latest per scope, budget status), `/risk` (drawdown chart),
+- **Dashboard** — `/overview` (events + NAV + current regime), `/rankings` (latest
+  ranking + regime), `/sentiment` (latest per scope, budget status), `/regime`
+  (current state, effects, pillars, history), `/risk` (drawdown + regime),
   `/orders`, `/positions`, `/signals`.
 
 ### Gaps to close for easier debugging

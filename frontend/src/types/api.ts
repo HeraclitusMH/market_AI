@@ -141,6 +141,47 @@ export interface CompositeFactor {
   components: Record<string, unknown>;
 }
 
+export type RegimeLevel = 'risk_on' | 'risk_reduced' | 'risk_off' | 'unknown';
+
+export interface RegimePillars {
+  trend: number | null;
+  breadth: number | null;
+  volatility: number | null;
+  credit_stress: number | null;
+}
+
+export interface RegimeEffects {
+  allows_new_equity_entries: boolean;
+  allows_new_options_entries: boolean;
+  sizing_factor: number;
+  stop_tightening_factor: number;
+  score_threshold_adjustment: number;
+}
+
+export interface RegimeCurrent {
+  level: RegimeLevel;
+  message?: string;
+  composite_score?: number;
+  transition?: string | null;
+  pillars?: RegimePillars;
+  hysteresis_active?: boolean;
+  data_quality?: string;
+  timestamp?: string;
+  effects?: RegimeEffects | null;
+  components?: Record<string, unknown> | null;
+}
+
+export interface RegimeHistoryRow {
+  timestamp: string;
+  level: RegimeLevel;
+  composite_score: number;
+  trend: number | null;
+  breadth: number | null;
+  volatility: number | null;
+  credit_stress: number | null;
+  transition: string | null;
+}
+
 export interface PlanRow {
   id: number;
   ts: string;

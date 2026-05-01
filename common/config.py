@@ -51,13 +51,13 @@ class StrategyWeights(BaseModel):
     sentiment: float = 0.25
 
 
-class RegimeConfig(BaseModel):
+class RegimeStrategyConfig(BaseModel):
     vol_threshold: float = 25.0
 
 
 class StrategyConfig(BaseModel):
     weights: StrategyWeights = StrategyWeights()
-    regime: RegimeConfig = RegimeConfig()
+    regime: RegimeStrategyConfig = RegimeStrategyConfig()
     timeframes: List[str] = ["1D", "1H"]
     max_holding_days: int = 20
 
@@ -365,6 +365,107 @@ class SentimentConfig(BaseModel):
         return v
 
 
+# ── Enhanced regime config ───────────────────────────────────
+
+class RegimeTrendConfig(BaseModel):
+    sma_period: int = 200
+    ema_fast: int = 20
+    ema_slow: int = 50
+
+
+class RegimeBreadthConfig(BaseModel):
+    ma_period: int = 50
+    strong_threshold: float = 0.70
+    moderate_threshold: float = 0.50
+    weak_threshold: float = 0.30
+    min_symbols_required: int = 20
+    use_universe: bool = True
+
+
+class RegimeVolatilityConfig(BaseModel):
+    realized_vol_period: int = 20
+    vix_low: float = 15.0
+    vix_moderate: float = 20.0
+    vix_elevated: float = 25.0
+    vix_high: float = 30.0
+    realized_vol_low: float = 12.0
+    realized_vol_moderate: float = 18.0
+    realized_vol_elevated: float = 25.0
+
+
+class RegimeCreditStressConfig(BaseModel):
+    lookback_days: int = 20
+    ratio_sma_period: int = 50
+    mild_deviation_pct: float = 0.02
+    severe_deviation_pct: float = 0.05
+
+
+class RegimeThresholds(BaseModel):
+    risk_on_min: int = 65
+    risk_off_max: int = 35
+
+
+class RegimeHysteresis(BaseModel):
+    degrade_confirmations: int = 2
+    recover_confirmations: int = 3
+    min_hold_cycles: int = 1
+
+
+class RegimeEffectConfig(BaseModel):
+    sizing_factor: float = 1.0
+    allows_new_equity_entries: bool = True
+    allows_new_options_entries: bool = True
+    stop_tightening_factor: float = 1.0
+    score_threshold_adjustment: float = 0.0
+
+
+class RegimeEffectsConfig(BaseModel):
+    risk_on: RegimeEffectConfig = RegimeEffectConfig()
+    risk_reduced: RegimeEffectConfig = RegimeEffectConfig(
+        sizing_factor=0.50,
+        allows_new_options_entries=False,
+        stop_tightening_factor=0.75,
+        score_threshold_adjustment=0.10,
+    )
+    risk_off: RegimeEffectConfig = RegimeEffectConfig(
+        sizing_factor=0.0,
+        allows_new_equity_entries=False,
+        allows_new_options_entries=False,
+        stop_tightening_factor=0.50,
+        score_threshold_adjustment=0.20,
+    )
+
+
+class RegimeFallbackConfig(BaseModel):
+    on_insufficient_data: str = "risk_reduced"
+    on_ibkr_offline: str = "risk_reduced"
+
+
+class RegimeWeights(BaseModel):
+    trend: float = 0.30
+    breadth: float = 0.25
+    volatility: float = 0.25
+    credit_stress: float = 0.20
+
+
+class RegimeConfig(BaseModel):
+    enabled: bool = True
+    trend_symbol: str = "SPY"
+    volatility_symbol: str = "VIX"
+    credit_stress_symbols: Dict[str, str] = Field(
+        default_factory=lambda: {"high_yield": "HYG", "investment_grade": "LQD"}
+    )
+    weights: RegimeWeights = RegimeWeights()
+    trend: RegimeTrendConfig = RegimeTrendConfig()
+    breadth: RegimeBreadthConfig = RegimeBreadthConfig()
+    volatility: RegimeVolatilityConfig = RegimeVolatilityConfig()
+    credit_stress: RegimeCreditStressConfig = RegimeCreditStressConfig()
+    thresholds: RegimeThresholds = RegimeThresholds()
+    hysteresis: RegimeHysteresis = RegimeHysteresis()
+    effects: RegimeEffectsConfig = RegimeEffectsConfig()
+    fallback: RegimeFallbackConfig = RegimeFallbackConfig()
+
+
 # ── root ────────────────────────────────────────────────────
 
 class AppConfig(BaseModel):
@@ -386,6 +487,7 @@ class AppConfig(BaseModel):
     bots: BotsConfig = BotsConfig()
     securities: SecuritiesConfig = SecuritiesConfig()
     exits: ExitConfig = ExitConfig()
+    regime: RegimeConfig = RegimeConfig()
     dry_run: bool = False
 
     @field_validator("mode")
