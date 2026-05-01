@@ -51,8 +51,9 @@
 - **Approve mode** (default ON) never submits to IBKR — orders are written with
   `status="pending_approval"` for human review through the dashboard.
 - **Portfolio isolation**: every `Order`/`Position`/`Trade` row carries
-  `portfolio_id` (`options_swing` | `equity_swing`). Each bot's risk checks filter
-  by its own portfolio.
+  `portfolio_id` (`options_swing` | `equity_swing` | `unattributed`). IBKR sync
+  reconciles positions from `TradeManagement`/orders; unattributed positions count
+  conservatively against the matching bot's instrument cap.
 - **Company → ticker matching** is deterministic: `security_master` + `security_alias`
   tables map normalised company names to verified symbols. The Claude LLM provider emits
   `mentioned_companies` (raw names, not guessed tickers); the RSS provider scans
@@ -681,16 +682,18 @@ flowchart TD
   - `sync_account`: reads `NetLiquidation / TotalCashValue / Unrealized / Realized`,
     calls `record_equity_snapshot` which also computes drawdown against the
     peak NAV.
-  - `sync_positions`: deletes local `positions` and repopulates from
-    `client.positions()` (instruments classified stock/option/combo).
+  - `sync_positions`: deletes local `positions`, repopulates from
+    `client.positions()` (instruments classified stock/option/combo), and reconciles
+    `portfolio_id` via `TradeManagement` first, then recent filled/submitted orders.
+    Unmatched rows are tagged `unattributed` and logged.
   - `sync_orders`: updates `orders.status` by IBKR orderId and inserts new `Fill`
     rows from `trade.fills`.
 - **Outputs/artifacts.** Updated `equity_snapshots.drawdown_pct` — drives the
   drawdown gate in Phase J.
 - **Decision gates.** Any IBKR call failure → logged, no DB write.
-- **Known limitation.** Position rows are not tagged with `portfolio_id` during
-  sync (IBKR doesn't know about the bot partition), so the per-bot position
-  caps use only orders the bot itself wrote. See open questions.
+- **Resolved limitation.** Position rows are tagged during sync. Because IBKR does
+  not carry bot partition metadata, unmatched/manual positions become
+  `unattributed` and consume capacity conservatively until closed or attributed.
 
 ---
 
@@ -729,7 +732,7 @@ flowchart TD
 | `GateResult` | dataclass `(approved, reason, checks_passed, checks_failed, warnings, greeks_summary)` | `GreeksGate.evaluate` | Planner + `execute_signal` | in-memory; summary embedded in `orders.payload_json` | |
 | `Order` | ORM row `(intent_id, symbol, direction, instrument, portfolio_id, quantity, order_type, limit_price, status, ibkr_order_id, max_loss, payload_json)` | `execute_signal` / `place_equity_order` | risk checks, UI, `sync_orders` | DB `orders` | `status` lifecycle: `pending_approval → submitted → filled/cancelled/rejected` |
 | `Fill` | ORM row `(order_id, timestamp, qty, price, commission)` | `sync_orders` | UI, P&L | DB `fills` | Source: IBKR `trade.fills` |
-| `Position` | ORM row `(symbol, quantity, avg_cost, market_price, market_value, unrealized_pnl, instrument, portfolio_id)` | `sync_positions` | risk, `_get_sector_values`, UI | DB `positions` | Rebuilt each sync; `portfolio_id` not auto-populated from IBKR |
+| `Position` | ORM row `(symbol, quantity, avg_cost, market_price, market_value, unrealized_pnl, instrument, portfolio_id)` | `sync_positions` | risk, `_get_sector_values`, UI | DB `positions` | Rebuilt each sync; `portfolio_id` reconciled from `TradeManagement`/orders or set to `unattributed` |
 | `EquitySnapshot` | ORM row `(net_liquidation, cash, unrealized, realized, drawdown_pct)` | `trader/risk.py::record_equity_snapshot` | risk checks, equity bot cash math, UI | DB `equity_snapshots` | Peak NAV across all rows drives drawdown |
 | `BotState` | ORM row (singleton id=1) `(paused, kill_switch, options_enabled, approve_mode, last_heartbeat)` | startup / controls endpoint | risk gates, scheduler heartbeat | DB `bot_state` | Default `approve_mode=True` |
 | `EventLog` | ORM row `(level, type, message, payload_json)` | `log_event`, `_log_event` | UI `/overview`, debugging | DB `events_log` | Types include `startup, signal, order_submitted, risk_block, greeks_gate_reject, sentiment_refresh_success` |
@@ -948,12 +951,12 @@ If the `/sentiment` dashboard shows market/sector rows but no ticker rows:
      `generate_signals` and `plan_trade` branches and check whether CLI-run
      orders fight with scheduler-run orders in `orders.portfolio_id`.
 
-3. **`Position.portfolio_id` is not populated by `sync_positions`.**
-   - *Why it matters:* per-bot position caps rely on `Position.portfolio_id`,
-     but the sync wipes and re-inserts positions without a tag. Caps may be
-     under-counted after a restart or after a manual trade.
-   - *How to verify:* `SELECT symbol, portfolio_id FROM positions` after a sync.
-     Fix candidate: reconcile using `orders.symbol → portfolio_id` at sync time.
+3. ~~**`Position.portfolio_id` is not populated by `sync_positions`.**~~ **RESOLVED**
+   - `sync_positions` now reconciles from `TradeManagement` first, then recent
+     filled/submitted orders, and tags unmatched/manual positions as `unattributed`.
+   - *How to verify:* `SELECT symbol, instrument, portfolio_id FROM positions`
+     after a sync; check `events_log` for `sync_positions_reconciled` and
+     `sync_unattributed_positions`.
 
 4. **Kill-switch blocks new orders but does not close existing ones.**
    - *How to verify:* `api/routes/controls.py::close_all` flips the kill switch

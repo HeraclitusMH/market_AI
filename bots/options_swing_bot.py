@@ -83,6 +83,11 @@ class OptionsSwingBot(BaseBot):
         scored_map = {c.symbol: bd for c, bd in ranked}
 
         intents: List[TradeIntent] = []
+        slots_available = cfg.risk.max_positions - _count_options_positions()
+        if slots_available <= 0:
+            log.info("[options_swing] Max positions (%d) reached.", cfg.risk.max_positions)
+            return []
+
         for rs in candidates_from_ranking:
             if not rs.eligible or rs.bias is None:
                 continue
@@ -108,7 +113,7 @@ class OptionsSwingBot(BaseBot):
                 bot_id=self.bot_id,
             ))
 
-        return intents[:cfg.risk.max_positions]
+        return intents[:slots_available]
 
     def execute_exit_intent(self, exit_intent, context: BotContext) -> None:
         from common.db import get_db
@@ -195,3 +200,29 @@ def _plan_to_signal(plan, intent: TradeIntent) -> "SignalIntent":
         components=rationale.get("components", intent.components),
         regime=intent.regime,
     )
+
+
+def _count_options_positions() -> int:
+    """Count distinct option/combo symbols, including unattributed option positions."""
+    from sqlalchemy.exc import OperationalError
+    from sqlalchemy import and_, func, or_
+    from common.models import Position
+
+    try:
+        with get_db() as db:
+            count = (
+                db.query(func.count(func.distinct(Position.symbol)))
+                .filter(
+                    or_(
+                        Position.portfolio_id == "options_swing",
+                        and_(
+                            Position.portfolio_id == "unattributed",
+                            Position.instrument.in_(["option", "combo"]),
+                        ),
+                    )
+                )
+                .scalar()
+            )
+    except OperationalError:
+        return 0
+    return count or 0

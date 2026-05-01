@@ -28,7 +28,7 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **Debit spreads only (OptionsSwingBot)** — bull call spreads + bear put spreads. No naked shorts. Max loss = net debit paid.
 - **EquitySwingBot long-only (v1)** — buys stock shares; no shorting unless `long_only: false` in config.
 - **ATR-based equity sizing** — `stop = entry - (atr_stop_multiplier × stop_tightening_factor) × ATR(14)`; `shares = floor(nav × risk_per_trade_pct% / stop_distance) × sizing_factor`. Both `stop_tightening_factor` and `sizing_factor` come from `context.regime_state` (1.0 in `risk_on`, reduced in `risk_reduced`/`risk_off`). Capped to available cash and sector concentration limit.
-- **Portfolio isolation via `portfolio_id`** — `Order`, `Position`, `Trade` rows carry `portfolio_id` ("options_swing" or "equity_swing"). Each bot's risk/position checks filter by its own portfolio_id. Migration: `alembic/versions/0004_portfolio_id.py`.
+- **Portfolio isolation via `portfolio_id`** — `Order`, `Position`, `Trade` rows carry `portfolio_id` (`options_swing`, `equity_swing`, or `unattributed`). `sync_positions()` reconciles IBKR's flat broker positions from `TradeManagement` first, then recent filled/submitted/pending approval orders. Unmatched/manual positions become `unattributed` and count conservatively against the matching bot's instrument cap. Migration: `alembic/versions/0004_portfolio_id.py`.
 - **Bot plugin pattern** — `BaseBot` ABC defines `build_candidates / score_candidate / select_trades / execute_intent / execute_exit_intent`. `run()` orchestrates the full cycle (regime → universe → rank → **exit phase** → score → select → execute). Both bots share universe, regime check, and composite ranking score. `BotContext` carries both `regime: str` (backward compat) and `regime_state: RegimeState` (full object).
 - **7-factor composite scoring** — `rank_symbols()` always uses `trader/composite_scorer/CompositeScorer`. It computes Quality, Value, Momentum, Growth, Sentiment, Technical Structure, and subtractive Risk Penalty with regime-adaptive weights from `trader/composite_scorer/config/scoring_config.yaml`. `components_json.composite_7factor` is authoritative for API/UI display; the API and Rankings page no longer recompute or display the old 4-factor formula.
 - **yfinance fundamental scoring** — `trader/fundamental_scorer.py` fetches yfinance quote data, normalizes configured metrics to 0-100, rolls them into valuation/profitability/growth/financial-health pillars, and exposes the result through `compute_fundamentals_factor()` as `value_0_1` for the composite scorer. Three-tier cache: in-process (`cache_ttl_hours`, default 24h) → DB `fundamental_snapshots` (`ttl_days`, default 7) → yfinance fetch. `get_score(symbol, force_refresh=True)` bypasses both caches. `FundamentalResult` includes a `value_metrics` dict (raw yfinance fields: `enterprise_to_ebitda`, `free_cash_flow_ttm`, `market_cap`, `forward_pe`, `eps_growth_next_year`, `price_to_book`, `price_to_sales`, `sector`) extracted by `_parse_value_metrics()` for use by `ValueFactor`.
@@ -59,7 +59,7 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 ### Config & DB
 - **Config schema & loader** → `common/config.py` (all Pydantic models incl. `BotsConfig`, `EquityBotConfig`, `OptionsBotConfig`, `RegimeConfig` and 11 sub-models)
 - **DB models (20 tables)** → `common/models.py` (BotState, EquitySnapshot, Universe, SentimentSnapshot, SignalSnapshot, Order, Fill, Position, Trade, EventLog, ContractVerificationCache, SymbolRanking, FundamentalSnapshot, TradePlan, SentimentLlmItem, SentimentLlmUsage, SecurityMaster, SecurityAlias, RssEntityMatch, **RegimeSnapshot**, TradeManagement)
-- **API response schemas** → `common/schema.py`
+- **API response schemas** → `common/schema.py` (`PositionOut` includes `portfolio_id` for dashboard attribution visibility)
 
 ### Regime Detection (all in `trader/regime/` sub-package)
 - **Models** → `trader/regime/models.py` (`RegimeLevel` enum, `PillarScore` dataclass, `RegimeState` dataclass with backward-compat `__eq__`/`__str__`/`.regime` property)
@@ -88,6 +88,7 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **Fundamental scoring** → `trader/fundamental_scorer.py` (`FundamentalScorer`, `FundamentalResult`; yfinance, three-tier cache: memory → `fundamental_snapshots` DB → yfinance; `force_refresh` param; missing-factor redistribution; `_parse_value_metrics()` extracts raw fields into `value_metrics` dict stored in `FundamentalResult`)
 - **Fundamentals refresh helper** → `trader/fundamentals_refresh.py` (`refresh_fundamentals(symbols=None, force=True)` — shared by scheduler/API/CLI)
 - **Risk engine** → `trader/risk.py` (`check_can_trade()`, `compute_max_risk_for_trade()`, `record_equity_snapshot()`, `log_event()`)
+- **IBKR position sync/reconciliation** → `trader/sync.py::sync_positions()` and helpers `_build_attribution_map()`, `_reconcile_portfolio_id()`, `_classify_instrument()`. Emits `sync_positions_reconciled` every sync and `sync_unattributed_positions` when manual/unmatched positions are found.
 - **Options order construction** → `trader/execution.py` (debit spread spec, IBKR BAG combo orders, `execute_signal()`)
 - **Options trade planner** → `trader/options_planner.py` (`plan_trade()` — pure planning, no submission, writes TradePlan rows)
 - **Universe** → `trader/universe.py` (`seed_universe()`, `get_verified_universe()`, `verify_contract()`, `SEED_TICKERS`)
@@ -104,8 +105,8 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 
 ### Bot Layer
 - **Bot plugin interface** → `bots/base_bot.py` (`BaseBot` ABC, `Candidate`, `ScoreBreakdown`, `TradeIntent`, `BotContext`, `BotRunResult`). `BotContext` carries `regime: str` (backward compat) + `regime_state: RegimeState` (full object).
-- **Options bot** → `bots/options_swing_bot.py` (wraps `plan_trade()` + `execute_signal()` pipeline; blocks all new entries when `regime_state.allows_new_options_entries=False`)
-- **Equity bot** → `bots/equity_swing_bot.py` (ATR sizing, sector cap, `_size_equity_trade()`, `_count_equity_positions()`; applies `regime_state.sizing_factor` and `score_threshold_adjustment`; blocks entries when `allows_new_equity_entries=False`)
+- **Options bot** → `bots/options_swing_bot.py` (wraps `plan_trade()` + `execute_signal()` pipeline; `_count_options_positions()` counts distinct option/combo symbols and unattributed option/combo positions; blocks all new entries when `regime_state.allows_new_options_entries=False`)
+- **Equity bot** → `bots/equity_swing_bot.py` (ATR sizing, sector cap, `_size_equity_trade()`, `_count_equity_positions()`; counts unattributed stock positions; applies `regime_state.sizing_factor` and `score_threshold_adjustment`; blocks entries when `allows_new_equity_entries=False`)
 - **Equity execution** → `execution/equity_execution.py` (`place_equity_order()`, portfolio_id="equity_swing")
 - **Options execution shim** → `execution/options_execution.py` (`execute_options_intent()` — `TradeIntent` → `SignalIntent`)
 
@@ -190,6 +191,7 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 - **React SPA** (`frontend/`) — 10 pages, dark design system, TanStack Query polling, Zustand bot store, Recharts charts, Tweaks panel; built to `ui/static/dist/`, served on root-level browser routes. Regime is surfaced on `/regime`, Overview, Risk, Rankings, and Signals.
 - Indicator calculations (EMA, SMA, RSI, MACD, ATR) — deterministic, tested
 - Risk engine: drawdown stop, position limits, cash reservation, kill switch, approve mode
+- Position sync portfolio attribution: `sync_positions()` rebuilds broker positions with reconciled `portfolio_id`, tags unmatched rows as `unattributed`, logs attribution events, and the Positions page displays attribution/warning badges.
 - Sentiment: RSS lexicon + Claude LLM + mock providers, DB persistence, recency weighting
 - **3-state regime model** (`trader/regime/`): `RegimeEngine` with 4 pillars (Trend/Breadth/Volatility/Credit Stress), confidence-weighted composite score, asymmetric hysteresis state machine, DB persistence to `regime_snapshots`, restart recovery; `check_regime()` returns `RegimeState` backward-compatible with string comparisons
 - Strategy: SPY regime filter, legacy 4-factor `score_symbol()` (still used by equity bot `score_candidate`)
@@ -256,3 +258,4 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
   - New `api/routes/regime.py`: `GET /api/v1/regime/current` + `/history?days=30`.
   - `tests/test_regime.py`: 37 tests across 6 classes covering all pillars, state machine, backward compat, composite scoring. Total: 331 passing.
 - [2026-05-01] Frontend regime integration: added typed `api.getRegimeCurrent/getRegimeHistory`, `/regime` SPA page, sidebar nav, shared `RegimeSummaryCard`, and current-regime indicators on Overview, Risk, Rankings, and Signals. `/api/v1/regime/current` now returns configured per-state downstream effects for UI display.
+- [2026-05-01] Position sync portfolio reconciliation: `trader/sync.py::sync_positions()` now attributes IBKR positions via `TradeManagement` then recent orders, falls back to `unattributed`, skips zero quantity rows, and logs `sync_positions_reconciled` / `sync_unattributed_positions`. Risk caps and sector checks count unattributed positions conservatively; options count distinct option/combo symbols. `/api/v1/positions` and the Positions page now expose/show `portfolio_id`. Added `tests/test_sync.py`.

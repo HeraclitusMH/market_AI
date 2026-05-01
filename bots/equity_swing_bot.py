@@ -301,24 +301,42 @@ def _get_available_cash() -> float:
 
 
 def _count_equity_positions() -> int:
+    from sqlalchemy import and_, or_
     from common.models import Position
     with get_db() as db:
         return (
             db.query(Position)
-            .filter(Position.portfolio_id == "equity_swing")
+            .filter(
+                or_(
+                    Position.portfolio_id == "equity_swing",
+                    and_(
+                        Position.portfolio_id == "unattributed",
+                        Position.instrument == "stock",
+                    ),
+                )
+            )
             .count()
         )
 
 
 def _get_sector_values() -> dict:
-    """Sum of current equity_swing position market values by sector."""
+    """Sum equity position market values by sector, including unattributed stocks."""
+    from sqlalchemy import and_, or_
     from common.models import Position
     from common.models import Universe
     result: dict = {}
     with get_db() as db:
         positions = (
             db.query(Position)
-            .filter(Position.portfolio_id == "equity_swing")
+            .filter(
+                or_(
+                    Position.portfolio_id == "equity_swing",
+                    and_(
+                        Position.portfolio_id == "unattributed",
+                        Position.instrument == "stock",
+                    ),
+                )
+            )
             .all()
         )
         for pos in positions:

@@ -6,6 +6,7 @@ interface BadgeProps {
   children: React.ReactNode;
   variant?: BadgeVariant;
   dot?: boolean;
+  title?: string;
 }
 
 const DOT_COLORS: Record<BadgeVariant, string> = {
@@ -17,9 +18,9 @@ const DOT_COLORS: Record<BadgeVariant, string> = {
   solid: 'var(--bg-0)',
 };
 
-export function Badge({ children, variant = 'neutral', dot }: BadgeProps) {
+export function Badge({ children, variant = 'neutral', dot, title }: BadgeProps) {
   return (
-    <span className={`badge ${variant}`}>
+    <span className={`badge ${variant}`} title={title}>
       {dot && (
         <span
           className="badge-dot"

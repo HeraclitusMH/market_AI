@@ -24,6 +24,23 @@ const FILTERS = [
 const COLS: Column<Position>[] = [
   { key: 'symbol', header: 'Company', render: (r) => symbolCell(r) },
   { key: 'instrument', header: 'Type', render: (r) => <Badge variant="info">{r.instrument}</Badge> },
+  {
+    key: 'portfolio_id',
+    header: 'Portfolio',
+    render: (r) => (
+      <Badge
+        variant={r.portfolio_id === 'unattributed' ? 'warn' : 'neutral'}
+        dot={r.portfolio_id === 'unattributed'}
+        title={
+          r.portfolio_id === 'unattributed'
+            ? 'This position could not be matched to a bot. It counts against position limits until attributed.'
+            : undefined
+        }
+      >
+        {r.portfolio_id === 'unattributed' ? 'unattributed' : r.portfolio_id}
+      </Badge>
+    ),
+  },
   { key: 'quantity', header: 'Qty', numeric: true },
   { key: 'avg_cost', header: 'Avg Cost', numeric: true, render: (r) => fmtMoney(r.avg_cost) },
   { key: 'market_price', header: 'Price', numeric: true, render: (r) => fmtMoney(r.market_price) },
@@ -53,8 +70,8 @@ const COLS: Column<Position>[] = [
 
 function applyFilter(data: Position[], filter: Filter): Position[] {
   switch (filter) {
-    case 'equity': return data.filter((p) => p.instrument === 'STK');
-    case 'options': return data.filter((p) => p.instrument !== 'STK');
+    case 'equity': return data.filter((p) => p.instrument === 'stock');
+    case 'options': return data.filter((p) => p.instrument === 'option' || p.instrument === 'combo');
     case 'winners': return data.filter((p) => p.unrealized_pnl > 0);
     case 'losers': return data.filter((p) => p.unrealized_pnl < 0);
     default: return data;

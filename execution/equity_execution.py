@@ -167,11 +167,8 @@ def _check_equity_risk(intent) -> tuple[bool, str]:
             return False, "bot paused"
 
         # Per-bot position cap (equity_swing only)
-        pos_count = (
-            db.query(Position)
-            .filter(Position.portfolio_id == _PORTFOLIO_ID)
-            .count()
-        )
+        from trader.risk import _get_open_position_count
+        pos_count = _get_open_position_count(db, _PORTFOLIO_ID)
         if pos_count >= equity_cfg.max_positions:
             return False, f"equity_swing max_positions ({equity_cfg.max_positions}) reached"
 

@@ -39,6 +39,7 @@ class PositionOut(BaseModel):
     market_value: float
     unrealized_pnl: float
     instrument: str
+    portfolio_id: str
     updated_at: Optional[datetime] = None
 
     class Config:

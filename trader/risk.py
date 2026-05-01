@@ -14,6 +14,37 @@ from trader.strategy import SignalIntent
 log = get_logger(__name__)
 
 
+def _get_open_position_count(session, portfolio_id: str) -> int:
+    """Count portfolio positions plus conservative unattributed positions."""
+    from sqlalchemy import and_, func, or_
+
+    if portfolio_id == "equity_swing":
+        unattributed_instruments = ["stock"]
+        count_expr = func.count(Position.id)
+    elif portfolio_id == "options_swing":
+        unattributed_instruments = ["option", "combo"]
+        count_expr = func.count(func.distinct(Position.symbol))
+    else:
+        unattributed_instruments = []
+        count_expr = func.count(Position.id)
+
+    filters = [Position.portfolio_id == portfolio_id]
+    if unattributed_instruments:
+        filters.append(
+            and_(
+                Position.portfolio_id == "unattributed",
+                Position.instrument.in_(unattributed_instruments),
+            )
+        )
+
+    return (
+        session.query(count_expr)
+        .filter(or_(*filters))
+        .scalar()
+        or 0
+    )
+
+
 def get_bot_state() -> BotState:
     with get_db() as db:
         state = db.query(BotState).first()
@@ -77,7 +108,8 @@ def check_can_trade(intent: SignalIntent) -> Tuple[bool, str]:
             return False, f"Drawdown {latest_eq.drawdown_pct:.1f}% >= limit {cfg.risk.max_drawdown_pct}%"
 
         # Max positions
-        open_positions = db.query(Position).count()
+        portfolio_id = "equity_swing" if intent.instrument == "stock" else "options_swing"
+        open_positions = _get_open_position_count(db, portfolio_id)
         if open_positions >= cfg.risk.max_positions:
             return False, f"Max positions ({cfg.risk.max_positions}) reached"
 

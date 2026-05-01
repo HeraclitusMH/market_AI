@@ -69,10 +69,16 @@ def test_max_positions_check():
     from trader.risk import record_equity_snapshot
     record_equity_snapshot(100_000, 100_000, 0, 0)
 
-    # Add max positions
+    # Add max positions for the options portfolio. Options caps count distinct
+    # option/combo symbols, including unattributed option positions.
     with get_db() as db:
         for i in range(5):
-            db.add(Position(symbol=f"SYM{i}", quantity=100))
+            db.add(Position(
+                symbol=f"SYM{i}",
+                quantity=1,
+                instrument="option",
+                portfolio_id="options_swing",
+            ))
 
     intent = _make_intent()
     allowed, reason = check_can_trade(intent)

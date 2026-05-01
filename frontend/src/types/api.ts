@@ -24,6 +24,7 @@ export interface Position {
   market_value: number;
   unrealized_pnl: number;
   instrument: string;
+  portfolio_id: string;
   updated_at: string | null;
 }
 
