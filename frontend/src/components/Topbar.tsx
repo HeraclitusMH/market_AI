@@ -1,6 +1,7 @@
 import { useLocation } from 'react-router-dom';
 import { Bell, Search } from 'lucide-react';
 import { useBotStore } from '@/store/botStore';
+import { ThemeSwitch } from './ThemeSwitch';
 
 const PAGE_NAMES: Record<string, [string, string]> = {
   overview: ['Dashboard', 'Overview'],
@@ -36,6 +37,8 @@ export function Topbar() {
         <span>Search…</span>
         <kbd className="topbar-kbd">⌘K</kbd>
       </button>
+
+      <ThemeSwitch />
 
       <div className="pulse-pill" aria-label={`Data feed: ${isLive ? 'live' : 'offline'}`}>
         <span className={`pulse-dot${isLive ? '' : ' dead'}`} />

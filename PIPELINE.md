@@ -704,6 +704,17 @@ flowchart TD
 - **Trigger / cadence.** FastAPI request-driven (`api/main.py`).
 - **Core logic.** React SPA under `frontend/` powered by JSON endpoints in
   `api/v1/`; FastAPI serves the built assets from `ui/static/dist/`.
+- **Theme layer.** The dashboard has two visual themes with the same routes,
+  components, and density:
+  - Matrix is the default: no attribute on `<html>`, base
+    `frontend/src/styles/globals.css` applies unchanged.
+  - Dream mode sets `<html data-theme="dream">`; `frontend/src/theme-dream.css`
+    is loaded after the base CSS and scopes all overrides under
+    `[data-theme="dream"]`.
+  - `frontend/src/components/ThemeSwitch.tsx` lives in the topbar and uses
+    `frontend/src/hooks/useTheme.ts` to persist `market-ai-theme` in
+    `localStorage`, toggle the document attribute, and inject/remove the
+    `.dream-particles` layer. Switching themes must not remount route content.
 - **Outputs.** Control-plane mutations write to `BotState` (kill switch, pause,
   approve mode, options enabled) and to `orders` (approve / reject / close).
 
@@ -736,6 +747,7 @@ flowchart TD
 | `EquitySnapshot` | ORM row `(net_liquidation, cash, unrealized, realized, drawdown_pct)` | `trader/risk.py::record_equity_snapshot` | risk checks, equity bot cash math, UI | DB `equity_snapshots` | Peak NAV across all rows drives drawdown |
 | `BotState` | ORM row (singleton id=1) `(paused, kill_switch, options_enabled, approve_mode, last_heartbeat)` | startup / controls endpoint | risk gates, scheduler heartbeat | DB `bot_state` | Default `approve_mode=True` |
 | `EventLog` | ORM row `(level, type, message, payload_json)` | `log_event`, `_log_event` | UI `/overview`, debugging | DB `events_log` | Types include `startup, signal, order_submitted, risk_block, greeks_gate_reject, sentiment_refresh_success` |
+| `market-ai-theme` | localStorage string `matrix` or `dream` | `frontend/src/hooks/useTheme.ts` | `ThemeSwitch`, document root, dream particle layer | browser localStorage | Dream applies only via `<html data-theme="dream">`; Matrix removes the attribute |
 | `ContractVerificationCache` | ORM row `(symbol, verified, checked_at, conid, primary_exchange, reason)` | `verify_contract` | `get_verified_universe` | DB `contract_verification_cache` | TTL = `cfg.ranking.contract_cache_hours` (24h) |
 | `SymbolRanking` | ORM row `(ts, symbol, score_total, components_json, eligible, reasons_json)` | `_persist_rankings` | UI `/rankings`, `report last-run` | DB `symbol_rankings` | One batch per `ts` |
 | `SecurityMaster` | ORM row `(symbol PK, name, exchange, security_type, currency, active, market_cap, avg_dollar_volume_20d, options_eligible, ibkr_conid, updated_at)` | `trader/securities/master.py::import_csv` | `SecurityAlias` JOIN queries in matcher + RSS loader | DB `security_master` | Auto-seeded from `data/us_listed_master.csv` on first `create_tables()` |
