@@ -382,33 +382,88 @@ flowchart TD
 
 ---
 
-### Phase F — Per-Symbol Scoring (`score_symbol`) — Legacy / Secondary Path
+### Phase F — Exit Management
 
-- **Purpose.** Produce a weighted 4-factor score (trend / momentum / volatility /
-  sentiment) for a single symbol. Now used primarily by `EquitySwingBot.score_candidate`
-  and the legacy `generate_signals()` path. The composite ranking score from Phase E
-  is the primary driver of bot selection — Phase F refines the equity bot's per-candidate
-  `ScoreBreakdown` (adds ATR14, last_price for sizing).
-- **Trigger / cadence.** Called by `BaseBot.score_candidate` for each candidate
-  in a cycle; also by the legacy `generate_signals()` path.
-- **Upstream inputs.** Daily bars (cached), `get_latest_market_score()`,
-  `get_latest_sector_score(sector)`, regime from Phase D.
-- **Core logic** (`trader/strategy.py::score_symbol`):
-  - Trend (0–1): `+0.5` if EMA20>EMA50, `+0.5` if close>SMA200.
-  - Momentum (0–1): RSI bucketed (`<40 → 0.6`, `40–60 → 0.3`, `>60 → 0.1`),
-    plus `+0.4` if MACD histogram bullish.
-  - Volatility (0–1): bucketed on 20-day realised vol (`<15% → 1.0`, `<25 → 0.7`,
-    `<40 → 0.4`, else `0.1`).
-  - Sentiment (0–1): normalise average of market+sector scores from `-1..1` to `0..1`.
-  - `total = Σ weights[i] × factor[i]`.
-  - Direction label: `regime="risk_on" AND total>0.5 → long`;
-    `regime="risk_off" AND total<0.35 → bearish`; else `None` (hold/skip).
-- **Key parameters/config.** `cfg.strategy.weights.{trend,momentum,volatility,sentiment}`.
-- **Outputs/artifacts.** `Optional[SignalIntent]` wrapped by the bot into a
-  `ScoreBreakdown` (adds ATR14 + last_price for equity sizing).
-- **Downstream consumers.** `build_candidates` / `select_trades` of each bot.
-- **Decision gates.** `len(bars) < 50` or `compute_indicators` invalid → `None`.
-  Intent returned only when the `(regime, total)` thresholds match.
+- **Purpose.** Evaluate all open positions against a priority-ordered exit rule stack
+  and generate close orders **before** new entries are considered. This ensures capital
+  is freed and risk is managed before new positions are opened in the same cycle.
+- **Trigger / cadence.** `BaseBot._run_exit_phase(context)` — called automatically at
+  the start of every bot cycle, after ranking and before `build_candidates`. Gated by
+  `cfg.exits.enabled` (default `True`).
+- **Upstream inputs.**
+  - `TradeManagement` rows (DB) — one per open position, filtered by `portfolio_id`.
+  - Current market prices via `trader/market_data.fetch_bars(symbol, "1D")`.
+  - Current scores from `context.ranked` (list of `RankedSymbol`).
+  - `context.regime` (`risk_on` | `risk_off`).
+  - For options: IBKR `GreeksService` for spread mid-price, IV, and net delta.
+- **Core logic** (`trader/exits.py::ExitManager.evaluate_all_positions`):
+  1. Query all `TradeManagement` rows for the current `portfolio_id`.
+  2. For each position, run the instrument-specific rule stack in priority order.
+  3. First **full-exit** intent (not partial) stops rule evaluation.
+  4. Partial-profit intents (equity only) do not block subsequent full-exit rules.
+  5. Trailing stop update (equity) and regime-tighten side-effects run after the rule
+     stack when no full exit was triggered.
+  6. Persist state changes (trailing stop, `consecutive_below_threshold`, `days_held`,
+     `current_r_multiple`, high/low watermarks).
+  7. Return `List[ExitEvaluation]` — one per position.
+- **Equity exit rules** (priority order):
+  | Priority | Rule | Urgency |
+  |---|---|---|
+  | 0 | Hard stop hit | immediate (MKT) |
+  | 1 | Max holding days | normal (LMT) |
+  | 2 | Profit target (full — at `profit_target_r` R) | normal |
+  | 3 | Partial profit (at `partial_profit_r` R, fires once) | normal |
+  | 4 | Regime change exit (`regime_exit_action="close"`) | normal |
+  | 5 | Score degradation (N consecutive cycles below threshold) | end_of_day (MOC) |
+  | — | Trailing stop ratchet (management only; no order) | — |
+  | — | Regime tighten stop (side-effect; no order) | — |
+- **Options exit rules** (priority order):
+  | Priority | Rule | Urgency |
+  |---|---|---|
+  | 0 | Max loss stop (`loss_pct ≥ max_loss_exit_pct`) | immediate |
+  | 1 | DTE threshold (gamma risk) | immediate |
+  | 2 | Profit target (`profit_captured_pct ≥ threshold`) | normal |
+  | 3 | Regime change exit | normal |
+  | 4 | IV crush exit (vega edge eroded) | normal |
+  | 5 | Delta drift exit (thesis broken) | normal |
+  | 6 | Score degradation | end_of_day |
+  | 7 | Theta bleed (bleeding out with no recovery) | end_of_day |
+- **Key parameters/config.** `cfg.exits.*` (see `config.example.yaml`):
+  - Equity: `trailing_stop_enabled`, `trailing_activation_r`, `trailing_method`,
+    `trailing_atr_multiplier`, `profit_target_r`, `partial_profit_r`, `score_exit_threshold`,
+    `regime_exit_action`, `max_holding_days`.
+  - Options: `dte_exit_threshold`, `profit_target_pct`, `max_loss_exit_pct`,
+    `iv_crush_threshold`, `max_delta_drift`, `theta_bleed_threshold`.
+- **Outputs/artifacts.**
+  - `ExitEvaluation` list (in-memory) — consumed immediately by `_run_exit_phase`.
+  - `Order` rows for close orders (status `pending_approval` | `submitted`).
+  - Updated `TradeManagement` rows (stop ratchets, partial quantity reduction,
+    `partial_profit_taken`, `consecutive_below_threshold`).
+  - On full exit: `TradeManagement` row is deleted.
+  - `events_log` entries: `equity_exit_submitted`, `equity_exit_pending_approval`,
+    `options_exit_submitted`, `options_exit_pending_approval`, `equity_exit_failed`,
+    `options_exit_failed`.
+- **Decision gates.**
+  - `cfg.exits.enabled = false` → entire phase skipped.
+  - Price unavailable → position skipped with a warning; no exit generated.
+    Exception: if `days_held > max_holding_days + 3`, a CRITICAL log is emitted for
+    human intervention.
+  - Options spread value = 0 (worthless) → no close order submitted; position awaits expiry.
+  - `approve=True` → close orders written as `pending_approval` (same as entries).
+  - `dry_run=True` → close intents logged but no orders written.
+- **TradeManagement lifecycle:**
+  - **Created:** in `execution/equity_execution.py::_create_trade_management` immediately
+    after an equity order is persisted (`place_equity_order`). For options, the caller
+    should create the row after `execute_signal` confirms order placement (see Section 11
+    of the implementation spec for the options path).
+  - **Updated:** every cycle by `ExitManager._evaluate_equity/options`.
+  - **Deleted:** on full exit via `EquitySwingBot.execute_exit_intent` or
+    `OptionsSwingBot.execute_exit_intent`.
+- **Failure modes.**
+  - Exception in rule evaluation for one position → session rollback, log error,
+    continue with next position.
+  - IBKR unreachable during exit → spread value / IV / delta are `None`; rules that
+    require these inputs are skipped gracefully.
 
 ---
 
@@ -685,13 +740,14 @@ flowchart TD
 1. `check_regime(client)` → `"risk_on"|"risk_off"` (errors demoted to `risk_off`).
 2. `get_verified_universe(client)` → `List[UniverseItem]`.
 3. `rank_symbols(universe)` → `List[RankedSymbol]` + DB write.
-4. `build_candidates(context)` → bot-specific filter.
-5. For each candidate: `score_candidate` (returns `None` → skipped with reason).
-6. Sort scored by `final_score` desc; `select_trades` → `List[TradeIntent]`.
-7. For each intent:
+4. **`_run_exit_phase(context)`** → evaluate + execute exits for all open positions (Phase F).
+5. `build_candidates(context)` → bot-specific filter.
+6. For each candidate: `score_candidate` (returns `None` → skipped with reason).
+7. Sort scored by `final_score` desc; `select_trades` → `List[TradeIntent]`.
+8. For each intent:
    - `dry_run=True` → log only, count as executed.
    - Else → `execute_intent(intent, context)` (per-bot: plan+execute or place_equity_order).
-8. Produce `BotRunResult` with counts and errors.
+9. Produce `BotRunResult` with counts and errors.
 
 ### State carried across cycles
 
@@ -883,10 +939,12 @@ If the `/sentiment` dashboard shows market/sector rows but no ticker rows:
      only. Needs an explicit IBKR close routine before "close_all" lives up to
      its name.
 
-5. **Equity `exit_threshold` (0.45) and `max_holding_days` are declared but not
-   wired.** No exit / trailing-stop loop exists.
-   - *How to verify:* `grep -R "exit_threshold\|max_holding_days" trader/ bots/ execution/`
-     — only config reads; no caller acts on the value.
+5. ~~**Equity `exit_threshold` (0.45) and `max_holding_days` are declared but not
+   wired.**~~ **RESOLVED** — `trader/exits.py::ExitManager` implements the full exit rule
+   stack (trailing stop, max holding days, profit target, partial profit, regime change,
+   score degradation). `BaseBot._run_exit_phase()` calls it each cycle before new entries.
+   `TradeManagement` table tracks open-position lifecycle. `cfg.exits.*` governs all
+   exit parameters (see `config.example.yaml`).
 
 6. **EUR/USD FX conversion is missing** across risk / budget math (budget is
    computed in EUR while broker flow is USD).

@@ -197,6 +197,43 @@ class EquitySwingBot(BaseBot):
         from execution.equity_execution import place_equity_order
         return place_equity_order(intent, context.client, context.approve)
 
+    def execute_exit_intent(self, exit_intent, context: BotContext) -> None:
+        from common.db import get_db
+        from common.models import TradeManagement
+        from execution.equity_execution import close_equity_position
+
+        with get_db() as session:
+            order = close_equity_position(
+                symbol=exit_intent.symbol,
+                quantity=exit_intent.quantity,
+                direction=exit_intent.direction,
+                urgency=exit_intent.urgency,
+                limit_price=exit_intent.limit_price,
+                client=context.client,
+                session=session,
+                approve=context.approve,
+                exit_rule=exit_intent.exit_rule,
+                exit_reason=exit_intent.exit_reason,
+                management_id=exit_intent.management_id,
+            )
+            if order is None:
+                return
+
+            tm = (
+                session.query(TradeManagement).get(exit_intent.management_id)
+                if exit_intent.management_id else None
+            )
+            if tm is None:
+                return
+
+            if exit_intent.is_partial:
+                tm.current_quantity = max(0, tm.current_quantity - exit_intent.quantity)
+                tm.partial_profit_taken = True
+                if exit_intent.metadata.get("move_stop_to_breakeven"):
+                    tm.current_stop = tm.entry_price
+            else:
+                session.delete(tm)
+
     def run(
         self,
         mode: str = "paper",

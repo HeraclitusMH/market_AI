@@ -101,6 +101,33 @@ class OptionsSwingBot(BaseBot):
 
         return intents[:cfg.risk.max_positions]
 
+    def execute_exit_intent(self, exit_intent, context: BotContext) -> None:
+        from common.db import get_db
+        from common.models import TradeManagement
+        from trader.execution import close_options_spread
+
+        with get_db() as session:
+            order = close_options_spread(
+                symbol=exit_intent.symbol,
+                management_id=exit_intent.management_id,
+                quantity=exit_intent.quantity,
+                urgency=exit_intent.urgency,
+                limit_price=exit_intent.limit_price,
+                client=context.client,
+                session=session,
+                approve=context.approve,
+                exit_rule=exit_intent.exit_rule,
+                exit_reason=exit_intent.exit_reason,
+            )
+            if order is None:
+                return
+            tm = (
+                session.query(TradeManagement).get(exit_intent.management_id)
+                if exit_intent.management_id else None
+            )
+            if tm is not None:
+                session.delete(tm)
+
     def execute_intent(self, intent: TradeIntent, context: BotContext) -> Optional[str]:
         """Plan + optionally execute via the full options pipeline."""
         from trader.options_planner import plan_trade

@@ -60,6 +60,8 @@ class BotContext:
     dry_run: bool
     approve: bool
     mode: str                 # "paper" | "live"
+    now: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    portfolio_id: Optional[str] = None
 
 
 @dataclass
@@ -114,6 +116,50 @@ class BaseBot(ABC):
     ) -> Optional[str]:
         """Execute or queue a single trade intent. Returns intent_id or None."""
 
+    def execute_exit_intent(self, exit_intent: Any, context: BotContext) -> None:
+        """Execute a single ExitIntent. Subclasses override for instrument-specific logic."""
+
+    def _run_exit_phase(self, context: BotContext) -> None:
+        """Evaluate and execute exit intents for all open positions."""
+        from common.config import get_config
+        from common.db import get_db
+
+        cfg = get_config()
+        if not cfg.exits.enabled:
+            return
+
+        try:
+            from trader.exits import ExitManager
+            with get_db() as session:
+                mgr = ExitManager(cfg.exits, session, context.client)
+                evaluations = mgr.evaluate_all_positions(context)
+
+                exit_intents = []
+                for ev in evaluations:
+                    if ev.should_exit:
+                        exit_intents.extend(ev.exit_intents)
+
+                exit_intents.sort(key=lambda ei: ei.priority)
+
+                for ei in exit_intents:
+                    try:
+                        if not context.dry_run:
+                            self.execute_exit_intent(ei, context)
+                        else:
+                            log.info(
+                                "[%s] DRY-RUN exit: %s rule=%s qty=%d",
+                                self.bot_id, ei.symbol, ei.exit_rule, ei.quantity,
+                            )
+                    except Exception as exc:
+                        log.error("[%s] Exit execution failed for %s: %s", self.bot_id, ei.symbol, exc)
+
+            log.info(
+                "[%s] Exit phase: %d positions checked, %d exits triggered",
+                self.bot_id, len(evaluations), len(exit_intents),
+            )
+        except Exception as exc:
+            log.error("[%s] Exit phase failed: %s", self.bot_id, exc)
+
     def run(
         self,
         mode: str = "paper",
@@ -160,7 +206,12 @@ class BaseBot(ABC):
             dry_run=dry_run,
             approve=approve,
             mode=mode,
+            now=datetime.now(timezone.utc),
+            portfolio_id=getattr(self, "bot_id", None),
         )
+
+        # === PHASE: EXIT MANAGEMENT (runs before new entries) ===
+        self._run_exit_phase(context)
 
         candidates = self.build_candidates(context)
         log.info(

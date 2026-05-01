@@ -298,6 +298,58 @@ class FundamentalsConfig(BaseModel):
         return v
 
 
+class EquityExitConfig(BaseModel):
+    trailing_stop_enabled: bool = True
+    initial_stop_method: str = "atr"
+    atr_stop_multiplier: float = 2.0
+    trailing_activation_r: float = 1.0
+    trailing_method: str = "atr"
+    trailing_atr_multiplier: float = 1.5
+    trailing_percent: float = 0.05
+    stop_never_moves_down: bool = True
+    max_holding_days: int = 20
+    time_decay_warning_days: int = 15
+    profit_target_enabled: bool = True
+    profit_target_r: float = 3.0
+    partial_profit_enabled: bool = True
+    partial_profit_r: float = 2.0
+    partial_profit_pct: float = 0.50
+    score_exit_enabled: bool = True
+    score_exit_threshold: float = 0.40
+    score_exit_consecutive_cycles: int = 2
+    regime_exit_enabled: bool = True
+    regime_exit_action: str = "tighten"   # "tighten" | "close"
+    regime_tighten_atr_multiplier: float = 1.0
+    sector_exit_on_sentiment_flip: bool = False
+
+
+class OptionsExitConfig(BaseModel):
+    dte_exit_threshold: int = 7
+    dte_warning_threshold: int = 14
+    profit_target_pct: float = 0.50
+    profit_target_aggressive_pct: float = 0.75
+    max_loss_exit_pct: float = 0.80
+    max_loss_floor_pct: float = 1.00
+    time_decay_exit_enabled: bool = True
+    theta_bleed_threshold: float = 0.60
+    score_exit_enabled: bool = True
+    score_exit_threshold: float = 0.40
+    score_exit_consecutive_cycles: int = 2
+    regime_exit_enabled: bool = True
+    regime_exit_action: str = "close"
+    delta_drift_exit_enabled: bool = True
+    max_delta_drift: float = 0.15
+    iv_crush_exit_enabled: bool = True
+    iv_crush_threshold: float = 0.30
+
+
+class ExitConfig(BaseModel):
+    enabled: bool = True
+    check_frequency: str = "every_cycle"
+    equity: EquityExitConfig = EquityExitConfig()
+    options: OptionsExitConfig = OptionsExitConfig()
+
+
 class SentimentConfig(BaseModel):
     provider: str = "rss_lexicon"  # rss_lexicon | claude_llm
     refresh_minutes: int = 60
@@ -333,6 +385,7 @@ class AppConfig(BaseModel):
     fundamentals: FundamentalsConfig = FundamentalsConfig()
     bots: BotsConfig = BotsConfig()
     securities: SecuritiesConfig = SecuritiesConfig()
+    exits: ExitConfig = ExitConfig()
     dry_run: bool = False
 
     @field_validator("mode")

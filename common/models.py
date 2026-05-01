@@ -293,3 +293,57 @@ class RssEntityMatch(Base):
     match_score = Column(Float, nullable=True)
     reason = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
+
+
+class TradeManagement(Base):
+    """Lifecycle state for each open position used by the exit manager.
+
+    One row per open position. Created on order placement, deleted on full close.
+    """
+    __tablename__ = "trade_management"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    symbol = Column(String(20), nullable=False, index=True)
+    portfolio_id = Column(String(30), nullable=False)     # "equity_swing" | "options_swing"
+    instrument_type = Column(String(20), nullable=False)  # "equity" | "debit_spread"
+
+    # Entry metadata (set once at open)
+    entry_price = Column(Float, nullable=False)           # avg fill / debit paid
+    entry_date = Column(DateTime, nullable=False)
+    entry_atr = Column(Float, nullable=True)              # ATR14 at entry (equity)
+    entry_score = Column(Float, nullable=True)            # composite score at entry
+    entry_regime = Column(String(20), nullable=True)      # "risk_on" | "risk_off"
+    direction = Column(String(10), nullable=False)        # "long" | "short"
+    quantity = Column(Integer, nullable=False)            # original quantity
+    current_quantity = Column(Integer, nullable=False)    # after partial exits
+
+    # Risk parameters
+    initial_stop = Column(Float, nullable=False)
+    current_stop = Column(Float, nullable=False)
+    risk_per_share = Column(Float, nullable=False)        # entry_price - initial_stop (1R)
+
+    # Tracking (updated every cycle)
+    highest_price_since_entry = Column(Float, nullable=True)
+    lowest_price_since_entry = Column(Float, nullable=True)
+    current_r_multiple = Column(Float, nullable=True)
+    trailing_activated = Column(Boolean, default=False)
+    partial_profit_taken = Column(Boolean, default=False)
+    days_held = Column(Integer, default=0)
+    consecutive_below_threshold = Column(Integer, default=0)
+
+    # Options-specific fields
+    entry_iv = Column(Float, nullable=True)
+    entry_net_delta = Column(Float, nullable=True)
+    expiry_date = Column(DateTime, nullable=True)
+    long_strike = Column(Float, nullable=True)
+    short_strike = Column(Float, nullable=True)
+    spread_width = Column(Float, nullable=True)
+    max_profit = Column(Float, nullable=True)
+    max_loss = Column(Float, nullable=True)
+
+    # Linkage
+    intent_id = Column(String(64), nullable=True, index=True)
+    order_id = Column(Integer, nullable=True)
+
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)

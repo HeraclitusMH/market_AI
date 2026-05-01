@@ -312,3 +312,151 @@ def execute_signal(intent: SignalIntent, client: IBKRClient | None = None) -> Op
         log.error("Failed to place order for %s: %s", intent.symbol, e)
         log_event("ERROR", "order_failed", f"Failed to place {intent.symbol}: {e}", order_payload)
         return None
+
+
+def close_options_spread(
+    symbol: str,
+    management_id: int,
+    quantity: int,
+    urgency: str,
+    limit_price: Optional[float],
+    client,
+    session,
+    approve: bool,
+    exit_rule: str,
+    exit_reason: str,
+) -> Optional[Order]:
+    """Close a debit spread by selling the spread (reversing the entry combo).
+
+    Looks up TradeManagement for the leg details, then builds the reverse BAG order.
+    """
+    from common.models import TradeManagement
+
+    tm = session.query(TradeManagement).get(management_id)
+    if tm is None:
+        log.error("TradeManagement id=%d not found for %s", management_id, symbol)
+        return None
+
+    # Options with no remaining value: let them expire rather than submit a zero-credit order
+    if limit_price is not None and limit_price <= 0:
+        log.info("[options] %s spread appears worthless — letting expire.", symbol)
+        return None
+
+    date_str = utcnow().strftime("%Y%m%d")
+    intent_id = f"{symbol}_exit_spread_{date_str}_{uuid.uuid4().hex[:8]}"
+
+    if _is_duplicate_intent_in_session(intent_id, session):
+        return None
+
+    order_type = "MKT" if urgency == "immediate" else "LMT"
+    payload = {
+        "exit_rule": exit_rule,
+        "exit_reason": exit_reason,
+        "long_strike": tm.long_strike,
+        "short_strike": tm.short_strike,
+        "expiry": tm.expiry_date.strftime("%Y%m%d") if tm.expiry_date else None,
+        "urgency": urgency,
+        "is_exit": True,
+    }
+    order = Order(
+        intent_id=intent_id,
+        symbol=symbol,
+        direction=f"close_{tm.direction}",
+        instrument=f"close_{'bull_call_spread' if tm.direction == 'long' else 'bear_put_spread'}",
+        portfolio_id="options_swing",
+        quantity=quantity,
+        order_type=order_type,
+        limit_price=limit_price,
+        status="pending_approval" if approve else "submitted",
+        max_loss=0.0,
+        payload_json=json.dumps(payload),
+    )
+    session.add(order)
+
+    if not approve and client is not None:
+        try:
+            combo_contract, ib_order = _build_closing_combo_order(
+                symbol=symbol,
+                long_strike=tm.long_strike,
+                short_strike=tm.short_strike,
+                expiry=tm.expiry_date,
+                direction=tm.direction,
+                quantity=quantity,
+                order_type=order_type,
+                limit_price=limit_price,
+                client=client,
+            )
+            trade = client.place_order(combo_contract, ib_order)
+            session.flush()
+            order.ibkr_order_id = trade.order.orderId if trade else None
+            order.status = "submitted"
+            log_event("INFO", "options_exit_submitted", f"{symbol}: {exit_rule}",
+                      {"intent_id": intent_id, "exit_reason": exit_reason})
+        except Exception as e:
+            log.error("[options] Failed to submit exit for %s: %s", symbol, e)
+            order.status = "failed"
+            log_event("ERROR", "options_exit_failed", str(e), {"symbol": symbol})
+    else:
+        log_event("INFO", "options_exit_pending_approval", f"{symbol}: {exit_rule}",
+                  {"intent_id": intent_id})
+
+    return order
+
+
+def _build_closing_combo_order(
+    symbol: str,
+    long_strike: float,
+    short_strike: float,
+    expiry,
+    direction: str,
+    quantity: int,
+    order_type: str,
+    limit_price: Optional[float],
+    client,
+):
+    """Build the reverse IBKR BAG combo to close a debit spread.
+
+    Entry: BUY long leg + SELL short leg.
+    Close: SELL long leg + BUY short leg.
+    """
+    right = "C" if direction == "long" else "P"
+    expiry_str = expiry.strftime("%Y%m%d") if expiry else ""
+
+    long_opt = Option(symbol, expiry_str, long_strike, right, "SMART")
+    short_opt = Option(symbol, expiry_str, short_strike, right, "SMART")
+    long_opt = client.qualify_contract(long_opt)
+    short_opt = client.qualify_contract(short_opt)
+
+    combo = Contract()
+    combo.symbol = symbol
+    combo.secType = "BAG"
+    combo.exchange = "SMART"
+    combo.currency = "USD"
+
+    leg1 = ComboLeg()
+    leg1.conId = long_opt.conId
+    leg1.ratio = 1
+    leg1.action = "SELL"
+    leg1.exchange = "SMART"
+
+    leg2 = ComboLeg()
+    leg2.conId = short_opt.conId
+    leg2.ratio = 1
+    leg2.action = "BUY"
+    leg2.exchange = "SMART"
+
+    combo.comboLegs = [leg1, leg2]
+
+    ib_order = IBOrder()
+    ib_order.action = "SELL"  # Selling the spread = receiving a credit
+    ib_order.orderType = order_type
+    ib_order.totalQuantity = quantity
+    if order_type == "LMT" and limit_price:
+        ib_order.lmtPrice = round(limit_price, 2)
+    ib_order.tif = "DAY"
+
+    return combo, ib_order
+
+
+def _is_duplicate_intent_in_session(intent_id: str, session) -> bool:
+    return session.query(Order).filter(Order.intent_id == intent_id).first() is not None
