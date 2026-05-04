@@ -3,16 +3,21 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from common.config import get_config
+import common.config
+from common.config import SentimentConfig, get_config
 
 router = APIRouter(tags=["v1"])
 
 
 class ConfigResponse(BaseModel):
     sections: Dict[str, Dict[str, Any]]
+
+
+class SentimentProviderUpdate(BaseModel):
+    provider: str
 
 
 @router.get("/config", response_model=ConfigResponse)
@@ -55,6 +60,14 @@ def get_config_view():
             "neutral_score": cfg.fundamentals.neutral_score,
             "min_coverage": cfg.fundamentals.min_coverage,
         },
+        "Sentiment": {
+            "provider": cfg.sentiment.provider,
+            "refresh_minutes": cfg.sentiment.refresh_minutes,
+            "routine_source_type": cfg.sentiment.routine.source_type,
+            "routine_local_path": cfg.sentiment.routine.local_path,
+            "routine_max_staleness_hours": cfg.sentiment.routine.max_staleness_hours,
+            "claude_model": cfg.sentiment.claude.model,
+        },
         "Risk": {
             "max_drawdown_pct": cfg.risk.max_drawdown_pct,
             "max_risk_per_trade_pct": cfg.risk.max_risk_per_trade_pct,
@@ -74,3 +87,18 @@ def get_config_view():
         },
     }
     return ConfigResponse(sections=sections)
+
+
+@router.post("/config/sentiment/provider")
+def set_sentiment_provider(update: SentimentProviderUpdate):
+    cfg = get_config()
+    try:
+        next_sentiment = SentimentConfig(
+            **cfg.sentiment.model_dump(exclude={"provider"}),
+            provider=update.provider,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    common.config._cached = cfg.model_copy(update={"sentiment": next_sentiment})
+    return {"ok": True, "provider": next_sentiment.provider}

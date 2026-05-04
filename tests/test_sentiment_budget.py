@@ -78,8 +78,8 @@ def test_daily_cap_triggers_stop():
 def test_monthly_cap_triggers_stop_even_if_daily_ok():
     from common.db import get_db
     # Spread spend across older days so daily is 0 but month exceeds cap.
-    _seed_usage(9.0, when=utcnow() - timedelta(days=5))
-    _seed_usage(1.5, when=utcnow() - timedelta(days=3))   # still in month
+    _seed_usage(9.0, when=utcnow() - timedelta(days=2))
+    _seed_usage(1.5, when=utcnow() - timedelta(days=1))   # still in month
     with get_db() as db:
         st = budget_mod.get_status(
             db, monthly_budget_eur=10.0, daily_budget_fraction=0.99,

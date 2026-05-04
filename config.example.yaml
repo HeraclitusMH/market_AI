@@ -219,7 +219,7 @@ exits:
     iv_crush_threshold: 0.30
 
 sentiment:
-  provider: "rss_lexicon"         # rss_lexicon | claude_llm
+  provider: "rss_lexicon"         # rss_lexicon | claude_llm | claude_routine | mock
   refresh_minutes: 60
 
   rss:
@@ -265,6 +265,13 @@ sentiment:
     hard_stop_on_budget: true
     daily_budget_fraction: 0.12
     max_tokens_per_item_estimate: 300
+
+  routine:
+    source_type: "local"          # local | github
+    local_path: "data/sentiment_output.json"
+    github_raw_url: ""            # e.g. https://raw.githubusercontent.com/user/repo/main/data/sentiment_output.json
+    github_token_env: "GITHUB_TOKEN"
+    max_staleness_hours: 8.0      # routine runs 5x/day; reject stale output
 
 regime:
   enabled: true

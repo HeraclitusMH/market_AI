@@ -243,6 +243,11 @@ export interface ConfigData {
   sections: Record<string, Record<string, unknown>>;
 }
 
+export interface SentimentProviderUpdateResponse {
+  ok: boolean;
+  provider: string;
+}
+
 export interface ControlResponse {
   ok: boolean;
   bot: BotState;

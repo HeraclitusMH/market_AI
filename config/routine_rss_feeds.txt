@@ -1,0 +1,5 @@
+https://feeds.reuters.com/reuters/businessNews
+https://feeds.reuters.com/reuters/marketsNews
+https://www.cnbc.com/id/100003114/device/rss/rss.html
+https://feeds.bloomberg.com/markets/news.rss
+https://seekingalpha.com/market_currents.xml

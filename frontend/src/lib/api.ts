@@ -1,7 +1,7 @@
 import type {
   BotState, OverviewData, Position, Order, Fill, Signal,
   SentimentData, RiskData, RankingRow, PlanRow, ConfigData, ControlResponse,
-  RegimeCurrent, RegimeHistoryRow,
+  RegimeCurrent, RegimeHistoryRow, SentimentProviderUpdateResponse,
 } from '@/types/api';
 
 const BASE = '/api/v1';
@@ -36,6 +36,8 @@ export const api = {
   getRegimeCurrent: () => get<RegimeCurrent>('/regime/current'),
   getRegimeHistory: (days = 30) => get<RegimeHistoryRow[]>(`/regime/history?days=${days}`),
   getConfig:      () => get<ConfigData>('/config'),
+  setSentimentProvider: (provider: string) =>
+    post<SentimentProviderUpdateResponse>('/config/sentiment/provider', { provider }),
 
   postControl: (action: string) => post<ControlResponse>(`/controls/${action}`),
   refreshSentiment: () => post<{ status: string; snapshots_written: number; reason: string }>(

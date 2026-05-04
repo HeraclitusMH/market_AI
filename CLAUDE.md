@@ -19,7 +19,7 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **`ui/`** — `static/dist/` built React SPA output
 - **`frontend/`** — React 18 + Vite + TypeScript + Tailwind SPA. Build output goes to `ui/static/dist/`. Dev server on port 5173 proxies `/api` to FastAPI.
 - **`scripts/`** — `init_db.py` (DB setup), `run_all.py` (starts API + trader as subprocesses)
-- **`data/`** — `sp500.csv` (~180 S&P 500 stocks with symbol/name/sector); `us_listed_master.csv` (~220 major US stocks seed for security master); `manual_alias_overrides.csv` (manual priority-1 aliases)
+- **`data/`** — `sp500.csv` (~180 S&P 500 stocks with symbol/name/sector); `us_listed_master.csv` (~220 major US stocks seed for security master); `manual_alias_overrides.csv` (manual priority-1 aliases); `seen_articles.json` + `sentiment_output.json` (Claude Routine sentiment contract files)
 - **`cli.py`** — unified Click CLI entry point
 
 ### Key Design Decisions
@@ -43,7 +43,7 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **DTE config unification** — canonical planner DTE lives in `cfg.options.planner_dte_{min,max,target,fallback_min}`. `cfg.ranking.dte_*` kept for backward compat with deprecation comment.
 - **Cash reservation** — before placing any order, cash equal to max loss is reserved; trade blocked if insufficient.
 - **Approve mode defaults ON** — signals saved to DB as `pending_approval`; orders not submitted until disabled.
-- **Sentiment** — pluggable `SentimentProvider` ABC. Providers: `rss_lexicon`, `claude_llm`, `mock`. Shared by both bots. Sentiment is one input to the composite score (not the only input).
+- **Sentiment** — pluggable `SentimentProvider` ABC. Providers: `rss_lexicon`, `claude_llm`, `claude_routine`, `mock`. Shared by both bots. Sentiment is one input to the composite score (not the only input). `claude_routine` is a pure reader for pre-computed scores in `data/sentiment_output.json` (local path or GitHub raw URL); it does no NLP/API work and never writes `data/seen_articles.json`.
 - **No paid APIs** — core universe seeded from embedded SEED_TICKERS (~50 tickers) + RSS-discovered tickers (verified via IBKR). `data/sp500.csv` exists as reference but is not yet auto-ingested into the universe builder.
 
 ### Patterns & Conventions
@@ -114,7 +114,8 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 ### Sentiment
 - **Factory + refresh** → `trader/sentiment/factory.py` (`refresh_and_store()`, serialised by lock)
 - **Scoring getters** → `trader/sentiment/scoring.py` (`get_latest_market_score()`, `get_latest_sector_score()`, `get_latest_ticker_score()`)
-- **Providers** → `trader/sentiment/rss_provider.py`, `claude_provider.py`, `mock_provider.py`
+- **Providers** → `trader/sentiment/rss_provider.py`, `claude_provider.py`, `routine_provider.py`, `mock_provider.py`
+- **Claude Routine files** → `data/sentiment_output.json` (bot reads scores), `data/seen_articles.json` (external routine owns dedup), `config/routine_rss_feeds.txt` (routine feed list)
 - **Budget cap** → `trader/sentiment/budget.py` (hard €10/mo cap; failures must NOT fall back to lexicon)
 
 ### Security Master (company-name → ticker)
@@ -170,7 +171,7 @@ pnpm test                        # Run vitest smoke tests (11 tests)
 
 # Unified CLI (new)
 python cli.py fundamentals refresh [--symbol AAPL]   # weekly bulk; --symbol for one
-python cli.py sentiment refresh [--source rss_lexicon|claude_llm] [--dry-run]
+python cli.py sentiment refresh [--source rss_lexicon|claude_llm|claude_routine|mock] [--dry-run]
 python cli.py run options_swing --mode paper --dry-run
 python cli.py run equity_swing  --mode paper --approve
 python cli.py run all           --mode live  --once        # single cycle + exit
@@ -195,7 +196,7 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 - Indicator calculations (EMA, SMA, RSI, MACD, ATR) — deterministic, tested
 - Risk engine: drawdown stop, position limits, cash reservation, kill switch, approve mode
 - Position sync portfolio attribution: `sync_positions()` rebuilds broker positions with reconciled `portfolio_id`, tags unmatched rows as `unattributed`, logs attribution events, and the Positions page displays attribution/warning badges.
-- Sentiment: RSS lexicon + Claude LLM + mock providers, DB persistence, recency weighting
+- Sentiment: RSS lexicon + Claude LLM + Claude Routine + mock providers, DB persistence, recency weighting. `claude_routine` reads pre-computed routine output, clamps invalid scores, warns near staleness, returns `status="stale"` without writing new snapshots when output is too old, and degrades gracefully on missing/unparseable files.
 - **3-state regime model** (`trader/regime/`): `RegimeEngine` with 4 pillars (Trend/Breadth/Volatility/Credit Stress), confidence-weighted composite score, asymmetric hysteresis state machine, DB persistence to `regime_snapshots`, restart recovery; `check_regime()` returns `RegimeState` backward-compatible with string comparisons
 - Strategy: SPY regime filter, legacy 4-factor `score_symbol()` (still used by equity bot `score_candidate`)
 - **7-factor composite scoring** (`trader/composite_scorer/` + `trader/ranking.py`): [0,1] score per symbol from Quality, Value, Momentum, Growth, Sentiment, Technical Structure, and subtractive Risk Penalty; regime weights adapt via `RegimeDetector`; liquidity remains an eligibility gate only
@@ -208,7 +209,7 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 - Unified CLI with continuous and single-cycle modes
 - **Security master** (`trader/securities/`): company-name→ticker deterministic matching
 - **Exit management** (`trader/exits.py`): `ExitManager` with 8 equity + 8 options rules; `TradeManagement` table tracks open-position lifecycle; `BaseBot._run_exit_phase()` fires before new entries each cycle
-- 331 pytest tests passing (37 new regime tests)
+- 359 pytest tests passing (37 regime tests plus routine sentiment coverage)
 
 ### Not Yet Tested End-to-End
 - Live IBKR connection (requires TWS/Gateway running)
@@ -263,3 +264,4 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 - [2026-05-01] Frontend regime integration: added typed `api.getRegimeCurrent/getRegimeHistory`, `/regime` SPA page, sidebar nav, shared `RegimeSummaryCard`, and current-regime indicators on Overview, Risk, Rankings, and Signals. `/api/v1/regime/current` now returns configured per-state downstream effects for UI display.
 - [2026-05-01] Position sync portfolio reconciliation: `trader/sync.py::sync_positions()` now attributes IBKR positions via `TradeManagement` then recent orders, falls back to `unattributed`, skips zero quantity rows, and logs `sync_positions_reconciled` / `sync_unattributed_positions`. Risk caps and sector checks count unattributed positions conservatively; options count distinct option/combo symbols. `/api/v1/positions` and the Positions page now expose/show `portfolio_id`. Added `tests/test_sync.py`.
 - [2026-05-01] Dashboard dual-theme toggle: added topbar `ThemeSwitch`, `useTheme()` persistence, and scoped `frontend/src/theme-dream.css`. Matrix remains the no-attribute default; Dream mode uses `<html data-theme="dream">`, per-route mantras, fixed aura/mandala backgrounds, and a JS `.dream-particles` layer that is removed on switch-back. Dream readability was tuned upward after review. Verified with frontend build and 14 Vitest tests.
+- [2026-05-04] Claude Routine sentiment provider: added `trader/sentiment/routine_provider.py`, `SentimentRoutineConfig`, factory stale handling, routine contract files (`data/sentiment_output.json`, `data/seen_articles.json`, `config/routine_rss_feeds.txt`), and tests. Config page now has a runtime sentiment modality switch (RSS / Claude LLM / Routine / Mock). Verified with 359 pytest tests, Config vitest, and TypeScript build.

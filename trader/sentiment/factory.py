@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 from typing import Optional
 
@@ -41,6 +42,18 @@ def build_provider(cfg: Optional[AppConfig] = None, *, use_mock: bool = False) -
             claude_cfg=cfg.sentiment.claude,
             rss_cfg=cfg.sentiment.rss,
         )
+    if name == "claude_routine":
+        from trader.sentiment.routine_provider import RoutineProvider
+        routine = cfg.sentiment.routine
+        return RoutineProvider(
+            source_type=routine.source_type,
+            github_raw_url=routine.github_raw_url,
+            local_path=routine.local_path,
+            max_staleness_hours=routine.max_staleness_hours,
+            github_token=os.environ.get(routine.github_token_env),
+        )
+    if name == "mock":
+        return MockProvider()
     # default / rss_lexicon
     return RSSProvider(feeds=cfg.sentiment.rss.feeds)
 
@@ -89,17 +102,43 @@ def refresh_and_store(provider: Optional[SentimentProvider] = None) -> dict:
         # RSS lexicon path
         results = []
         try:
-            results.append(provider.fetch_market_sentiment())
+            market_result = provider.fetch_market_sentiment()
+            if market_result is not None:
+                results.append(market_result)
         except Exception as e:
+            if e.__class__.__name__ == "StaleDataError":
+                log.warning("Sentiment refresh skipped due to stale provider data: %s", e)
+                return {
+                    "status": "stale",
+                    "reason": str(e),
+                    "provider": cfg.sentiment.provider,
+                    "snapshots_written": 0,
+                }
             log.error("Market sentiment fetch failed: %s", e)
         try:
-            results.extend(provider.fetch_sector_sentiment())
+            results.extend([r for r in provider.fetch_sector_sentiment() if r is not None])
         except Exception as e:
+            if e.__class__.__name__ == "StaleDataError":
+                log.warning("Sentiment refresh skipped due to stale provider data: %s", e)
+                return {
+                    "status": "stale",
+                    "reason": str(e),
+                    "provider": cfg.sentiment.provider,
+                    "snapshots_written": 0,
+                }
             log.error("Sector sentiment fetch failed: %s", e)
         if hasattr(provider, "fetch_ticker_sentiment"):
             try:
-                results.extend(provider.fetch_ticker_sentiment())
+                results.extend([r for r in provider.fetch_ticker_sentiment() if r is not None])
             except Exception as e:
+                if e.__class__.__name__ == "StaleDataError":
+                    log.warning("Sentiment refresh skipped due to stale provider data: %s", e)
+                    return {
+                        "status": "stale",
+                        "reason": str(e),
+                        "provider": cfg.sentiment.provider,
+                        "snapshots_written": 0,
+                    }
                 log.error("Ticker sentiment fetch failed: %s", e)
 
         _persist_snapshots(results)

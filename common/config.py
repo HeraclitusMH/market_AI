@@ -148,6 +148,22 @@ class SentimentClaudeConfig(BaseModel):
     max_tokens_per_item_estimate: int = 300
 
 
+class SentimentRoutineConfig(BaseModel):
+    source_type: str = "local"
+    github_raw_url: str = ""
+    local_path: str = "data/sentiment_output.json"
+    max_staleness_hours: float = 8.0
+    github_token_env: str = "GITHUB_TOKEN"
+
+    @field_validator("source_type")
+    @classmethod
+    def _validate_source_type(cls, v: str) -> str:
+        v = v.strip().lower()
+        if v not in ("local", "github"):
+            raise ValueError("sentiment.routine.source_type must be 'local' or 'github'")
+        return v
+
+
 class RankingConfig(BaseModel):
     # Sentiment sub-weights (market/sector/ticker components)
     w_market: float = 0.20
@@ -351,17 +367,18 @@ class ExitConfig(BaseModel):
 
 
 class SentimentConfig(BaseModel):
-    provider: str = "rss_lexicon"  # rss_lexicon | claude_llm
+    provider: str = "rss_lexicon"  # rss_lexicon | claude_llm | claude_routine | mock
     refresh_minutes: int = 60
     rss: SentimentRssConfig = SentimentRssConfig()
     claude: SentimentClaudeConfig = SentimentClaudeConfig()
+    routine: SentimentRoutineConfig = SentimentRoutineConfig()
 
     @field_validator("provider")
     @classmethod
     def _validate_provider(cls, v: str) -> str:
         v = v.strip().lower()
-        if v not in ("rss_lexicon", "claude_llm"):
-            raise ValueError("sentiment.provider must be 'rss_lexicon' or 'claude_llm'")
+        if v not in ("rss_lexicon", "claude_llm", "claude_routine", "mock"):
+            raise ValueError("sentiment.provider must be 'rss_lexicon', 'claude_llm', 'claude_routine', or 'mock'")
         return v
 
 

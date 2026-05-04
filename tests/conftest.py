@@ -25,6 +25,9 @@ def _ensure_valid_config(monkeypatch):
     """
     # Remove the poisoned env var set by test_risk at module level.
     monkeypatch.delenv("MARKET_AI_CONFIG", raising=False)
+    # Keep tests on their explicit SQLite configs instead of the running
+    # compose Postgres service.
+    monkeypatch.delenv("DATABASE_URL", raising=False)
 
     # Provide a default in-memory config if nothing else has set the cache.
     if common.config._cached is None:

@@ -24,9 +24,11 @@
 - **Universe** = embedded `SEED_TICKERS` (~50 large-cap US stocks + sector ETFs) +
   RSS/LLM-discovered tickers, each verified against IBKR `reqContractDetails` with
   24h caching. `data/sp500.csv` exists but is **not yet auto-ingested**.
-- **Sentiment** is pluggable (`rss_lexicon` | `claude_llm` | `mock`). Claude has a
-  hard €10/month budget cap and **must not fall back to lexicon** on failure. Output
-  is three scopes — market / sector / ticker — persisted as `SentimentSnapshot`.
+- **Sentiment** is pluggable (`rss_lexicon` | `claude_llm` | `claude_routine` |
+  `mock`). Claude LLM has a hard EUR10/month budget cap and **must not fall back to
+  lexicon** on failure. Claude Routine reads pre-computed scores from
+  `data/sentiment_output.json` (local file or GitHub raw URL) and does not call an LLM.
+  Output is three scopes — market / sector / ticker — persisted as `SentimentSnapshot`.
 - **Ranking** runs a 7-factor composite scoring pipeline per symbol — Quality,
   Value, Momentum, Growth, Sentiment, Technical Structure, and subtractive Risk
   Penalty — with regime-adaptive weights. Liquidity is an eligibility gate only. Each symbol also gets
@@ -192,10 +194,15 @@ flowchart TD
   - Scheduler: every `sentiment.refresh_minutes` minutes (default 60).
   - Serialised by `trader/sentiment/factory.py::_REFRESH_LOCK` (threading lock).
 - **Upstream inputs.**
-  - Provider name from `cfg.sentiment.provider` (`rss_lexicon` | `claude_llm`).
+  - Provider name from `cfg.sentiment.provider` (`rss_lexicon` | `claude_llm` |
+    `claude_routine` | `mock`).
   - RSS feeds list from `cfg.sentiment.rss.feeds`.
   - Claude config from `cfg.sentiment.claude` (`model`, `monthly_budget_eur`,
     `daily_budget_fraction`, `max_items_per_run`, …).
+  - Routine config from `cfg.sentiment.routine` (`source_type`, `local_path`,
+    `github_raw_url`, `max_staleness_hours`, `github_token_env`).
+  - Routine output file `data/sentiment_output.json`; external routine-owned
+    dedup cache `data/seen_articles.json`.
   - Dedup cache from `sentiment_llm_items` (Claude only).
   - Monthly / daily spend state from `sentiment_llm_usage` (Claude only).
 - **Core logic.**
@@ -214,6 +221,12 @@ flowchart TD
     multi-word aliases (≥2 tokens) plus single-word manual overrides (priority≤1, len≥5)
     from `security_alias` and scans headlines with `\b{alias}\b` word-boundary regex,
     producing `scope="ticker"` `SentimentResult` items per matched symbol.
+  - **Claude Routine path**: `RoutineProvider` loads `sentiment_output.json` from
+    a local file or GitHub raw URL, validates `schema_version == 1`, checks UTC
+    timestamp staleness, clamps scores to [-1, 1], and maps market/sector/ticker
+    sections to `SentimentResult` rows. It caches one load for 60 seconds so the
+    factory's market/sector/ticker calls share the same data. It never writes
+    `seen_articles.json` and performs no NLP or Anthropic API calls.
   - Either way, snapshots are persisted to `sentiment_snapshots` with
     `scope ∈ {market, sector, ticker}`.
 - **Key parameters/config.** `cfg.sentiment.*` (see above); `trader/sentiment/budget.py`
@@ -232,6 +245,11 @@ flowchart TD
 - **Decision gates.**
   - Claude fails → status `failed`; **no fallback to lexicon** (saved memory rule).
     Empty snapshots are written so downstream can apply recency penalties.
+  - Routine output stale (`age > cfg.sentiment.routine.max_staleness_hours`) ->
+    factory returns `{"status": "stale", ...}` and writes no new snapshots, preserving
+    the last good DB rows.
+  - Routine output missing, GitHub 404/403, or invalid JSON -> logged and returns
+    empty results without crashing the cycle.
   - Lock already held → `{"status": "skipped", "reason": "already_running"}`.
   - Budget cap exceeded → provider aborts; `status != "success"`.
   - `security_alias` table empty → ticker matching skipped with a warning log; market
@@ -764,7 +782,7 @@ flowchart TD
 - **CLI** (`cli.py`) — preferred:
   - `python cli.py run <bot>|all --mode paper|live [--once] [--approve/--no-approve] [--dry-run] [--refresh-sentiment/--no-refresh-sentiment]`
   - `python cli.py fundamentals refresh [--symbol AAPL]`
-  - `python cli.py sentiment refresh [--source rss_lexicon|claude_llm] [--dry-run]`
+  - `python cli.py sentiment refresh [--source rss_lexicon|claude_llm|claude_routine|mock] [--dry-run]`
   - `python cli.py report last-run [--bot ...] [--json-out]`
 - **Legacy trader daemon** (`trader/main.py`) — calls `Scheduler.run()` with a 10 s heartbeat.
 - **API server** (`uvicorn api.main:app`) — separate process, no trading, only DB reads + control-plane writes.
@@ -810,7 +828,9 @@ flowchart TD
 - `TradePlan` cooldown (`cooldown_hours`) prevents re-proposing the same symbol
   even across restarts.
 - `ContractVerificationCache` prevents repeated IBKR lookups within 24h.
-- `SentimentLlmItem` prevents re-sending the same RSS items to Claude.
+- `SentimentLlmItem` prevents re-sending the same RSS items to Claude LLM.
+- `data/seen_articles.json` is the external Claude Routine dedup cache. The bot
+  never writes it; the routine prunes/updates it before committing new output.
 - `Universe` `active` flag and `SEED_TICKERS` guarantee the seed list survives restarts.
 
 ---
@@ -838,9 +858,9 @@ flowchart TD
 | 17 | Order routing (type, TIF, limit pricing) | `cfg.execution.*` (options); `cfg.bots.equity_swing.entry_order_type`; `build_combo_order` (options) | K / L |
 | 18 | Planner cadence (cooldown, daily cap) | `cfg.ranking.cooldown_hours`, `cfg.ranking.max_trades_per_day`; `_check_cooldown`, `_check_max_trades_today` | H |
 | 19 | Scheduler cadence (sentiment / signal / rebalance / sync) | `cfg.scheduling.*` + `cfg.sentiment.refresh_minutes`; `trader/scheduler.py::Scheduler._should_*` | A |
-| 20 | Sentiment provider selection | `cfg.sentiment.provider` ∈ `{rss_lexicon, claude_llm}`; env `SENTIMENT_PROVIDER`; `trader/sentiment/factory.py::build_provider` | B |
+| 20 | Sentiment provider selection | `cfg.sentiment.provider` in `{rss_lexicon, claude_llm, claude_routine, mock}`; env `SENTIMENT_PROVIDER`; runtime UI switch on Config page; `trader/sentiment/factory.py::build_provider` | B |
 | 21 | Claude budget cap (€10/mo) + pricing table | `cfg.sentiment.claude.{monthly_budget_eur, daily_budget_fraction, eur_usd_rate, hard_stop_on_budget}`; `trader/sentiment/budget.py::MODEL_PRICING_USD_PER_MTOK` | B |
-| 22 | RSS feeds | `cfg.sentiment.rss.feeds` (YAML) | B |
+| 22 | RSS feeds | `cfg.sentiment.rss.feeds` (YAML); `config/routine_rss_feeds.txt` for the external Claude Routine | B |
 | 23 | Approve mode default | `cfg.features.approve_mode_default`; env `APPROVE_MODE_DEFAULT`; `BotState.approve_mode` | A / K / L |
 | 24 | Kill switch / pause toggles | `/controls` UI → mutates `BotState`; enforced in `trader/risk.py::check_can_trade` and `execution/equity_execution.py::_check_equity_risk` | J |
 | 25 | Portfolio isolation tag | `execution/equity_execution.py::_PORTFOLIO_ID`; `common/models.py::Order.portfolio_id`, `Position.portfolio_id`, `Trade.portfolio_id` | K |
@@ -859,6 +879,7 @@ flowchart TD
 | 38 | Liquidity eligibility gate | `trader/scoring.py::compute_liquidity_factor`; gate: price ≥ min_price AND ADV ≥ min_dollar_volume | E |
 | 39 | Options eligibility gate (safe-by-default) | `trader/scoring.py::compute_optionability_factor`; reads `SecurityMaster.options_eligible`; returns `eligible=False` when no DB record | E |
 | 40 | Fundamentals factor | `trader/scoring.py::compute_fundamentals_factor` wraps `trader/fundamental_scorer.py::FundamentalScorer`; yfinance source; missing when unavailable; `cfg.fundamentals.*` | E |
+| 41 | Claude Routine sentiment output | `trader/sentiment/routine_provider.py`; `cfg.sentiment.routine.*`; `data/sentiment_output.json`; `data/seen_articles.json` owned by routine | B |
 
 ---
 
@@ -919,6 +940,9 @@ Bonus checks:
   are different paths (`generate_signals` vs `rank_symbols`).
 - Sentiment stale (`age > 72h`) zeros out the sentiment factor; check
   `SentimentSnapshot.timestamp` on `/sentiment`.
+- With `claude_routine`, stale routine output (`max_staleness_hours`, default 8)
+  writes no new snapshots. Check `data/sentiment_output.json.timestamp`, the
+  refresh result status, and the Config page provider switch.
 
 ### "Ticker snapshots not appearing" — additional checks
 

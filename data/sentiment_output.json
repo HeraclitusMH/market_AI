@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "timestamp": null,
+  "run_id": "",
+  "articles_analyzed": 0,
+  "articles_skipped_dedup": 0,
+  "total_articles_fetched": 0,
+  "market": null,
+  "sectors": {},
+  "tickers": {},
+  "sources": []
+}
