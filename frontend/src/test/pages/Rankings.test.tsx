@@ -7,6 +7,13 @@ import { api } from '@/lib/api';
 vi.mock('@/lib/api', () => ({
   api: {
     getRankings: vi.fn().mockResolvedValue([]),
+    refreshRankings: vi.fn().mockResolvedValue({
+      status: 'success',
+      sentiment_status: 'success',
+      snapshots_written: 1,
+      ranked: 1,
+      latest_ts: '2026-05-04T10:00:00',
+    }),
     getTradePlans: vi.fn().mockResolvedValue([]),
     getRegimeCurrent: vi.fn().mockResolvedValue({ level: 'risk_on', composite_score: 70 }),
   },

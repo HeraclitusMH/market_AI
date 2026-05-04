@@ -4,6 +4,7 @@ from __future__ import annotations
 import time
 import threading
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Optional
 
 from common.config import get_config
@@ -37,6 +38,9 @@ class Scheduler:
         self._last_rebalance: Optional[str] = None  # date string
         self._last_sync = datetime.min
         self._last_fundamentals = datetime.min
+        self._routine_file_signature = self._get_routine_file_signature()
+        self._routine_pending_signature = None
+        self._routine_pending_since: Optional[datetime] = None
 
     def _heartbeat(self) -> None:
         with get_db() as db:
@@ -81,6 +85,58 @@ class Scheduler:
         days = int(getattr(getattr(self.cfg, "fundamentals", None), "refresh_days", 7) or 7)
         return (datetime.now() - self._last_fundamentals).total_seconds() > days * 24 * 60 * 60
 
+    def _routine_watch_enabled(self) -> bool:
+        routine = getattr(self.cfg.sentiment, "routine", None)
+        return (
+            self.cfg.sentiment.provider == "claude_routine"
+            and routine is not None
+            and getattr(routine, "source_type", "") == "local"
+            and bool(getattr(routine, "watch_local_file", True))
+        )
+
+    def _routine_file_path(self) -> Optional[Path]:
+        routine = getattr(self.cfg.sentiment, "routine", None)
+        if routine is None:
+            return None
+        path = Path(getattr(routine, "local_path", "data/sentiment_output.json"))
+        return path if path.is_absolute() else Path.cwd() / path
+
+    def _get_routine_file_signature(self):
+        if not self._routine_watch_enabled():
+            return None
+        path = self._routine_file_path()
+        if path is None or not path.exists():
+            return None
+        try:
+            stat = path.stat()
+            return (stat.st_mtime_ns, stat.st_size)
+        except OSError as exc:
+            log.warning("Could not stat routine sentiment file %s: %s", path, exc)
+            return None
+
+    def _routine_file_refresh_due(self) -> bool:
+        signature = self._get_routine_file_signature()
+        if signature == self._routine_file_signature:
+            self._routine_pending_signature = None
+            self._routine_pending_since = None
+            return False
+
+        now = datetime.now()
+        if signature != self._routine_pending_signature:
+            self._routine_pending_signature = signature
+            self._routine_pending_since = now
+            return False
+
+        debounce = float(getattr(self.cfg.sentiment.routine, "watch_debounce_seconds", 5.0) or 0)
+        pending_since = self._routine_pending_since or now
+        if (now - pending_since).total_seconds() < debounce:
+            return False
+
+        self._routine_file_signature = signature
+        self._routine_pending_signature = None
+        self._routine_pending_since = None
+        return True
+
     def run_once(self) -> None:
         """Single iteration of the scheduler loop."""
         from trader.sync import full_sync
@@ -114,21 +170,30 @@ class Scheduler:
             except Exception as e:
                 log.error("Fundamentals refresh failed: %s", e)
 
+        routine_file_changed = self._routine_file_refresh_due()
+
+        sentiment_refresh_ok = not routine_file_changed
+
         # Refresh sentiment
-        if self._should_refresh_sentiment():
+        if routine_file_changed or self._should_refresh_sentiment():
             try:
                 summary = refresh_and_store()
                 self._last_sentiment = datetime.now()
+                sentiment_refresh_ok = summary.get("status") == "success"
                 log.info(
-                    "Sentiment refreshed: provider=%s status=%s snapshots=%s",
+                    "Sentiment refreshed: provider=%s status=%s snapshots=%s trigger=%s",
                     summary.get("provider"), summary.get("status"),
                     summary.get("snapshots_written", 0),
+                    "routine_file" if routine_file_changed else "schedule",
                 )
             except Exception as e:
+                sentiment_refresh_ok = False
                 log.error("Sentiment refresh failed: %s", e)
 
         # Ranking + trade planning (runs after sentiment refresh)
-        if self._should_rank():
+        if (routine_file_changed and sentiment_refresh_ok) or (
+            not routine_file_changed and self._should_rank()
+        ):
             try:
                 universe = get_verified_universe(self.client)
                 ranked = rank_symbols(universe, client=self.client)

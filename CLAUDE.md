@@ -43,7 +43,7 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **DTE config unification** — canonical planner DTE lives in `cfg.options.planner_dte_{min,max,target,fallback_min}`. `cfg.ranking.dte_*` kept for backward compat with deprecation comment.
 - **Cash reservation** — before placing any order, cash equal to max loss is reserved; trade blocked if insufficient.
 - **Approve mode defaults ON** — signals saved to DB as `pending_approval`; orders not submitted until disabled.
-- **Sentiment** — pluggable `SentimentProvider` ABC. Providers: `rss_lexicon`, `claude_llm`, `claude_routine`, `mock`. Shared by both bots. Sentiment is one input to the composite score (not the only input). `claude_routine` is a pure reader for pre-computed scores in `data/sentiment_output.json` (local path or GitHub raw URL); it does no NLP/API work and never writes `data/seen_articles.json`.
+- **Sentiment** — pluggable `SentimentProvider` ABC. Providers: `rss_lexicon`, `claude_llm`, `claude_routine`, `mock`. Shared by both bots. Sentiment is one input to the composite score (not the only input). `claude_routine` is a pure reader for pre-computed scores in `data/sentiment_output.json` (local path or GitHub raw URL); it does no NLP/API work and never writes `data/seen_articles.json`. When running `claude_routine` from a local file, `Scheduler` watches the file signature and triggers sentiment + ranking after `watch_debounce_seconds` when it changes.
 - **No paid APIs** — core universe seeded from embedded SEED_TICKERS (~50 tickers) + RSS-discovered tickers (verified via IBKR). `data/sp500.csv` exists as reference but is not yet auto-ingested into the universe builder.
 
 ### Patterns & Conventions
@@ -94,7 +94,8 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **Options trade planner** → `trader/options_planner.py` (`plan_trade()` — pure planning, no submission, writes TradePlan rows)
 - **Universe** → `trader/universe.py` (`seed_universe()`, `get_verified_universe()`, `verify_contract()`, `SEED_TICKERS`)
 - **Symbol ranking** → `trader/ranking.py` (`rank_symbols()`, `select_candidates()`, `RankedSymbol`, `_compute_sector_medians()` — re-exports sentiment internals from `trader/scoring.py`). `rank_symbols()` does a two-phase pass: pre-fetch all fund_factors → compute sector medians → score loop with peer-relative `fundamental_metrics`.
-- **Scheduler** → `trader/scheduler.py` (10s heartbeat, sentiment + ranking + signal eval + rebalance + IBKR sync)
+- **Manual ranking refresh API** → `api/v1/rankings.py::refresh_rankings()` (`POST /api/v1/rankings/refresh`) refreshes sentiment, connects to IBKR, recomputes `rank_symbols()`, and returns a summary for the Rankings page button.
+- **Scheduler** → `trader/scheduler.py` (10s heartbeat, sentiment + ranking + signal eval + rebalance + IBKR sync; also watches local `claude_routine` output file when enabled)
 - **Trader entry point** → `trader/main.py`
 
 ### Greeks (all in `trader/greeks/` sub-package)
@@ -115,7 +116,7 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **Factory + refresh** → `trader/sentiment/factory.py` (`refresh_and_store()`, serialised by lock)
 - **Scoring getters** → `trader/sentiment/scoring.py` (`get_latest_market_score()`, `get_latest_sector_score()`, `get_latest_ticker_score()`)
 - **Providers** → `trader/sentiment/rss_provider.py`, `claude_provider.py`, `routine_provider.py`, `mock_provider.py`
-- **Claude Routine files** → `data/sentiment_output.json` (bot reads scores), `data/seen_articles.json` (external routine owns dedup), `config/routine_rss_feeds.txt` (routine feed list)
+- **Claude Routine files** → `data/sentiment_output.json` (bot reads scores and scheduler can watch for changes), `data/seen_articles.json` (external routine owns dedup), `config/routine_rss_feeds.txt` (routine feed list)
 - **Claude Routine fetch script** → `scripts/routine_fetch_articles.py` (runs on Anthropic cloud after repo clone; fetches RSS, prunes/dedups via `data/seen_articles.json`, writes temporary `data/_pending_analysis.json`). Routine-only deps live in `scripts/requirements_routine.txt`.
 - **Budget cap** → `trader/sentiment/budget.py` (hard €10/mo cap; failures must NOT fall back to lexicon)
 
@@ -203,6 +204,7 @@ python -m json.tool data/_pending_analysis.json
 - Risk engine: drawdown stop, position limits, cash reservation, kill switch, approve mode
 - Position sync portfolio attribution: `sync_positions()` rebuilds broker positions with reconciled `portfolio_id`, tags unmatched rows as `unattributed`, logs attribution events, and the Positions page displays attribution/warning badges.
 - Sentiment: RSS lexicon + Claude LLM + Claude Routine + mock providers, DB persistence, recency weighting. `claude_routine` reads pre-computed routine output, clamps invalid scores, warns near staleness, returns `status="stale"` without writing new snapshots when output is too old, and degrades gracefully on missing/unparseable files.
+- Ranking refresh: `/api/v1/rankings/refresh` and the Rankings page button can manually refresh routine sentiment and recompute ranking immediately. The trader scheduler also watches local `data/sentiment_output.json` changes (`sentiment.routine.watch_local_file`, default true) and triggers sentiment + ranking after a debounce.
 - Claude Routine fetch infrastructure: `scripts/routine_fetch_articles.py` is repo-owned but bot-external. It hardcodes routine RSS feeds, filters to articles from the last 12 hours, hashes URLs with SHA-256 first 8 chars, writes `data/_pending_analysis.json`, and updates `data/seen_articles.json`; exit codes: 0=new articles, 1=partial/error, 2=no new articles.
 - **3-state regime model** (`trader/regime/`): `RegimeEngine` with 4 pillars (Trend/Breadth/Volatility/Credit Stress), confidence-weighted composite score, asymmetric hysteresis state machine, DB persistence to `regime_snapshots`, restart recovery; `check_regime()` returns `RegimeState` backward-compatible with string comparisons
 - Strategy: SPY regime filter, legacy 4-factor `score_symbol()` (still used by equity bot `score_candidate`)
@@ -275,3 +277,4 @@ python -m json.tool data/_pending_analysis.json
 - [2026-05-04] Claude Routine sentiment provider: added `trader/sentiment/routine_provider.py`, `SentimentRoutineConfig`, factory stale handling, routine contract files (`data/sentiment_output.json`, `data/seen_articles.json`, `config/routine_rss_feeds.txt`), and tests. Config page now has a runtime sentiment modality switch (RSS / Claude LLM / Routine / Mock). Verified with 359 pytest tests, Config vitest, and TypeScript build.
 - [2026-05-04] Claude Routine fetch infrastructure: added `scripts/routine_fetch_articles.py` plus `scripts/requirements_routine.txt`; `_pending_analysis.json` is gitignored. The script is for Anthropic's routine environment only and writes pending article JSON for Claude analysis before the routine commits `sentiment_output.json`.
 - [2026-05-04] Ranking trade eligibility now requires every required factor score to be present, including sentiment, momentum/trend, risk, fundamentals, and liquidity. Missing scores keep the ticker visible in rankings but set `eligible=False`, `equity_eligible=False`, `bias=None`, and add `missing_score_<factor>` reasons; API normalization applies the same rule to persisted rows.
+- [2026-05-04] Added immediate ranking refresh paths for Claude Routine output: `POST /api/v1/rankings/refresh`, a Rankings page "Refresh rankings" button, and a trader scheduler local-file watcher for `data/sentiment_output.json` with debounce config (`watch_local_file`, `watch_debounce_seconds`). The watcher refreshes sentiment and ranking when the routine commits a new local output file.

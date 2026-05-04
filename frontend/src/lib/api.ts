@@ -1,7 +1,7 @@
 import type {
   BotState, OverviewData, Position, Order, Fill, Signal,
   SentimentData, RiskData, RankingRow, PlanRow, ConfigData, ControlResponse,
-  RegimeCurrent, RegimeHistoryRow, SentimentProviderUpdateResponse,
+  RegimeCurrent, RegimeHistoryRow, SentimentProviderUpdateResponse, RefreshRankingsResponse,
 } from '@/types/api';
 
 const BASE = '/api/v1';
@@ -29,6 +29,7 @@ export const api = {
   getFills:       (limit = 100) => get<Fill[]>(`/fills?limit=${limit}`),
   getSignals:     (limit = 50)  => get<Signal[]>(`/signals?limit=${limit}`),
   getRankings:    (limit = 50)  => get<RankingRow[]>(`/rankings?limit=${limit}`),
+  refreshRankings: () => post<RefreshRankingsResponse>('/rankings/refresh'),
   getTradePlans:  (limit = 50, status?: string) =>
     get<PlanRow[]>(`/trade-plans?limit=${limit}${status ? `&status=${status}` : ''}`),
   getSentiment:   () => get<SentimentData>('/sentiment'),

@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api';
 import { fmtTs } from '@/lib/formatters';
 import { KPI } from '@/components/KPI';
+import { Button } from '@/components/Button';
 import { Card, CardHead, CardBody } from '@/components/Card';
 import { DataTable, type Column } from '@/components/DataTable';
 import { ScoreBar } from '@/components/ScoreBar';
@@ -206,11 +208,27 @@ const PLAN_COLS: Column<PlanRow>[] = [
 ];
 
 export function Rankings() {
+  const queryClient = useQueryClient();
   const { data: rankings = [], isLoading: rankLoading } = useQuery({ queryKey: ['rankings'], queryFn: () => api.getRankings(100), refetchInterval: 30_000 });
   const { data: plans = [], isLoading: planLoading } = useQuery({ queryKey: ['tradePlans'], queryFn: () => api.getTradePlans(50), refetchInterval: 30_000 });
   const { data: currentRegime } = useQuery({ queryKey: ['regimeCurrent'], queryFn: api.getRegimeCurrent, refetchInterval: 20_000 });
 
   const [activeTab, setActiveTab] = useState<'all' | 'bullish' | 'bearish'>('all');
+  const [refreshMessage, setRefreshMessage] = useState<string>('');
+  const refreshRankings = useMutation({
+    mutationFn: api.refreshRankings,
+    onSuccess: async (result) => {
+      const ts = result.latest_ts ? fmtTs(result.latest_ts) : 'latest batch';
+      setRefreshMessage(`Refreshed ${result.ranked} symbols at ${ts}`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['rankings'] }),
+        queryClient.invalidateQueries({ queryKey: ['tradePlans'] }),
+      ]);
+    },
+    onError: (error) => {
+      setRefreshMessage(error instanceof Error ? error.message : 'Refresh failed');
+    },
+  });
 
   if (rankLoading || planLoading) return <div className="loading-state">Loading rankings...</div>;
 
@@ -224,6 +242,20 @@ export function Rankings() {
   return (
     <div>
       <h1 className="page-title">Rankings</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 'var(--gap)' }}>
+        <div style={{ color: refreshRankings.isError ? 'var(--neg)' : 'var(--ink-4)', fontSize: 12 }}>
+          {refreshRankings.isPending ? 'Refreshing rankings...' : refreshMessage}
+        </div>
+        <Button
+          size="sm"
+          variant="primary"
+          icon={<RefreshCw size={14} />}
+          loading={refreshRankings.isPending}
+          onClick={() => refreshRankings.mutate()}
+        >
+          Refresh rankings
+        </Button>
+      </div>
 
       <div className="kpi-grid">
         <KPI label="Symbols Ranked" value={String(rankings.length)} />

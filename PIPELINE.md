@@ -29,6 +29,8 @@
   lexicon** on failure. Claude Routine reads pre-computed scores from
   `data/sentiment_output.json` (local file or GitHub raw URL) and does not call an LLM.
   Output is three scopes — market / sector / ticker — persisted as `SentimentSnapshot`.
+  When the local routine file is watched, `Scheduler` debounces file changes and
+  immediately refreshes sentiment plus rankings instead of waiting for the hourly cadence.
 - **Claude Routine article fetching** is repo-owned but bot-external:
   `scripts/routine_fetch_articles.py` runs on Anthropic cloud after repo clone,
   fetches/dedups RSS articles into temporary `data/_pending_analysis.json`, then
@@ -199,6 +201,11 @@ flowchart TD
   - CLI: before each bot cycle if `--refresh-sentiment` (default on) or standalone
     via `cli.py sentiment refresh`.
   - Scheduler: every `sentiment.refresh_minutes` minutes (default 60).
+  - Scheduler local-file watcher: for `claude_routine` + `source_type=local`,
+    a changed `data/sentiment_output.json` triggers sentiment + ranking after
+    `sentiment.routine.watch_debounce_seconds` when `watch_local_file=true`.
+  - Manual API/UI: `POST /api/v1/rankings/refresh` (Rankings page button) refreshes
+    sentiment and recomputes rankings immediately.
   - Serialised by `trader/sentiment/factory.py::_REFRESH_LOCK` (threading lock).
 - **Upstream inputs.**
   - Provider name from `cfg.sentiment.provider` (`rss_lexicon` | `claude_llm` |
@@ -207,7 +214,8 @@ flowchart TD
   - Claude config from `cfg.sentiment.claude` (`model`, `monthly_budget_eur`,
     `daily_budget_fraction`, `max_items_per_run`, …).
   - Routine config from `cfg.sentiment.routine` (`source_type`, `local_path`,
-    `github_raw_url`, `max_staleness_hours`, `github_token_env`).
+    `github_raw_url`, `max_staleness_hours`, `github_token_env`,
+    `watch_local_file`, `watch_debounce_seconds`).
   - Routine output file `data/sentiment_output.json`; external routine-owned
     dedup cache `data/seen_articles.json`.
   - Routine fetch helper `scripts/routine_fetch_articles.py` and routine-only
@@ -244,6 +252,10 @@ flowchart TD
     codes: `0` new articles, `1` partial/error, `2` no new articles.
   - Either way, snapshots are persisted to `sentiment_snapshots` with
     `scope ∈ {market, sector, ticker}`.
+  - `Scheduler._routine_file_refresh_due()` polls the local routine output file
+    signature `(mtime_ns, size)` once per 10-second loop, waits for the same changed
+    signature to remain stable for the debounce window, then calls `refresh_and_store()`.
+    Ranking only runs from this trigger when the sentiment refresh returns success.
 - **Key parameters/config.** `cfg.sentiment.*` (see above); `trader/sentiment/budget.py`
   pricing table `MODEL_PRICING_USD_PER_MTOK` must be updated when Anthropic pricing changes.
 - **Outputs/artifacts.**
@@ -263,6 +275,8 @@ flowchart TD
   - Routine output stale (`age > cfg.sentiment.routine.max_staleness_hours`) ->
     factory returns `{"status": "stale", ...}` and writes no new snapshots, preserving
     the last good DB rows.
+  - Routine file watcher trigger with stale/invalid output -> sentiment refresh is
+    logged but ranking is not recomputed from old snapshots.
   - Routine output missing, GitHub 404/403, or invalid JSON -> logged and returns
     empty results without crashing the cycle.
   - Lock already held → `{"status": "skipped", "reason": "already_running"}`.
@@ -840,7 +854,9 @@ flowchart TD
   - `trader/sentiment/factory._REFRESH_LOCK` — prevents overlapping refresh.
 - **Scheduler fields** (`Scheduler.__init__`):
   `_last_sentiment`, `_last_signal`, `_last_ranking`, `_last_rebalance` (date string),
-  `_last_sync` — none are persisted, so restarts immediately re-trigger everything.
+  `_last_sync`, `_routine_file_signature`, `_routine_pending_signature`,
+  `_routine_pending_since` — none are persisted, so restarts immediately re-trigger
+  regular cadence work and establish a new routine file baseline.
 
 ### Idempotency
 
@@ -880,7 +896,7 @@ flowchart TD
 | 16 | Equity risk-off behaviour (cash vs defensive) | `cfg.bots.equity_swing.risk_off_mode`, `defensive_sectors` | G |
 | 17 | Order routing (type, TIF, limit pricing) | `cfg.execution.*` (options); `cfg.bots.equity_swing.entry_order_type`; `build_combo_order` (options) | K / L |
 | 18 | Planner cadence (cooldown, daily cap) | `cfg.ranking.cooldown_hours`, `cfg.ranking.max_trades_per_day`; `_check_cooldown`, `_check_max_trades_today` | H |
-| 19 | Scheduler cadence (sentiment / signal / rebalance / sync) | `cfg.scheduling.*` + `cfg.sentiment.refresh_minutes`; `trader/scheduler.py::Scheduler._should_*` | A |
+| 19 | Scheduler cadence (sentiment / signal / rebalance / sync) | `cfg.scheduling.*` + `cfg.sentiment.refresh_minutes`; `trader/scheduler.py::Scheduler._should_*`; local routine-file trigger via `_routine_file_refresh_due()` | A |
 | 20 | Sentiment provider selection | `cfg.sentiment.provider` in `{rss_lexicon, claude_llm, claude_routine, mock}`; env `SENTIMENT_PROVIDER`; runtime UI switch on Config page; `trader/sentiment/factory.py::build_provider` | B |
 | 21 | Claude budget cap (€10/mo) + pricing table | `cfg.sentiment.claude.{monthly_budget_eur, daily_budget_fraction, eur_usd_rate, hard_stop_on_budget}`; `trader/sentiment/budget.py::MODEL_PRICING_USD_PER_MTOK` | B |
 | 22 | RSS feeds | `cfg.sentiment.rss.feeds` (YAML); `config/routine_rss_feeds.txt` for the external Claude Routine | B |
@@ -902,7 +918,8 @@ flowchart TD
 | 38 | Liquidity eligibility gate | `trader/scoring.py::compute_liquidity_factor`; gate: price ≥ min_price AND ADV ≥ min_dollar_volume | E |
 | 39 | Options eligibility gate (safe-by-default) | `trader/scoring.py::compute_optionability_factor`; reads `SecurityMaster.options_eligible`; returns `eligible=False` when no DB record | E |
 | 40 | Fundamentals factor | `trader/scoring.py::compute_fundamentals_factor` wraps `trader/fundamental_scorer.py::FundamentalScorer`; yfinance source; missing when unavailable; `cfg.fundamentals.*` | E |
-| 41 | Claude Routine sentiment output | `trader/sentiment/routine_provider.py`; `cfg.sentiment.routine.*`; `data/sentiment_output.json`; `data/seen_articles.json` owned by routine | B |
+| 41 | Claude Routine sentiment output | `trader/sentiment/routine_provider.py`; `cfg.sentiment.routine.*`; `data/sentiment_output.json`; `data/seen_articles.json` owned by routine; local file watcher in `trader/scheduler.py` | B |
+| 43 | Manual rankings refresh | `api/v1/rankings.py::refresh_rankings`; `frontend/src/pages/Rankings.tsx`; `frontend/src/lib/api.ts::refreshRankings` | E |
 | 42 | Claude Routine RSS fetch/dedup | `scripts/routine_fetch_articles.py`; `scripts/requirements_routine.txt`; temp output `data/_pending_analysis.json` gitignored | B |
 
 ---

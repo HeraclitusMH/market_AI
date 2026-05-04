@@ -272,6 +272,8 @@ sentiment:
     github_raw_url: ""            # e.g. https://raw.githubusercontent.com/user/repo/main/data/sentiment_output.json
     github_token_env: "GITHUB_TOKEN"
     max_staleness_hours: 8.0      # routine runs 5x/day; reject stale output
+    watch_local_file: true        # trader refreshes sentiment + rankings after this file changes
+    watch_debounce_seconds: 5.0   # wait for writes to settle before reading the file
 
 regime:
   enabled: true

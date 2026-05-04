@@ -154,6 +154,8 @@ class SentimentRoutineConfig(BaseModel):
     local_path: str = "data/sentiment_output.json"
     max_staleness_hours: float = 8.0
     github_token_env: str = "GITHUB_TOKEN"
+    watch_local_file: bool = True
+    watch_debounce_seconds: float = 5.0
 
     @field_validator("source_type")
     @classmethod

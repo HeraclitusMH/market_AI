@@ -252,3 +252,12 @@ export interface ControlResponse {
   ok: boolean;
   bot: BotState;
 }
+
+export interface RefreshRankingsResponse {
+  status: string;
+  sentiment_status: string;
+  snapshots_written: number;
+  ranked: number;
+  latest_ts: string | null;
+  reason?: string;
+}

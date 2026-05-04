@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -40,6 +40,15 @@ class PlanRow(BaseModel):
     rationale: dict
     status: str
     skip_reason: Optional[str] = None
+
+
+class RefreshRankingsResponse(BaseModel):
+    status: str
+    sentiment_status: str
+    snapshots_written: int
+    ranked: int
+    latest_ts: Optional[str] = None
+    reason: str = ""
 
 
 def _lookup_names(db: Session, symbols: List[str]) -> dict:
@@ -133,6 +142,63 @@ def get_rankings(limit: int = Query(50, le=200), db: Session = Depends(get_db)):
         ))
     result.sort(key=lambda row: row.score_total, reverse=True)
     return result[:limit]
+
+
+@router.post("/rankings/refresh", response_model=RefreshRankingsResponse)
+def refresh_rankings(db: Session = Depends(get_db)):
+    """Refresh routine sentiment, then recompute and persist a rankings batch."""
+    import asyncio
+
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+
+    from trader.ibkr_client import get_ibkr_client
+    from trader.ranking import rank_symbols
+    from trader.sentiment.factory import refresh_and_store
+    from trader.universe import get_verified_universe, seed_universe
+
+    sentiment = refresh_and_store()
+    sentiment_status = str(sentiment.get("status", "unknown"))
+    if sentiment_status not in ("success", "skipped"):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "status": "failed",
+                "sentiment_status": sentiment_status,
+                "snapshots_written": sentiment.get("snapshots_written", 0),
+                "ranked": 0,
+                "reason": sentiment.get("reason", "sentiment_refresh_failed"),
+            },
+        )
+
+    client = get_ibkr_client()
+    try:
+        client.connect()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "failed",
+                "sentiment_status": sentiment_status,
+                "snapshots_written": sentiment.get("snapshots_written", 0),
+                "ranked": 0,
+                "reason": f"ibkr_unavailable: {exc}",
+            },
+        ) from exc
+
+    seed_universe()
+    universe = get_verified_universe(client)
+    ranked = rank_symbols(universe, client=client)
+    latest_ts = db.query(func.max(SymbolRanking.ts)).scalar()
+    return RefreshRankingsResponse(
+        status="success",
+        sentiment_status=sentiment_status,
+        snapshots_written=int(sentiment.get("snapshots_written", 0) or 0),
+        ranked=len(ranked),
+        latest_ts=str(latest_ts) if latest_ts else None,
+    )
 
 
 @router.get("/trade-plans", response_model=List[PlanRow])
