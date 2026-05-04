@@ -29,6 +29,10 @@
   lexicon** on failure. Claude Routine reads pre-computed scores from
   `data/sentiment_output.json` (local file or GitHub raw URL) and does not call an LLM.
   Output is three scopes — market / sector / ticker — persisted as `SentimentSnapshot`.
+- **Claude Routine article fetching** is repo-owned but bot-external:
+  `scripts/routine_fetch_articles.py` runs on Anthropic cloud after repo clone,
+  fetches/dedups RSS articles into temporary `data/_pending_analysis.json`, then
+  Claude analyzes that file and writes `data/sentiment_output.json`.
 - **Ranking** runs a 7-factor composite scoring pipeline per symbol — Quality,
   Value, Momentum, Growth, Sentiment, Technical Structure, and subtractive Risk
   Penalty — with regime-adaptive weights. Liquidity is an eligibility gate only. Each symbol also gets
@@ -203,6 +207,8 @@ flowchart TD
     `github_raw_url`, `max_staleness_hours`, `github_token_env`).
   - Routine output file `data/sentiment_output.json`; external routine-owned
     dedup cache `data/seen_articles.json`.
+  - Routine fetch helper `scripts/routine_fetch_articles.py` and routine-only
+    dependencies in `scripts/requirements_routine.txt` (`requests`, `feedparser`).
   - Dedup cache from `sentiment_llm_items` (Claude only).
   - Monthly / daily spend state from `sentiment_llm_usage` (Claude only).
 - **Core logic.**
@@ -227,6 +233,12 @@ flowchart TD
     sections to `SentimentResult` rows. It caches one load for 60 seconds so the
     factory's market/sector/ticker calls share the same data. It never writes
     `seen_articles.json` and performs no NLP or Anthropic API calls.
+  - **Routine fetch helper**: `scripts/routine_fetch_articles.py` is called by the
+    external Claude Routine before analysis. It prunes `data/seen_articles.json`
+    entries older than 48h, fetches hardcoded RSS feeds, keeps only articles from
+    the last 12h, dedups by `sha256(url.lower().strip())[:8]`, writes
+    `data/_pending_analysis.json`, and updates `data/seen_articles.json`. Exit
+    codes: `0` new articles, `1` partial/error, `2` no new articles.
   - Either way, snapshots are persisted to `sentiment_snapshots` with
     `scope ∈ {market, sector, ticker}`.
 - **Key parameters/config.** `cfg.sentiment.*` (see above); `trader/sentiment/budget.py`
@@ -831,6 +843,8 @@ flowchart TD
 - `SentimentLlmItem` prevents re-sending the same RSS items to Claude LLM.
 - `data/seen_articles.json` is the external Claude Routine dedup cache. The bot
   never writes it; the routine prunes/updates it before committing new output.
+- `data/_pending_analysis.json` is the temporary routine handoff file and is
+  gitignored. It should not be committed.
 - `Universe` `active` flag and `SEED_TICKERS` guarantee the seed list survives restarts.
 
 ---
@@ -880,6 +894,7 @@ flowchart TD
 | 39 | Options eligibility gate (safe-by-default) | `trader/scoring.py::compute_optionability_factor`; reads `SecurityMaster.options_eligible`; returns `eligible=False` when no DB record | E |
 | 40 | Fundamentals factor | `trader/scoring.py::compute_fundamentals_factor` wraps `trader/fundamental_scorer.py::FundamentalScorer`; yfinance source; missing when unavailable; `cfg.fundamentals.*` | E |
 | 41 | Claude Routine sentiment output | `trader/sentiment/routine_provider.py`; `cfg.sentiment.routine.*`; `data/sentiment_output.json`; `data/seen_articles.json` owned by routine | B |
+| 42 | Claude Routine RSS fetch/dedup | `scripts/routine_fetch_articles.py`; `scripts/requirements_routine.txt`; temp output `data/_pending_analysis.json` gitignored | B |
 
 ---
 
@@ -943,6 +958,10 @@ Bonus checks:
 - With `claude_routine`, stale routine output (`max_staleness_hours`, default 8)
   writes no new snapshots. Check `data/sentiment_output.json.timestamp`, the
   refresh result status, and the Config page provider switch.
+- If switching sentiment provider from the Config page returns `405 Method Not
+  Allowed`, the frontend is likely hitting an API process that does not have
+  `POST /api/v1/config/sentiment/provider` loaded. Verify loaded routes from the
+  API container and restart/rebuild it if needed.
 
 ### "Ticker snapshots not appearing" — additional checks
 

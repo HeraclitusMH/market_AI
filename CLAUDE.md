@@ -19,7 +19,7 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **`ui/`** — `static/dist/` built React SPA output
 - **`frontend/`** — React 18 + Vite + TypeScript + Tailwind SPA. Build output goes to `ui/static/dist/`. Dev server on port 5173 proxies `/api` to FastAPI.
 - **`scripts/`** — `init_db.py` (DB setup), `run_all.py` (starts API + trader as subprocesses)
-- **`data/`** — `sp500.csv` (~180 S&P 500 stocks with symbol/name/sector); `us_listed_master.csv` (~220 major US stocks seed for security master); `manual_alias_overrides.csv` (manual priority-1 aliases); `seen_articles.json` + `sentiment_output.json` (Claude Routine sentiment contract files)
+- **`data/`** — `sp500.csv` (~180 S&P 500 stocks with symbol/name/sector); `us_listed_master.csv` (~220 major US stocks seed for security master); `manual_alias_overrides.csv` (manual priority-1 aliases); `seen_articles.json` + `sentiment_output.json` (Claude Routine sentiment contract files). `data/_pending_analysis.json` is a temporary Claude Routine handoff file and is gitignored.
 - **`cli.py`** — unified Click CLI entry point
 
 ### Key Design Decisions
@@ -116,6 +116,7 @@ Seven top-level packages plus data, scripts, and frontend — flat layout, no `s
 - **Scoring getters** → `trader/sentiment/scoring.py` (`get_latest_market_score()`, `get_latest_sector_score()`, `get_latest_ticker_score()`)
 - **Providers** → `trader/sentiment/rss_provider.py`, `claude_provider.py`, `routine_provider.py`, `mock_provider.py`
 - **Claude Routine files** → `data/sentiment_output.json` (bot reads scores), `data/seen_articles.json` (external routine owns dedup), `config/routine_rss_feeds.txt` (routine feed list)
+- **Claude Routine fetch script** → `scripts/routine_fetch_articles.py` (runs on Anthropic cloud after repo clone; fetches RSS, prunes/dedups via `data/seen_articles.json`, writes temporary `data/_pending_analysis.json`). Routine-only deps live in `scripts/requirements_routine.txt`.
 - **Budget cap** → `trader/sentiment/budget.py` (hard €10/mo cap; failures must NOT fall back to lexicon)
 
 ### Security Master (company-name → ticker)
@@ -184,6 +185,11 @@ python cli.py securities verify  --all
 python cli.py securities liquidity-refresh [--symbol AAPL] [--lookback 20]
 python cli.py match-company --text "Today Molina Healthcare made 5 billion in revenue"
 python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
+
+# Claude Routine infrastructure (not used by trading bot)
+pip install -r scripts/requirements_routine.txt
+python scripts/routine_fetch_articles.py
+python -m json.tool data/_pending_analysis.json
 ```
 
 ## Current State & Known Issues
@@ -197,6 +203,7 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 - Risk engine: drawdown stop, position limits, cash reservation, kill switch, approve mode
 - Position sync portfolio attribution: `sync_positions()` rebuilds broker positions with reconciled `portfolio_id`, tags unmatched rows as `unattributed`, logs attribution events, and the Positions page displays attribution/warning badges.
 - Sentiment: RSS lexicon + Claude LLM + Claude Routine + mock providers, DB persistence, recency weighting. `claude_routine` reads pre-computed routine output, clamps invalid scores, warns near staleness, returns `status="stale"` without writing new snapshots when output is too old, and degrades gracefully on missing/unparseable files.
+- Claude Routine fetch infrastructure: `scripts/routine_fetch_articles.py` is repo-owned but bot-external. It hardcodes routine RSS feeds, filters to articles from the last 12 hours, hashes URLs with SHA-256 first 8 chars, writes `data/_pending_analysis.json`, and updates `data/seen_articles.json`; exit codes: 0=new articles, 1=partial/error, 2=no new articles.
 - **3-state regime model** (`trader/regime/`): `RegimeEngine` with 4 pillars (Trend/Breadth/Volatility/Credit Stress), confidence-weighted composite score, asymmetric hysteresis state machine, DB persistence to `regime_snapshots`, restart recovery; `check_regime()` returns `RegimeState` backward-compatible with string comparisons
 - Strategy: SPY regime filter, legacy 4-factor `score_symbol()` (still used by equity bot `score_candidate`)
 - **7-factor composite scoring** (`trader/composite_scorer/` + `trader/ranking.py`): [0,1] score per symbol from Quality, Value, Momentum, Growth, Sentiment, Technical Structure, and subtractive Risk Penalty; regime weights adapt via `RegimeDetector`; liquidity remains an eligibility gate only
@@ -225,6 +232,7 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 - IBKR market-data subscription required for live data — paper accounts default to delayed (`ibkr.market_data_type: 3`). Set to `1` only when a live US data subscription is active.
 - VIX is a CBOE index; `fetch_bars("VIX", ...)` uses `Stock(...)` contract which silently fails on IBKR. The volatility pillar falls back to realized-vol only (reduced confidence). Fix: add `Index("VIX", "CBOE")` contract support to `trader/market_data.py`.
 - Position exit logic is fully implemented (`trader/exits.py`); wiring to live IBKR close orders not yet end-to-end tested.
+- Config-page sentiment provider switching calls `POST /api/v1/config/sentiment/provider`. If the UI shows 405 Method Not Allowed, confirm the API process has the route loaded (`docker compose exec -T api python -c "from api.main import app; print([r.path for r in app.routes])"`) and restart/rebuild the API container if it is serving an older code version.
 
 ## Session Log
 
@@ -265,3 +273,4 @@ python cli.py match-company --companies "Molina Healthcare,UnitedHealth"
 - [2026-05-01] Position sync portfolio reconciliation: `trader/sync.py::sync_positions()` now attributes IBKR positions via `TradeManagement` then recent orders, falls back to `unattributed`, skips zero quantity rows, and logs `sync_positions_reconciled` / `sync_unattributed_positions`. Risk caps and sector checks count unattributed positions conservatively; options count distinct option/combo symbols. `/api/v1/positions` and the Positions page now expose/show `portfolio_id`. Added `tests/test_sync.py`.
 - [2026-05-01] Dashboard dual-theme toggle: added topbar `ThemeSwitch`, `useTheme()` persistence, and scoped `frontend/src/theme-dream.css`. Matrix remains the no-attribute default; Dream mode uses `<html data-theme="dream">`, per-route mantras, fixed aura/mandala backgrounds, and a JS `.dream-particles` layer that is removed on switch-back. Dream readability was tuned upward after review. Verified with frontend build and 14 Vitest tests.
 - [2026-05-04] Claude Routine sentiment provider: added `trader/sentiment/routine_provider.py`, `SentimentRoutineConfig`, factory stale handling, routine contract files (`data/sentiment_output.json`, `data/seen_articles.json`, `config/routine_rss_feeds.txt`), and tests. Config page now has a runtime sentiment modality switch (RSS / Claude LLM / Routine / Mock). Verified with 359 pytest tests, Config vitest, and TypeScript build.
+- [2026-05-04] Claude Routine fetch infrastructure: added `scripts/routine_fetch_articles.py` plus `scripts/requirements_routine.txt`; `_pending_analysis.json` is gitignored. The script is for Anthropic's routine environment only and writes pending article JSON for Claude analysis before the routine commits `sentiment_output.json`.

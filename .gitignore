@@ -43,6 +43,9 @@ tws_credentials*
 *.log
 logs/
 
+# Claude Routine temporary analysis handoff
+data/_pending_analysis.json
+
 # IDE
 .vscode/
 .idea/
