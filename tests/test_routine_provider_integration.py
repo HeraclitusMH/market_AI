@@ -60,6 +60,24 @@ def test_full_refresh_cycle(routine_db):
         assert snapshots[("ticker", "NVDA")] == 0.8
 
 
+def test_routine_refresh_replaces_previous_snapshots(routine_db):
+    from common.db import get_db
+    from common.models import SentimentSnapshot
+    from trader.sentiment.factory import refresh_and_store
+
+    refresh_and_store()
+    refresh_and_store()
+
+    with get_db() as db:
+        rows = db.query(SentimentSnapshot).all()
+        assert len(rows) == 3
+        assert {(row.scope, row.key) for row in rows} == {
+            ("market", "overall"),
+            ("sector", "Technology"),
+            ("ticker", "NVDA"),
+        }
+
+
 def test_scoring_uses_routine_snapshots(routine_db):
     from common.db import get_db
     from common.models import SentimentSnapshot

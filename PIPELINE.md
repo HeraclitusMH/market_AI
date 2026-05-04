@@ -35,10 +35,13 @@
   Claude analyzes that file and writes `data/sentiment_output.json`.
 - **Ranking** runs a 7-factor composite scoring pipeline per symbol — Quality,
   Value, Momentum, Growth, Sentiment, Technical Structure, and subtractive Risk
-  Penalty — with regime-adaptive weights. Liquidity is an eligibility gate only. Each symbol also gets
-  `equity_eligible` (liquidity gate + IBKR-verified) and `options_eligible` (from
-  `SecurityMaster`; safe-by-default=False) flags. Score drives bias labels
-  (`≥0.55 → bullish`; `≤0.45 → bearish`). Rows persisted as `SymbolRanking`.
+  Penalty — with regime-adaptive weights. Liquidity is an eligibility gate only.
+  Every symbol is still persisted to `SymbolRanking`, but trading eligibility
+  requires all required scores to be present, including sentiment. Missing scores
+  add `missing_score_<factor>` reasons and set `eligible=False`,
+  `equity_eligible=False`, and `bias=None`. Each symbol also gets
+  `options_eligible` (from `SecurityMaster`; safe-by-default=False). Score drives
+  bias labels only for eligible rows (`≥0.55 → bullish`; `≤0.45 → bearish`).
 - **Fundamentals** are optional and sourced from yfinance via
   `trader/fundamental_scorer.py`. If yfinance returns no usable ratios, the factor
   is marked missing and its composite weight is redistributed. Results are cached
@@ -383,10 +386,14 @@ flowchart TD
   4. Persist `components_json.composite_7factor` with per-factor score, weight,
      contribution, components, regime, confidence, and timestamp. API/UI treat this
      payload as authoritative when present.
-  5. `equity_eligible = liquidity.eligible AND symbol verified in IBKR`.
-  6. `options_eligible = optionability.eligible`.
-  7. Bias: `score ≥ enter_threshold → bullish`; `score ≤ 1-enter_threshold → bearish`.
-  8. Persist all rows to `symbol_rankings` with full `components_json`.
+  5. Build missing-score reasons for sentiment, momentum/trend, risk,
+     fundamentals, and liquidity (`missing_score_<factor>`).
+  6. `equity_eligible = liquidity.eligible AND symbol verified in IBKR AND no
+     required scores are missing`.
+  7. `options_eligible = optionability.eligible`.
+  8. Bias: eligible rows with `score ≥ enter_threshold → bullish`; eligible rows
+     with `score ≤ 1-enter_threshold → bearish`; missing-score rows have `bias=None`.
+  9. Persist all rows to `symbol_rankings` with full `components_json`.
 - **Adapter input details** (`trader/scoring.py`):
   - `compute_sentiment_factor(market_snap, sector_snap, ticker_snap)` → `[0,1]`.
      Internally applies recency weighting (`>72h → stale`; `24-72h → ×0.5`).
@@ -417,7 +424,9 @@ flowchart TD
   `equity_eligible`), `/rankings` dashboard (expandable factor cards via `<details>`),
   `cli.py report last-run`.
 - **Decision gates.**
-  - `eligible=False` → never traded; row still persisted for audit.
+  - `eligible=False` → never traded; row still persisted for audit/ranking visibility.
+  - Any required score missing, including sentiment, → `eligible=False` and
+    `reasons` includes `missing_score_<factor>`.
   - `options_eligible=False` → `OptionsSwingBot` skips the symbol.
   - `equity_eligible=False` → `EquitySwingBot` skips the symbol.
   - `select_candidates` caps at `cfg.ranking.max_candidates_total` (prefer 2 bull + 1 bear).

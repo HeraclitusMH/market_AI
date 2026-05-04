@@ -115,9 +115,9 @@ def test_weights_no_ticker():
     mkt = _snap(0.6)
     sec = _snap(0.4)
     score, comp = _compute_score(mkt, sec, None, 0.20, 0.30, 0.50)
-    # Should use w_market=0.35, w_sector=0.65
-    expected = 0.35 * 0.6 + 0.65 * 0.4
-    assert score == pytest.approx(expected, abs=0.01)
+    assert score == pytest.approx(0.0, abs=0.01)
+    assert comp["market"]["weight"] == pytest.approx(0.0)
+    assert comp["sector"]["weight"] == pytest.approx(0.0)
     assert comp["ticker"]["weight"] == pytest.approx(0.0)
     assert comp["ticker"]["status"] == "missing"
 
@@ -159,9 +159,7 @@ def test_stale_ticker_treated_as_missing():
     tkr = _snap(0.9, age_hours=80)  # stale → should be ignored
     score_with_stale, comp = _compute_score(mkt, sec, tkr, 0.20, 0.30, 0.50)
 
-    # Stale ticker → same as no ticker: w_market=0.35, w_sector=0.65
-    expected = 0.35 * 0.5 + 0.65 * 0.3
-    assert score_with_stale == pytest.approx(expected, abs=0.01)
+    assert score_with_stale == pytest.approx(0.0, abs=0.01)
     assert comp["ticker"]["status"] == "stale"
 
 
@@ -259,7 +257,35 @@ def test_rank_symbols_liquidity_failure_makes_symbol_ineligible():
     assert result.eligible is False
     assert result.equity_eligible is False
     assert result.bias is None
-    assert result.reasons == ["low_adv_dollar_1000"]
+    assert result.reasons == ["low_adv_dollar_1000", "missing_score_fundamentals"]
+
+
+def test_rank_symbols_missing_factor_score_keeps_symbol_ranked_but_ineligible():
+    items = [_item("NOSENT")]
+
+    with patch("trader.ranking.get_config", return_value=_ranking_cfg()), \
+         patch("trader.ranking._get_market_snap", return_value=None), \
+         patch("trader.ranking._get_sector_snap", return_value=None), \
+         patch("trader.ranking.get_latest_ticker_score", return_value=None), \
+         patch("trader.market_data.get_latest_bars", return_value=MagicMock()), \
+         patch("trader.ranking.compute_sentiment_factor", return_value={"value_0_1": None, "status": "missing"}), \
+         patch("trader.ranking.compute_momentum_trend_factor", return_value={"value_0_1": 0.7, "status": "ok"}), \
+         patch("trader.ranking.compute_risk_factor", return_value={"value_0_1": 0.8, "status": "ok"}), \
+         patch("trader.ranking.compute_fundamentals_factor", return_value={"value_0_1": 0.6, "status": "ok"}), \
+         patch("trader.ranking.compute_liquidity_factor", return_value={"eligible": True, "value_0_1": 1.0, "status": "ok", "reasons": []}), \
+         patch("trader.ranking.compute_optionability_factor", return_value={"eligible": True, "value_0_1": 1.0, "status": "ok", "reasons": []}), \
+         patch("trader.ranking._score_7factor", return_value=_composite_result(90.0)), \
+         patch("trader.ranking._check_eligibility", return_value=(True, [])), \
+         patch("trader.ranking._persist_rankings"):
+        ranked = rank_symbols(items)
+
+    assert len(ranked) == 1
+    result = ranked[0]
+    assert result.score_total == pytest.approx(0.9)
+    assert result.eligible is False
+    assert result.equity_eligible is False
+    assert result.bias is None
+    assert result.reasons == ["missing_score_sentiment"]
 
 
 def test_rank_symbols_bias_assignment():

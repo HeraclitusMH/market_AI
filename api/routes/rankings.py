@@ -108,6 +108,15 @@ def _parse_json(s, default=None):
         return default
 
 
+def _missing_required_score_reasons(components: dict) -> List[str]:
+    missing: List[str] = []
+    for name in ("sentiment", "momentum_trend", "risk", "fundamentals", "liquidity"):
+        factor = components.get(name)
+        if not isinstance(factor, dict) or factor.get("value_0_1") is None:
+            missing.append(f"missing_score_{name}")
+    return missing
+
+
 def _normalize_ranking(components: dict, score_total: float, eligible: bool, reasons: List[str]):
     """Expose persisted 7-factor ranking rows without recomputing old scores."""
     components = dict(components)
@@ -129,6 +138,13 @@ def _normalize_ranking(components: dict, score_total: float, eligible: bool, rea
     if isinstance(liquidity, dict) and liquidity.get("eligible") is False:
         eligible = False
         for reason in liquidity.get("reasons", []):
+            if reason not in reasons:
+                reasons.append(reason)
+
+    missing_score_reasons = _missing_required_score_reasons(components)
+    if missing_score_reasons:
+        eligible = False
+        for reason in missing_score_reasons:
             if reason not in reasons:
                 reasons.append(reason)
 

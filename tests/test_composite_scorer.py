@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from trader.composite_scorer import CompositeScorer
-from trader.composite_scorer.factors.sentiment import apply_contrarian_logic
+from trader.composite_scorer.factors.sentiment import SentimentFactor, apply_contrarian_logic
 from trader.composite_scorer.factors.technical import TechnicalFactor
 from trader.composite_scorer.normalization.normalizer import (
     min_max_normalize,
@@ -82,6 +82,18 @@ def test_sentiment_contrarian_extremes_flip():
     assert apply_contrarian_logic(95) == pytest.approx(5)
     assert apply_contrarian_logic(5) == pytest.approx(95)
     assert apply_contrarian_logic(60) == pytest.approx(60)
+
+
+def test_sentiment_factor_missing_existing_score_has_no_contribution():
+    result = SentimentFactor().calculate(
+        "NVDA",
+        {"sentiment_factor": {"value_0_1": None, "status": "missing"}},
+    )
+
+    assert result.score == pytest.approx(0.0)
+    assert result.confidence == pytest.approx(0.0)
+    assert result.data_staleness == "missing"
+    assert result.components["missing"] is True
 
 
 def test_technical_factor_outputs_valid_score():

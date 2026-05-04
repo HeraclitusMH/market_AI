@@ -136,3 +136,42 @@ it('excludes liquidity weights from the score formula', async () => {
   expect(screen.getAllByText((_, el) => Boolean(el?.textContent?.includes('Risk Penalty 35') && el.textContent.includes('5%'))).length).toBeGreaterThan(0);
   expect(screen.queryByText(/liquidity 100 x/i)).not.toBeInTheDocument();
 });
+
+it('shows missing instead of a neutral sentiment score', async () => {
+  vi.mocked(api.getRankings).mockResolvedValueOnce([
+    {
+      id: 1,
+      ts: '2026-05-04T10:00:00',
+      symbol: 'NVDA',
+      score_total: 0.64,
+      eligible: true,
+      reasons: [],
+      components: {
+        sentiment: {
+          value_0_1: null,
+          status: 'missing',
+          components: {
+            market: { raw: 0.3, status: 'ok', weight: 0 },
+            sector: { raw: 0.55, status: 'ok', weight: 0 },
+            ticker: { raw: null, status: 'missing', weight: 0 },
+          },
+        },
+        liquidity: { value_0_1: 1, status: 'ok', eligible: true },
+        composite_7factor: {
+          ...composite(64),
+          factors: {
+            ...composite(64).factors,
+            sentiment: { score: 0, weight: 0.2, contribution: 0, components: { missing: true } },
+          },
+        },
+      },
+    },
+  ]);
+
+  render(<Rankings />, { wrapper: Wrapper });
+
+  expect(await screen.findAllByText('NVDA')).toHaveLength(2);
+  fireEvent.click(screen.getAllByText('NVDA')[1].closest('tr') as HTMLElement);
+  expect(screen.getByText('missing')).toBeInTheDocument();
+  expect(screen.queryByText('+10.00')).not.toBeInTheDocument();
+});

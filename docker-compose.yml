@@ -26,6 +26,7 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://market_ai:market_ai_pass@postgres:5432/market_ai}
       MODE: ${MODE:-PAPER}
+      SENTIMENT_PROVIDER: ${SENTIMENT_PROVIDER:-claude_routine}
       APPROVE_MODE_DEFAULT: ${APPROVE_MODE_DEFAULT:-true}
       # API doesn't connect to IB, but shares the image with trader so keep vars consistent.
       IB_HOST: ${IB_HOST:-host.docker.internal}
@@ -56,6 +57,7 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://market_ai:market_ai_pass@postgres:5432/market_ai}
       MODE: ${MODE:-PAPER}
+      SENTIMENT_PROVIDER: ${SENTIMENT_PROVIDER:-claude_routine}
       # IB Gateway runs on the Windows host, outside Docker.
       IB_HOST: ${IB_HOST:-host.docker.internal}
       IB_PORT: ${IB_PORT:-7497}

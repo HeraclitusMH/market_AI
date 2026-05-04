@@ -39,8 +39,53 @@ function isComposite7Factor(value: unknown): value is Composite7Factor {
   return value !== null && typeof value === 'object' && 'composite_score' in value && 'factors' in value;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object';
+}
+
 function composite7Factor(components: RankingComponents): Composite7Factor | null {
   return isComposite7Factor(components.composite_7factor) ? components.composite_7factor : null;
+}
+
+function factorIsMissing(key: string, components: RankingComponents): boolean {
+  if (key !== 'sentiment') return false;
+  const sentiment = components.sentiment;
+  return isFactor(sentiment) && sentiment.status === 'missing';
+}
+
+function sentimentComponents(components: RankingComponents) {
+  const sentiment = components.sentiment;
+  if (!isFactor(sentiment) || !isRecord(sentiment.components)) return [];
+
+  return (['market', 'sector', 'ticker'] as const).map((key) => {
+    const item = sentiment.components?.[key];
+    const row = isRecord(item) ? item : {};
+    const raw = typeof row.raw === 'number' ? row.raw : null;
+    const status = typeof row.status === 'string' ? row.status : 'missing';
+    const weight = typeof row.weight === 'number' ? row.weight : null;
+    return { key, raw, status, weight };
+  });
+}
+
+function SentimentSourceBreakdown({ components }: { components: RankingComponents }) {
+  const rows = sentimentComponents(components);
+  if (!rows.length) return null;
+
+  return (
+    <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+      <span style={{ fontSize: 10.5, color: 'var(--ink-4)', marginRight: 2 }}>Sentiment inputs</span>
+      {rows.map((row) => (
+        <span
+          key={row.key}
+          className="mono"
+          title={row.weight == null ? undefined : `weight ${(row.weight * 100).toFixed(0)}%`}
+          style={{ fontSize: 10.5, color: row.status === 'ok' ? 'var(--ink-2)' : 'var(--ink-4)', whiteSpace: 'nowrap' }}
+        >
+          {row.key}: {row.status === 'ok' && row.raw != null ? row.raw.toFixed(2) : row.status}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function ScoreFormula({ components, total }: { components: RankingComponents; total: number }) {
@@ -53,7 +98,8 @@ function ScoreFormula({ components, total }: { components: RankingComponents; to
       if (!factor) return null;
       return { key, label, factor, isRisk: key === 'risk' };
     })
-    .filter((t): t is NonNullable<typeof t> => t !== null);
+    .filter((t): t is NonNullable<typeof t> => t !== null)
+    .filter((t) => !factorIsMissing(t.key, components));
 
   return (
     <div style={{ marginTop: 10 }}>
@@ -118,7 +164,8 @@ function FactorBreakdown({
       )}
       {COMPOSITE_FACTOR_KEYS.map(([k, label]) => {
         const factor = composite?.factors[k];
-        const value = factor ? factor.score / 100 : null;
+        const missing = factorIsMissing(k, components);
+        const value = factor && !missing ? factor.score / 100 : null;
         const displayPct = value == null ? 0 : Math.round(Math.min(Math.max(value, 0), 1) * 100);
         return (
           <div key={k} className="factor-bar-row">
@@ -127,12 +174,13 @@ function FactorBreakdown({
               <div className="factor-bar-fill" style={{ width: `${displayPct}%`, background: scoreColor(value) }} />
             </div>
             <span className="factor-bar-val" title={`weight ${(factor?.weight ?? 0) * 100}%`}>
-              {factor ? `${factor.contribution >= 0 ? '+' : ''}${factor.contribution.toFixed(2)}` : '--'}
+              {missing ? 'missing' : factor ? `${factor.contribution >= 0 ? '+' : ''}${factor.contribution.toFixed(2)}` : '--'}
             </span>
           </div>
         );
       })}
       <LiquidityGate factor={components.liquidity} />
+      <SentimentSourceBreakdown components={components} />
       <ScoreFormula components={components} total={total} />
     </div>
   );

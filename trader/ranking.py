@@ -101,6 +101,15 @@ def _check_eligibility(item: UniverseItem) -> Tuple[bool, List[str]]:
     return True, reasons
 
 
+def _missing_required_score_reasons(factors: Dict[str, dict]) -> List[str]:
+    """Trading requires every ranking factor to have an actual score."""
+    missing: List[str] = []
+    for name, factor in factors.items():
+        if not isinstance(factor, dict) or factor.get("value_0_1") is None:
+            missing.append(f"missing_score_{name}")
+    return missing
+
+
 # ── Persistence ───────────────────────────────────────────────────────────────
 
 def _persist_rankings(results: List[RankedSymbol], now: datetime) -> None:
@@ -233,8 +242,17 @@ def rank_symbols(
         # ── Eligibility gates ─────────────────────────────────────────────
         base_eligible, base_reasons = _check_eligibility(item)
         liq_reasons = liq_factor.get("reasons", [])
-        eligible = base_eligible and liq_factor.get("eligible", True)
-        reasons = base_reasons + liq_reasons
+        required_score_factors = {
+            **factors,
+            "liquidity": liq_factor,
+        }
+        missing_score_reasons = _missing_required_score_reasons(required_score_factors)
+        eligible = (
+            base_eligible
+            and liq_factor.get("eligible", True)
+            and not missing_score_reasons
+        )
+        reasons = base_reasons + liq_reasons + missing_score_reasons
         equity_eligible = eligible
         options_eligible = opt_factor.get("eligible", False)
 

@@ -22,6 +22,19 @@ class SentimentFactor(BaseFactor):
     }
 
     def calculate(self, symbol: str, data: dict):
+        existing = data.get("sentiment_factor")
+        if (
+            isinstance(existing, dict)
+            and existing.get("status") == "missing"
+            and existing.get("value_0_1") is None
+        ):
+            return self.result(
+                0.0,
+                {"missing": True, "source": "sentiment_factor", "legacy": existing},
+                confidence=0.0,
+                data_staleness="missing",
+            )
+
         upgrades = data.get("upgrades_30d")
         downgrades = data.get("downgrades_30d")
         revision = None
@@ -38,7 +51,6 @@ class SentimentFactor(BaseFactor):
         if isinstance(data.get("put_25_delta_iv"), (int, float)) and isinstance(data.get("call_25_delta_iv"), (int, float)):
             skew = float(data["put_25_delta_iv"]) - float(data["call_25_delta_iv"])
         news = None
-        existing = data.get("sentiment_factor")
         if isinstance(existing, dict) and existing.get("value_0_1") is not None:
             news = float(existing["value_0_1"]) * 100
         elif isinstance(data.get("news_social_sentiment"), (int, float)):

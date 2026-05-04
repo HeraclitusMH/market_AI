@@ -457,6 +457,18 @@ def test_sentiment_factor_all_negative():
     assert result["value_0_1"] == pytest.approx(0.0, abs=0.01)
 
 
+def test_sentiment_factor_missing_without_ticker_score():
+    mkt = _snap(0.3)
+    sec = _snap(0.55)
+    result = compute_sentiment_factor(mkt, sec, None)
+    assert result["status"] == "missing"
+    assert result["value_0_1"] is None
+    assert result["raw_score"] == pytest.approx(0.0, abs=0.01)
+    assert result["components"]["market"]["raw"] == pytest.approx(0.3)
+    assert result["components"]["sector"]["raw"] == pytest.approx(0.55)
+    assert result["components"]["ticker"]["status"] == "missing"
+
+
 def test_sentiment_factor_missing_when_all_stale():
     mkt = _snap(0.5, age_hours=80)
     sec = _snap(0.5, age_hours=80)

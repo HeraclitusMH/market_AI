@@ -90,7 +90,10 @@ def refresh_and_store(provider: Optional[SentimentProvider] = None) -> dict:
                 "snapshots_written": 0,
             }
             if run.status == "success" and run.results:
-                _persist_snapshots(run.results)
+                _persist_snapshots(
+                    run.results,
+                    replace_existing=cfg.sentiment.provider == "claude_routine",
+                )
                 summary["snapshots_written"] = len(run.results)
                 _log_event(
                     "sentiment_refresh_success",
@@ -141,7 +144,10 @@ def refresh_and_store(provider: Optional[SentimentProvider] = None) -> dict:
                     }
                 log.error("Ticker sentiment fetch failed: %s", e)
 
-        _persist_snapshots(results)
+        _persist_snapshots(
+            results,
+            replace_existing=cfg.sentiment.provider == "claude_routine",
+        )
         summary = {
             "status": "success" if results else "failed",
             "reason": "" if results else "no_results",
@@ -159,9 +165,11 @@ def refresh_and_store(provider: Optional[SentimentProvider] = None) -> dict:
         _REFRESH_LOCK.release()
 
 
-def _persist_snapshots(results) -> None:
+def _persist_snapshots(results, *, replace_existing: bool = False) -> None:
     now = utcnow()
     with get_db() as db:
+        if replace_existing:
+            db.query(SentimentSnapshot).delete()
         for r in results:
             db.add(SentimentSnapshot(
                 timestamp=now,

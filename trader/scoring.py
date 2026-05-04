@@ -53,7 +53,13 @@ def _compute_score(
     market_snap, sector_snap, ticker_snap,
     w_market: float, w_sector: float, w_ticker: float,
 ) -> Tuple[float, Dict]:
-    """Weighted sentiment score in [-1, 1] with recency penalty and weight redistribution."""
+    """Weighted sentiment score in [-1, 1] with recency penalty.
+
+    Ticker-level sentiment is required for a directional per-symbol score. Market
+    and sector snapshots are kept as context, but they do not create a bullish or
+    bearish sentiment score for tickers that were not evaluated in the latest
+    routine output.
+    """
     mkt_age = _age_hours(market_snap)
     sec_age = _age_hours(sector_snap)
     tkr_age = _age_hours(ticker_snap)
@@ -70,10 +76,8 @@ def _compute_score(
     have_sector = sec_status in ("ok", "penalized")
     have_ticker = tkr_status in ("ok", "penalized")
 
-    if not have_ticker and not have_sector:
-        w_m, w_s, w_t = 1.0, 0.0, 0.0
-    elif not have_ticker and have_sector:
-        w_m, w_s, w_t = 0.35, 0.65, 0.0
+    if not have_ticker:
+        w_m, w_s, w_t = 0.0, 0.0, 0.0
     elif have_ticker and not have_sector:
         w_m, w_s, w_t = 0.30, 0.0, 0.70
     else:
@@ -126,8 +130,9 @@ def compute_sentiment_factor(
     )
     statuses = [components[k]["status"] for k in components]
     all_missing = all(s in ("stale", "missing") for s in statuses)
-    status = "missing" if all_missing else "ok"
-    value_0_1: Optional[float] = None if all_missing else round((raw_score + 1.0) / 2.0, 4)
+    ticker_missing = components["ticker"]["status"] in ("stale", "missing")
+    status = "missing" if all_missing or ticker_missing else "ok"
+    value_0_1: Optional[float] = None if status == "missing" else round((raw_score + 1.0) / 2.0, 4)
     return {
         "value_0_1": value_0_1,
         "raw_score": round(raw_score, 4),
