@@ -1,44 +1,48 @@
 {
   "schema_version": 1,
-  "timestamp": "2026-05-04T07:00:00Z",
-  "run_id": "run_20260504_070000_b7e1",
-  "articles_analyzed": 44,
-  "articles_skipped_dedup": 0,
+  "timestamp": "2026-05-04T11:45:00Z",
+  "run_id": "run_20260504_114500_a4f2",
+  "articles_analyzed": 37,
+  "articles_skipped_dedup": 11,
   "total_articles_fetched": 67,
   "feeds_failed": [
-    "reuters_business: fetch failed: HTTPSConnectionPool(host='feeds.reuters.com', port=443): Max retries exceeded with url: /reuters/businessNews (Caused by NameResolutionError(\"<urllib3.connection.HTTPSConnection object at 0x0000019CFA5F15B0>: Failed to resolve 'feeds.reuters.com' ([Errno 11001] getaddrinfo failed)\"))",
-    "reuters_markets: fetch failed: HTTPSConnectionPool(host='feeds.reuters.com', port=443): Max retries exceeded with url: /reuters/marketsNews (Caused by NameResolutionError(\"<urllib3.connection.HTTPSConnection object at 0x0000019CFA5F1A60>: Failed to resolve 'feeds.reuters.com' ([Errno 11001] getaddrinfo failed)\"))"
+    "reuters_business: fetch failed: HTTPSConnectionPool(host='feeds.reuters.com', port=443): Max retries exceeded with url: /reuters/businessNews (Caused by NameResolutionError(\"<urllib3.connection.HTTPSConnection object at 0x00000248192D9610>: Failed to resolve 'feeds.reuters.com' ([Errno 11001] getaddrinfo failed)\"))",
+    "reuters_markets: fetch failed: HTTPSConnectionPool(host='feeds.reuters.com', port=443): Max retries exceeded with url: /reuters/marketsNews (Caused by NameResolutionError(\"<urllib3.connection.HTTPSConnection object at 0x00000248192DA210>: Failed to resolve 'feeds.reuters.com' ([Errno 11001] getaddrinfo failed)\"))"
   ],
   "market": {
-    "score": 0.30,
-    "summary": "Markets are broadly positive driven by strong Big Tech AI earnings and S&P 500/Nasdaq at highs, with Asian tech markets hitting fresh records. Geopolitical risk from the Hormuz closure and Trump auto tariff threats temper the upside.",
+    "score": 0.10,
+    "summary": "Market sentiment is cautious as Iran's attack on a US warship in the Strait of Hormuz pushed S&P 500 futures down 0.4% pre-bell, though strong tech earnings and AI-driven momentum continue to underpin resilience with the S&P 500 and Nasdaq fresh off record closes.",
     "key_drivers": [
-      "Big Tech earnings beat; AI spending bubble fears dismissed",
-      "AMD and SK Hynix surging on AI data center demand",
-      "Iran-US Hormuz conflict disrupting global shipping supply chains",
-      "Trump auto tariff threats weighing on European markets"
+      "Iran attack on US warship in Hormuz drops S&P 500 futures 0.4%, Nasdaq 0.5%",
+      "Tech earnings and AI momentum providing market resilience per Morgan Stanley",
+      "AI chipmakers driving Asian stocks back to all-time highs despite initial geopolitical shock",
+      "Fed chair transition uncertainty as Warsh raises questions on monetary policy independence"
     ]
   },
   "sectors": {
     "Technology": {
-      "score": 0.55,
-      "summary": "Big Tech earnings validated massive AI capex, AMD surged 74% in April, SK Hynix rallied 12% on data center spending signals, and the data center trade is now broadly mainstream."
+      "score": 0.40,
+      "summary": "AI chipmakers drove Asian stocks to record highs, Morgan Stanley sees tech earnings eclipsing geopolitical fears, and Cerebras targets a $3.5B IPO at $24.5B valuation — partially offset by Microsoft lagging peers on AI spending concerns."
+    },
+    "Healthcare": {
+      "score": -0.30,
+      "summary": "A Deloitte report flags a 'bubble effect' as GLP-1/obesity assets now represent 25% of late-stage pharma pipeline while oncology's share has slipped to 20%, raising concentration risk concerns for the sector."
     },
     "Energy": {
-      "score": -0.15,
-      "summary": "OPEC+ announced a 188,000 bpd output increase bearish for prices, while Hormuz closure continues to disrupt supply chains and keep oil trade choppy."
+      "score": 0.10,
+      "summary": "Oil prices jumped after Iran's navy halted a US warship in the Strait of Hormuz, providing a near-term positive price catalyst for energy stocks that offsets the prior OPEC+ supply increase headwind."
     },
     "Financials": {
-      "score": 0.20,
-      "summary": "Berkshire Hathaway's leadership transition to Greg Abel received positive shareholder reception, and the dropped Fed Chair Powell criminal investigation reduces institutional uncertainty."
+      "score": 0.15,
+      "summary": "Bitcoin breaking $80,000 boosted crypto-exposed stocks like Coinbase and Strategy, though Kevin Warsh's unconventional stance on Fed independence is introducing uncertainty into the monetary policy outlook."
     },
     "Consumer Discretionary": {
       "score": 0.15,
       "summary": "Amazon made a significant strategic move positive for retail sector outlook, while the GameStop-eBay takeover bid injects speculative activity into e-commerce."
     },
     "Industrials": {
-      "score": -0.10,
-      "summary": "Three industrials stocks were flagged with warning signs, suggesting selective caution even as the sector has posted strong 6-month gains of 14.6%."
+      "score": -0.20,
+      "summary": "Airlines are tackling a fuel cost surge from Middle East tensions with price hikes and outlook cuts, compounding the existing warning signs flagged for industrials stocks."
     }
   },
   "tickers": {
@@ -65,228 +69,197 @@
     "BRK.B": {
       "score": 0.20,
       "summary": "New CEO Greg Abel earned broadly positive reviews from Berkshire shareholders at his first annual meeting, ruling out a breakup and emphasizing continuity with Buffett's legacy."
+    },
+    "MSFT": {
+      "score": -0.30,
+      "summary": "Microsoft is described as lagging its megacap peers as investors question its AI capital expenditure plans, with analyst commentary calling it 'a mess' relative to the Magnificent Seven."
     }
   },
   "sources": [
     {
-      "url": "https://seekingalpha.com/news/4584511-samsung-lags-sk-hynix-as-citi-slashes-target-price-on-union-strike-concerns",
-      "title": "Samsung lags SK Hynix as Citi slashes target price on union strike concerns",
+      "url": "https://seekingalpha.com/news/4584604-costar-group-stock-climbs-after-ceo-buys-2_5m-of-stock",
+      "title": "CoStar Group stock climbs after CEO buys $2.5M of stock",
       "feed": "seeking_alpha"
     },
     {
-      "url": "https://www.cnbc.com/2026/05/04/asia-markets-live-updates-today-hang-seng-kospi-asx-oil-us-iran-trump-hormuz.html",
-      "title": "South Korean stocks hit fresh record, building on historic monthly rally in April",
-      "feed": "cnbc"
-    },
-    {
-      "url": "https://www.investing.com/news/company-news/federal-signal-q1-2026-slides-record-results-drive-raised-outlook-93CH-4655013",
-      "title": "Federal Signal Q1 2026 slides: record results drive raised outlook",
-      "feed": "investing_com"
-    },
-    {
-      "url": "https://seekingalpha.com/news/4584496-quant-rating-check-analyzing-the-impact-of-spirits-collapse-on-airline-standings",
-      "title": "Quant Rating Check: Analyzing the impact of Spirit's collapse on airline standings",
+      "url": "https://seekingalpha.com/news/4584606-sap-acquires-prior-labs-in-ai-push",
+      "title": "SAP acquires Prior Labs in AI push",
       "feed": "seeking_alpha"
     },
     {
-      "url": "https://www.investing.com/news/world-news/trump-says-us-to-help-ships-stranded-in-strait-of-hormuz-as-tanker-hit-by-projectiles-4654934",
-      "title": "Iran warns US Navy to stay clear of Hormuz after Trump says US to help stranded ships",
-      "feed": "investing_com"
-    },
-    {
-      "url": "https://www.investing.com/news/stock-market-news/australia-stocks-lower-at-close-of-trade-spasx-200-down-037-4655009",
-      "title": "Australia stocks lower at close of trade; S&P/ASX 200 down 0.37%",
-      "feed": "investing_com"
-    },
-    {
-      "url": "https://www.cnbc.com/2026/05/04/india-coal-power-heatwave-lng-supply-demand-prices-generation.html",
-      "title": "India is burning more coal as extreme heat and the Iran war squeeze energy supplies",
-      "feed": "cnbc"
-    },
-    {
-      "url": "https://www.investing.com/news/company-news/jyske-bank-buys-back-83296-shares-in-week-18-93CH-4655008",
-      "title": "Jyske Bank buys back 83,296 shares in week 18",
-      "feed": "investing_com"
-    },
-    {
-      "url": "https://www.cnbc.com/2026/05/04/european-markets-stoxx-600-ftse-dax-cac-iran-latest-news.html",
-      "title": "European markets set to open lower as Trump threatens new auto tariffs",
-      "feed": "cnbc"
-    },
-    {
-      "url": "https://www.investing.com/news/stock-market-news/australia-japan-strengthen-critical-minerals-ties-4654982",
-      "title": "Australia, Japan strengthen critical minerals ties",
-      "feed": "investing_com"
-    },
-    {
-      "url": "https://www.investing.com/news/stock-market-news/sk-hynix-shares-rally-12-after-us-tech-firms-signal-strong-spending-on-ai-data-centers-4655001",
-      "title": "SK Hynix shares rally 12% after US tech firms signal strong spending on AI data centers",
-      "feed": "investing_com"
-    },
-    {
-      "url": "https://www.investing.com/news/economic-indicators/russia-manufacturing-contracts-for-11th-straight-month-in-april-pmi-shows-4654994",
-      "title": "Russia manufacturing contracts for 11th straight month in April, PMI shows",
-      "feed": "investing_com"
-    },
-    {
-      "url": "https://finance.yahoo.com/markets/stocks/articles/veeva-systems-veev-6-9-061141757.html?.tsrc=rss",
-      "title": "Veeva Systems (VEEV) Is Up 6.9% After S&P 500 Addition and GC Transition News",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://www.cnbc.com/2026/05/04/fifa-world-cup-team-payouts-ticket-prices.html",
-      "title": "World Cup prize pool nears $900 million as FIFA boosts payouts. Here's who gets what",
-      "feed": "cnbc"
-    },
-    {
-      "url": "https://seekingalpha.com/news/4584504-chinese-robot-hand-maker-linkerbot-eyes-6b-valuation-in-next-funding-round---report",
-      "title": "Chinese robot-hand maker Linkerbot eyes $6B valuation in next funding round - report",
+      "url": "https://seekingalpha.com/news/4584598-blackberry-surges-after-qnx-unit-chief-highlights-software",
+      "title": "BlackBerry surges after QNX unit chief highlights software",
       "feed": "seeking_alpha"
     },
     {
-      "url": "https://www.investing.com/news/transcripts/earnings-call-transcript-federal-signal-q1-2026-beats-expectations-with-strong-growth-93CH-4654992",
-      "title": "Earnings call transcript: Federal Signal Q1 2026 beats expectations with strong growth",
+      "url": "https://seekingalpha.com/news/4584608-twist-bioscience-gaap-eps-of-0_71-misses-by-0_23-revenue-of-110_72m-beats-by-3_06m",
+      "title": "Twist Bioscience GAAP EPS of -$0.71 misses by $0.23, revenue of $110.72M beats by $3.06M",
+      "feed": "seeking_alpha"
+    },
+    {
+      "url": "https://seekingalpha.com/news/4584607-packaging-corporation-lands-a-bull-rating-from-deutsche-bank",
+      "title": "Packaging Corporation lands a bull rating from Deutsche Bank",
+      "feed": "seeking_alpha"
+    },
+    {
+      "url": "https://seekingalpha.com/news/4584602-cerberas-systems-aims-to-raise-3_5b-in-blockbuster-ipo",
+      "title": "Cerberas Systems aims to raise $3.5B in blockbuster IPO",
+      "feed": "seeking_alpha"
+    },
+    {
+      "url": "https://seekingalpha.com/news/4584603-pop-mart-reopens-its-beijing-theme-park-as-bets-on-labubu-buzz",
+      "title": "Pop Mart reopens its Beijing theme park as bets on Labubu buzz",
+      "feed": "seeking_alpha"
+    },
+    {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/jonestrading-launches-jt20-index-concentrated-112400063.html?.tsrc=rss",
+      "title": "JonesTrading Launches JT20 Index, a Concentrated Benchmark Tracking the 20 Largest U.S. Companies",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/stocks-mostly-down-pre-bell-112300773.html?.tsrc=rss",
+      "title": "Stocks Mostly Down Pre-Bell as Traders Assess Middle East Developments, Await Fresh Labor Data",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/ai-persian-gulf-outlooks-cap-111340217.html?.tsrc=rss",
+      "title": "AI, Persian Gulf Outlooks Cap Wall Street Pre-Bell; Asia Up, Europe Off",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://www.cnbc.com/2026/05/04/fed-kevin-warsh-interest-rates.html",
+      "title": "Warsh's take on Fed independence is met with confusion and some concern",
+      "feed": "cnbc"
+    },
+    {
+      "url": "https://www.cnbc.com/2026/05/04/cerebras-ipo-ai-chipmaker.html",
+      "title": "AI chipmaker Cerebras targets $3.5 billion raise in IPO",
+      "feed": "cnbc"
+    },
+    {
+      "url": "https://www.cnbc.com/2026/05/04/wegovy-glp1-weight-loss-drugs-pharma-growth-bubble.html",
+      "title": "'Bubble effect': Weight loss drug fueled growth is putting the pharma sector at risk, report finds",
+      "feed": "cnbc"
+    },
+    {
+      "url": "https://finance.yahoo.com/m/551adfb4-434b-308d-b69b-0b3cb1c32b3d/stock-futures-tumble-on.html?.tsrc=rss",
+      "title": "Stock Futures Tumble on Report of Iran Attack on US Warship",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://finance.yahoo.com/m/9fc3c6c4-ddc9-3159-9fed-8a295158994f/coinbase%2C-strategy%2C-and-other.html?.tsrc=rss",
+      "title": "Coinbase, Strategy, and Other Crypto Stocks Get a Boost as Bitcoin Rallies",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/ai-chipmakers-korea-taiwan-drive-063820107.html?.tsrc=rss",
+      "title": "AI Chipmakers in Korea, Taiwan Drive Asian Stocks to Record",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/morgan-stanley-sees-tech-earnings-090410744.html?.tsrc=rss",
+      "title": "Morgan Stanley Sees Tech Earnings Eclipsing Iran War for Stocks",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://finance.yahoo.com/m/37e6c99d-864c-3e07-9a18-62a36d227089/bitcoin-price-breaks-%2480%2C000..html?.tsrc=rss",
+      "title": "Bitcoin Price Breaks $80,000. Why It's Just a Blip for the Crypto.",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://www.fool.com/investing/2026/05/04/microsoft-buy-avoid-growth-stock-may/?.tsrc=rss",
+      "title": "Microsoft Is a Mess. Is the \"Magnificent Seven\" Stock a Buy in May or Better Avoided?",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://www.fool.com/investing/2026/05/04/jerome-powell-threw-donald-trump-under-the-bus-fed/?.tsrc=rss",
+      "title": "Jerome Powell Just Threw President Donald Trump Under the Bus One Last Time Before His Term as Fed Chair Ends",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://finance.yahoo.com/sectors/technology/articles/high-growth-tech-stocks-aduro-093818433.html?.tsrc=rss",
+      "title": "High Growth Tech Stocks Among 3 With Promising Potential",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/global-market-highlights-3-stocks-093801648.html?.tsrc=rss",
+      "title": "Global Market Highlights: 3 Stocks Conceivably Priced Below Fair Value",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/insider-favored-growth-companies-global-093550545.html?.tsrc=rss",
+      "title": "Insider-Favored Growth Companies In Global May 2026",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/top-dividend-stocks-global-consider-093213556.html?.tsrc=rss",
+      "title": "Top Dividend Stocks In Global To Consider",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://www.fool.com/investing/2026/05/04/buy-2-index-funds-beat-sp-500-next-5-wall-street/?.tsrc=rss",
+      "title": "Buy 2 Index Funds to Beat the S&P 500 in the Next 5 Years, According to Wall Street Analysts",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://www.fool.com/investing/2026/05/04/prediction-will-1-worlds-most-valuable-stocks-2050/?.tsrc=rss",
+      "title": "Prediction: This Will Be 1 of the World's Most Valuable Stocks in 2050",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://www.fool.com/investing/2026/05/04/buy-spacex-ipo-venture-fund-crush-sp-500-nasdaq/?.tsrc=rss",
+      "title": "Want to Buy SpaceX Before Its IPO? This Venture Fund Crushed the S&P 500 and Nasdaq-100 in the Past Year.",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://www.investing.com/news/company-news/sap-to-acquire-dremio-to-enhance-ai-data-capabilities-93CH-4655652",
+      "title": "SAP to acquire Dremio to enhance AI data capabilities",
       "feed": "investing_com"
     },
     {
-      "url": "https://www.investing.com/news/economy-news/uks-leftwing-greens-seek-to-topple-labours-london-strongholds-4654991",
-      "title": "UK's left-wing Greens seek to topple Labour's London strongholds",
+      "url": "https://www.investing.com/news/stock-market-news/factboxairlines-tackle-fuel-cost-surge-with-price-hikes-outlook-cuts-4655649",
+      "title": "Factbox-Airlines tackle fuel cost surge with price hikes, outlook cuts",
       "feed": "investing_com"
     },
     {
-      "url": "https://www.investing.com/news/stock-market-news/taiwan-stocks-lower-at-close-of-trade-taiwan-weighted-down-096-4654990",
-      "title": "Taiwan stocks lower at close of trade; Taiwan Weighted down 0.96%",
+      "url": "https://www.investing.com/news/stock-market-news/stocks-edge-up-in-asia-oil-flat-amid-middle-east-uncertainty-4654933",
+      "title": "Oil jumps after Iran's navy said it halted a US warship",
       "feed": "investing_com"
     },
     {
-      "url": "https://seekingalpha.com/news/4584498-bitcoin-tops-80000-to-hit-three-month-high-ether-advances",
-      "title": "Bitcoin tops $80,000 to hit three-month high; Ether advances",
-      "feed": "seeking_alpha"
+      "url": "https://www.investing.com/news/economic-indicators/turkeys-april-inflation-exceeds-forecasts-at-324-93CH-4655650",
+      "title": "Turkey's April inflation exceeds forecasts at 32.4%",
+      "feed": "investing_com"
     },
     {
-      "url": "https://www.cnbc.com/2026/05/04/gamestop-ebay-takeover-bid-ryan-cohen-gaming-retail-ecommerce.html",
-      "title": "Meme stock GameStop makes $56 billion offer for eBay in bid to rival Amazon",
-      "feed": "cnbc"
+      "url": "https://www.investing.com/news/company-news/biocryst-licenses-navenibart-rights-in-europe-for-70m-upfront-93CH-4655633",
+      "title": "BioCryst licenses navenibart rights in Europe for $70M upfront",
+      "feed": "investing_com"
     },
     {
-      "url": "https://seekingalpha.com/news/4584509-mondays-economic-calendar",
-      "title": "Monday's Economic Calendar",
-      "feed": "seeking_alpha"
+      "url": "https://www.investing.com/news/company-news/corteva-names-spinoff-company-vylor-ahead-of-planned-split-93CH-4655632",
+      "title": "Corteva names spinoff company Vylor ahead of planned split",
+      "feed": "investing_com"
     },
     {
-      "url": "https://www.cnbc.com/2026/05/03/opec-announces-188000-barrels-per-day-output-increase-.html",
-      "title": "OPEC+ announces 188,000 barrels-per-day output increase in first meeting without UAE",
-      "feed": "cnbc"
+      "url": "https://www.investing.com/news/company-news/cibus-transfers-geneedited-rice-materials-to-partner-interoc-93CH-4655634",
+      "title": "Cibus transfers gene-edited rice materials to partner Interoc",
+      "feed": "investing_com"
     },
     {
-      "url": "https://seekingalpha.com/news/4584495-asian-equities-gain-amid-light-holiday-volume-investors-weigh-trumps-middle-east-updates",
-      "title": "Asian equities gain amid light holiday volume; investors weigh Trump's Middle East updates",
-      "feed": "seeking_alpha"
+      "url": "https://www.investing.com/news/filings/form-144-perion-network-ltd-for-4-may-93CH-4655651",
+      "title": "Form 144 Perion Network Ltd. For: 4 May",
+      "feed": "investing_com"
     },
     {
-      "url": "https://seekingalpha.com/news/4584505-datavault-ai-prices-60m-public-offering-of-common-shares",
-      "title": "Datavault AI prices $60M public offering of common shares",
-      "feed": "seeking_alpha"
+      "url": "https://www.investing.com/news/company-news/cabaletta-bio-stock-jumps-on-150m-offering-pricing-93CH-4655646",
+      "title": "Cabaletta Bio stock jumps on $150M offering pricing",
+      "feed": "investing_com"
     },
     {
-      "url": "https://www.cnbc.com/2026/05/04/nuclear-energy-europe-trump-iran-war.html",
-      "title": "The nuclear option: Atomic energy could offer Europe hope, say analysts — but it won't be easy",
-      "feed": "cnbc"
-    },
-    {
-      "url": "https://www.cnbc.com/2026/05/04/denmark-data-centers-moratorium-grid-pause-power-demand.html",
-      "title": "Denmark faces data center reckoning as power grid overwhelmed by surging demand",
-      "feed": "cnbc"
-    },
-    {
-      "url": "https://finance.yahoo.com/m/cfdf164e-e24a-366b-9d8b-b0274f05ba94/dow-jones-futures%3A-trump-says.html?.tsrc=rss",
-      "title": "Dow Jones Futures: Trump Says U.S. To 'Guide' Ships Through Hormuz",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://www.cnbc.com/2026/05/04/oil-prices-today-wti-brent-trump-iran-us-hormuz.html",
-      "title": "Oil prices mixed in choppy trade as Trump plans to 'free' ships stranded due to Mideast conflict",
-      "feed": "cnbc"
-    },
-    {
-      "url": "https://finance.yahoo.com/markets/world-indices/articles/seoul-taipei-hit-records-asian-032149912.html?.tsrc=rss",
-      "title": "Seoul, Taipei hit records as Asian stocks track Wall St tech rally",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://finance.yahoo.com/economy/policy/articles/markets-alert-trump-vows-project-231032971.html?.tsrc=rss",
-      "title": "Markets on alert as Trump vows 'Project Freedom' for Hormuz, setting up potential showdown after renewed attacks on ships",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://www.cnbc.com/2026/05/03/trump-iran-strait-of-hormuz-trapped-ships.html",
-      "title": "Trump says U.S. will 'free' ships trapped in Persian Gulf by Strait of Hormuz closure",
-      "feed": "cnbc"
-    },
-    {
-      "url": "https://www.cnbc.com/2026/05/04/rudy-giuliani-hospital-critical-condition-trump.html",
-      "title": "Rudy Giuliani, former New York mayor and Trump lawyer, hospitalized in critical condition",
-      "feed": "cnbc"
-    },
-    {
-      "url": "https://finance.yahoo.com/markets/stocks/articles/3-industrials-stocks-warning-signs-014055445.html?.tsrc=rss",
-      "title": "3 Industrials Stocks with Warning Signs",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://www.fool.com/investing/2026/05/03/amd-stock-amd-earnings-date-when-best-ai-stocks/?.tsrc=rss",
-      "title": "Why AMD Stock Skyrocketed 74% in April",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://247wallst.com/investing/2026/05/03/this-high-yield-bond-etf-offers-steady-cash-flow-and-low-volatility/?.tsrc=rss",
-      "title": "This High-Yield Bond ETF Offers Steady Cash Flow and Low Volatility",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://www.thestreet.com/investing/stocks/cathie-wood-buys-28-7-million-of-tumbling-megacap-stock-meta-meta?.tsrc=rss",
-      "title": "Cathie Wood buys $28.7 million of tumbling megacap stock",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://www.cnbc.com/2026/05/03/trump-assassination-cole-allen-suicide-pirro.html",
-      "title": "Pirro reveals new Trump attack evidence; Cole Allen removed from 'suicide precautions'",
-      "feed": "cnbc"
-    },
-    {
-      "url": "https://www.cnbc.com/2026/05/03/berkshire-annual-meeting-greg-abel-rules-out-break-up-stressing-continuity-with-buffett.html",
-      "title": "Greg Abel rules out Berkshire break-up, stresses continuity with Buffett's legacy at annual meeting",
-      "feed": "cnbc"
-    },
-    {
-      "url": "https://finance.yahoo.com/markets/stocks/articles/jim-cramer-says-data-center-223131502.html?.tsrc=rss",
-      "title": "Jim Cramer Says 'Data Center' Trade Is Going Mainstream",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://www.cnbc.com/2026/05/03/big-tech-earnings-show-how-big-smart-spending-can-be-rewarded-by-the-market.html",
-      "title": "Big Tech earnings show how big, smart spending can be rewarded by the market",
-      "feed": "cnbc"
-    },
-    {
-      "url": "https://www.fool.com/investing/2026/05/03/amazon-just-made-a-big-move-these-2-sp-500-stocks/?.tsrc=rss",
-      "title": "Amazon Just Made a Big Move. These 2 S&P 500 Stocks Are Next to Watch.",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://www.cnbc.com/2026/05/03/berkshire-ceo-greg-abel-earns-solid-first-scorecard-after-first-annual-meeting.html",
-      "title": "Greg Abel earns solid scorecard from Berkshire shareholders after first annual meeting",
-      "feed": "cnbc"
-    },
-    {
-      "url": "https://247wallst.com/investing/2026/05/03/this-natural-resources-etf-has-silently-outperformed-the-sp-500-year-to-date-while-yielding-5/?.tsrc=rss",
-      "title": "This Natural Resources ETF Has Silently Outperformed The S&P 500 Year-To-Date While Yielding 5%",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://www.cnbc.com/2026/05/03/pirro-fed-powell.html",
-      "title": "Pirro appears to drop plans to appeal criminal investigation of Fed Chair Powell",
-      "feed": "cnbc"
+      "url": "https://www.investing.com/news/company-news/galle-gallants-franchise-acquired-for-lanka-premier-league-season-6-93CH-4655631",
+      "title": "Galle Gallants franchise acquired for Lanka Premier League season 6",
+      "feed": "investing_com"
     }
   ]
 }
