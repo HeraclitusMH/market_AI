@@ -1,10 +1,319 @@
 {
   "schema_version": 1,
-  "last_cleanup": null,
+  "last_cleanup": "2026-05-04T06:58:00Z",
   "ttl_hours": 48,
   "stats": {
-    "total_processed_lifetime": 0,
-    "current_entries": 0
+    "total_processed_lifetime": 44,
+    "current_entries": 44
   },
-  "articles": {}
+  "articles": {
+    "5e99ffc8": {
+      "url": "https://www.cnbc.com/2026/05/04/gamestop-ebay-takeover-bid-ryan-cohen-gaming-retail-ecommerce.html",
+      "title": "Meme stock GameStop makes $56 billion offer for eBay in bid to rival Amazon",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T05:29:55Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "38dfafcb": {
+      "url": "https://www.cnbc.com/2026/05/04/rudy-giuliani-hospital-critical-condition-trump.html",
+      "title": "Rudy Giuliani, former New York mayor and Trump lawyer, hospitalized in critical condition",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T01:53:02Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "63099a08": {
+      "url": "https://www.cnbc.com/2026/05/04/india-coal-power-heatwave-lng-supply-demand-prices-generation.html",
+      "title": "India is burning more coal as extreme heat and the Iran war squeeze energy supplies",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T06:26:02Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "4baa7fa0": {
+      "url": "https://www.cnbc.com/2026/05/03/trump-iran-strait-of-hormuz-trapped-ships.html",
+      "title": "Trump says U.S. will 'free' ships trapped in Persian Gulf by Strait of Hormuz closure",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T02:01:05Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "600ebe15": {
+      "url": "https://www.cnbc.com/2026/05/04/nuclear-energy-europe-trump-iran-war.html",
+      "title": "The nuclear option: Atomic energy could offer Europe hope, say analysts — but it won't be easy",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T05:00:01Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "901d0dc6": {
+      "url": "https://www.cnbc.com/2026/05/04/oil-prices-today-wti-brent-trump-iran-us-hormuz.html",
+      "title": "Oil prices mixed in choppy trade as Trump plans to 'free' ships stranded due to Mideast conflict",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T03:22:14Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "5befc48c": {
+      "url": "https://www.cnbc.com/2026/05/04/european-markets-stoxx-600-ftse-dax-cac-iran-latest-news.html",
+      "title": "European markets set to open lower as Trump threatens new auto tariffs",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T06:22:57Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "1123b469": {
+      "url": "https://www.cnbc.com/2026/05/04/denmark-data-centers-moratorium-grid-pause-power-demand.html",
+      "title": "Denmark faces data center reckoning as power grid overwhelmed by surging demand",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T05:00:01Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "74acdbad": {
+      "url": "https://www.cnbc.com/2026/05/04/fifa-world-cup-team-payouts-ticket-prices.html",
+      "title": "World Cup prize pool nears $900 million as FIFA boosts payouts. Here’s who gets what",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T06:11:02Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "f5f2d8d3": {
+      "url": "https://www.cnbc.com/2026/05/03/trump-assassination-cole-allen-suicide-pirro.html",
+      "title": "Pirro reveals new Trump attack evidence; Cole Allen removed from 'suicide precautions'",
+      "feed": "cnbc",
+      "published_at": "2026-05-03T23:44:38Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "48808450": {
+      "url": "https://www.cnbc.com/2026/05/04/asia-markets-live-updates-today-hang-seng-kospi-asx-oil-us-iran-trump-hormuz.html",
+      "title": "South Korean stocks hit fresh record, building on historic monthly rally in April",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T06:45:35Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "a0d65f48": {
+      "url": "https://www.cnbc.com/2026/05/03/berkshire-ceo-greg-abel-earns-solid-first-scorecard-after-first-annual-meeting.html",
+      "title": "Greg Abel earns solid scorecard from Berkshire shareholders after first annual meeting",
+      "feed": "cnbc",
+      "published_at": "2026-05-03T21:14:08Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "d729328c": {
+      "url": "https://www.cnbc.com/2026/05/03/pirro-fed-powell.html",
+      "title": "Pirro appears to drop plans to appeal criminal investigation of Fed Chair Powell",
+      "feed": "cnbc",
+      "published_at": "2026-05-03T18:58:42Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "0e8a837b": {
+      "url": "https://www.cnbc.com/2026/05/03/big-tech-earnings-show-how-big-smart-spending-can-be-rewarded-by-the-market.html",
+      "title": "Big Tech earnings show how big, smart spending can be rewarded by the market",
+      "feed": "cnbc",
+      "published_at": "2026-05-03T22:31:09Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "7c838c8a": {
+      "url": "https://www.cnbc.com/2026/05/03/opec-announces-188000-barrels-per-day-output-increase-.html",
+      "title": "OPEC+ announces 188,000 barrels-per-day output increase in first meeting without UAE",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T05:19:19Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "2e398b6e": {
+      "url": "https://www.cnbc.com/2026/05/03/berkshire-annual-meeting-greg-abel-rules-out-break-up-stressing-continuity-with-buffett.html",
+      "title": "Greg Abel rules out Berkshire break-up, stresses continuity with Buffett's legacy at annual meeting",
+      "feed": "cnbc",
+      "published_at": "2026-05-03T23:14:58Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "da2fbe37": {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/veeva-systems-veev-6-9-061141757.html?.tsrc=rss",
+      "title": "Veeva Systems (VEEV) Is Up 6.9% After S&P 500 Addition and GC Transition News",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T06:11:41Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "19785c7d": {
+      "url": "https://finance.yahoo.com/m/cfdf164e-e24a-366b-9d8b-b0274f05ba94/dow-jones-futures%3A-trump-says.html?.tsrc=rss",
+      "title": "Dow Jones Futures: Trump Says U.S. To 'Guide' Ships Through Hormuz",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T04:27:18Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "5f3b8b28": {
+      "url": "https://finance.yahoo.com/markets/world-indices/articles/seoul-taipei-hit-records-asian-032149912.html?.tsrc=rss",
+      "title": "Seoul, Taipei hit records as Asian stocks track Wall St tech rally",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T03:21:49Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "023019c0": {
+      "url": "https://finance.yahoo.com/economy/policy/articles/markets-alert-trump-vows-project-231032971.html?.tsrc=rss",
+      "title": "Markets on alert as Trump vows ‘Project Freedom’ for Hormuz, setting up potential showdown after renewed attacks on ships",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T02:33:45Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "73454785": {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/3-industrials-stocks-warning-signs-014055445.html?.tsrc=rss",
+      "title": "3 Industrials Stocks with Warning Signs",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T01:40:55Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "fd8ff82f": {
+      "url": "https://www.fool.com/investing/2026/05/03/amd-stock-amd-earnings-date-when-best-ai-stocks/?.tsrc=rss",
+      "title": "Why AMD Stock Skyrocketed 74% in April",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T00:53:36Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "f1749366": {
+      "url": "https://247wallst.com/investing/2026/05/03/this-high-yield-bond-etf-offers-steady-cash-flow-and-low-volatility/?.tsrc=rss",
+      "title": "This High-Yield Bond ETF Offers Steady Cash Flow and Low Volatility",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T00:05:39Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "7feadfe3": {
+      "url": "https://www.thestreet.com/investing/stocks/cathie-wood-buys-28-7-million-of-tumbling-megacap-stock-meta-meta?.tsrc=rss",
+      "title": "Cathie Wood buys $28.7 million of tumbling megacap stock",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T00:03:00Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "16d5dadc": {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/jim-cramer-says-data-center-223131502.html?.tsrc=rss",
+      "title": "Jim Cramer Says 'Data Center' Trade Is Going Mainstream",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-03T22:31:31Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "38a68bc4": {
+      "url": "https://www.fool.com/investing/2026/05/03/amazon-just-made-a-big-move-these-2-sp-500-stocks/?.tsrc=rss",
+      "title": "Amazon Just Made a Big Move. These 2 S&P 500 Stocks Are Next to Watch.",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-03T22:25:00Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "d8e3c4ea": {
+      "url": "https://247wallst.com/investing/2026/05/03/this-natural-resources-etf-has-silently-outperformed-the-sp-500-year-to-date-while-yielding-5/?.tsrc=rss",
+      "title": "This Natural Resources ETF Has Silently Outperformed The S&P 500 Year-To-Date While Yielding 5%",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-03T20:05:41Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "e1889d6d": {
+      "url": "https://seekingalpha.com/news/4584511-samsung-lags-sk-hynix-as-citi-slashes-target-price-on-union-strike-concerns?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
+      "title": "Samsung lags SK Hynix as Citi slashes target price on union strike concerns",
+      "feed": "seeking_alpha",
+      "published_at": "2026-05-04T06:46:43Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "0f52bc44": {
+      "url": "https://seekingalpha.com/news/4584496-quant-rating-check-analyzing-the-impact-of-spirits-collapse-on-airline-standings?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
+      "title": "Quant Rating Check: Analyzing the impact of Spirit’s collapse on airline standings",
+      "feed": "seeking_alpha",
+      "published_at": "2026-05-04T06:31:12Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "00641aa7": {
+      "url": "https://seekingalpha.com/news/4584504-chinese-robot-hand-maker-linkerbot-eyes-6b-valuation-in-next-funding-round---report?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
+      "title": "Chinese robot-hand maker Linkerbot eyes $6B valuation in next funding round - report",
+      "feed": "seeking_alpha",
+      "published_at": "2026-05-04T06:07:01Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "366eb23c": {
+      "url": "https://seekingalpha.com/news/4584498-bitcoin-tops-80000-to-hit-three-month-high-ether-advances?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
+      "title": "Bitcoin tops $80,000 to hit three-month high; Ether advances",
+      "feed": "seeking_alpha",
+      "published_at": "2026-05-04T05:44:25Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "d9f24376": {
+      "url": "https://seekingalpha.com/news/4584509-mondays-economic-calendar?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
+      "title": "Monday’s Economic Calendar",
+      "feed": "seeking_alpha",
+      "published_at": "2026-05-04T05:23:26Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "09b405a5": {
+      "url": "https://seekingalpha.com/news/4584495-asian-equities-gain-amid-light-holiday-volume-investors-weigh-trumps-middle-east-updates?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
+      "title": "Asian equities gain amid light holiday volume; investors weigh Trump’s Middle East updates",
+      "feed": "seeking_alpha",
+      "published_at": "2026-05-04T05:16:59Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "c0dd5903": {
+      "url": "https://seekingalpha.com/news/4584505-datavault-ai-prices-60m-public-offering-of-common-shares?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
+      "title": "Datavault AI prices $60M public offering of common shares",
+      "feed": "seeking_alpha",
+      "published_at": "2026-05-04T05:04:30Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "6ed34ea8": {
+      "url": "https://www.investing.com/news/company-news/federal-signal-q1-2026-slides-record-results-drive-raised-outlook-93CH-4655013",
+      "title": "Federal Signal Q1 2026 slides: record results drive raised outlook",
+      "feed": "investing_com",
+      "published_at": "2026-05-04T06:31:18Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "d63f8f82": {
+      "url": "https://www.investing.com/news/world-news/trump-says-us-to-help-ships-stranded-in-strait-of-hormuz-as-tanker-hit-by-projectiles-4654934",
+      "title": "Iran warns US Navy to stay clear of Hormuz after Trump says US to help stranded ships",
+      "feed": "investing_com",
+      "published_at": "2026-05-04T06:30:48Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "3769de14": {
+      "url": "https://www.investing.com/news/stock-market-news/australia-stocks-lower-at-close-of-trade-spasx-200-down-037-4655009",
+      "title": "Australia stocks lower at close of trade; S&P/ASX 200 down 0.37%",
+      "feed": "investing_com",
+      "published_at": "2026-05-04T06:30:03Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "9f95afda": {
+      "url": "https://www.investing.com/news/company-news/jyske-bank-buys-back-83296-shares-in-week-18-93CH-4655008",
+      "title": "Jyske Bank buys back 83,296 shares in week 18",
+      "feed": "investing_com",
+      "published_at": "2026-05-04T06:23:02Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "46e6ce6b": {
+      "url": "https://www.investing.com/news/stock-market-news/australia-japan-strengthen-critical-minerals-ties-4654982",
+      "title": "Australia, Japan strengthen critical minerals ties",
+      "feed": "investing_com",
+      "published_at": "2026-05-04T06:18:48Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "ee1b8189": {
+      "url": "https://www.investing.com/news/stock-market-news/sk-hynix-shares-rally-12-after-us-tech-firms-signal-strong-spending-on-ai-data-centers-4655001",
+      "title": "SK Hynix shares rally 12% after US tech firms signal strong spending on AI data centers",
+      "feed": "investing_com",
+      "published_at": "2026-05-04T06:18:31Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "ceb3cdbc": {
+      "url": "https://www.investing.com/news/economic-indicators/russia-manufacturing-contracts-for-11th-straight-month-in-april-pmi-shows-4654994",
+      "title": "Russia manufacturing contracts for 11th straight month in April, PMI shows",
+      "feed": "investing_com",
+      "published_at": "2026-05-04T06:12:33Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "0cf1be80": {
+      "url": "https://www.investing.com/news/transcripts/earnings-call-transcript-federal-signal-q1-2026-beats-expectations-with-strong-growth-93CH-4654992",
+      "title": "Earnings call transcript: Federal Signal Q1 2026 beats expectations with strong growth",
+      "feed": "investing_com",
+      "published_at": "2026-05-04T06:06:36Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "b80921f1": {
+      "url": "https://www.investing.com/news/economy-news/uks-leftwing-greens-seek-to-topple-labours-london-strongholds-4654991",
+      "title": "UK’s left-wing Greens seek to topple Labour’s London strongholds",
+      "feed": "investing_com",
+      "published_at": "2026-05-04T06:06:35Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    },
+    "3b694358": {
+      "url": "https://www.investing.com/news/stock-market-news/taiwan-stocks-lower-at-close-of-trade-taiwan-weighted-down-096-4654990",
+      "title": "Taiwan stocks lower at close of trade; Taiwan Weighted down 0.96%",
+      "feed": "investing_com",
+      "published_at": "2026-05-04T06:05:03Z",
+      "seen_at": "2026-05-04T06:58:00Z"
+    }
+  }
 }
