@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "last_cleanup": "2026-05-04T14:05:40Z",
+  "last_cleanup": "2026-05-05T04:26:28Z",
   "ttl_hours": 48,
   "stats": {
-    "total_processed_lifetime": 128,
-    "current_entries": 128
+    "total_processed_lifetime": 187,
+    "current_entries": 187
   },
   "articles": {
     "5e99ffc8": {
@@ -902,6 +902,419 @@
       "feed": "investing_com",
       "published_at": "2026-05-04T13:55:05Z",
       "seen_at": "2026-05-04T14:05:40Z"
+    },
+    "e9b60ac8": {
+      "url": "https://www.cnbc.com/2026/05/04/iran-war-uae-trump-ceasefire-missiles.html",
+      "title": "Iran attacks UAE; U.S. says it sank boats in Strait of Hormuz",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T21:42:35Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "99d631dc": {
+      "url": "https://www.cnbc.com/2026/05/05/hsbc-q1-earnings-banking-finance.html",
+      "title": "HSBC first-quarter pre-tax profit misses estimates on wider-than-expected credit losses",
+      "feed": "cnbc",
+      "published_at": "2026-05-05T04:25:50Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "c6014808": {
+      "url": "https://www.cnbc.com/2026/05/05/oil-prices-today-wti-brent-iran-war-trump-hormuz.html",
+      "title": "Oil slides as traders assess Middle East developments with Iran attacks keeping markets jittery",
+      "feed": "cnbc",
+      "published_at": "2026-05-05T00:37:11Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "86e4cb1a": {
+      "url": "https://www.cnbc.com/2026/05/05/byd-april-sales-exports-china-ev-rivals-leapmotor-zeekr.html",
+      "title": "BYD's passenger EV sales drop for an eighth month as competition heats up",
+      "feed": "cnbc",
+      "published_at": "2026-05-05T02:27:32Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "ecd7ca17": {
+      "url": "https://www.cnbc.com/2026/05/04/andy-jassy-amazon-investors-rewarded-ai-spending.html",
+      "title": "Andy Jassy says Amazon investors will be rewarded by all its AI spending",
+      "feed": "cnbc",
+      "published_at": "2026-05-05T00:38:58Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "d420f376": {
+      "url": "https://www.cnbc.com/2026/05/04/the-devil-wears-prada-2-kicks-off-summer-box-office.html",
+      "title": "'The Devil Wears Prada 2' kicks off summer movie season in style with $77 million opening",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T23:14:02Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "b0ca0e9f": {
+      "url": "https://www.cnbc.com/2026/05/04/china-tech-financial-ecosystem-matures-as-hong-kong-ipos-boom.html",
+      "title": "CNBC's The China Connection newsletter: China is rewiring the Silicon Valley model — starting in Hong Kong",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T23:00:01Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "d5cb28e4": {
+      "url": "https://www.cnbc.com/2026/05/05/secret-service-arrest-spillman-miami-trump-doral-golf.html",
+      "title": "Secret Service officer arrested for indecent exposure in Miami after Trump golf event",
+      "feed": "cnbc",
+      "published_at": "2026-05-05T03:36:48Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "b8647304": {
+      "url": "https://www.cnbc.com/2026/05/04/open-ai-executive-leaves-thrive-capital.html",
+      "title": "OpenAI sales leader leaves for role at Thrive Capital",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T22:54:54Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "37ff0524": {
+      "url": "https://www.cnbc.com/2026/05/04/palantir-pltr-q1-earnings-report-2026.html",
+      "title": "Palantir tops estimates on 85% revenue growth, fastest expansion since market debut in 2020",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T22:51:10Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "4d5e9d36": {
+      "url": "https://www.cnbc.com/2026/05/04/spirit-airlines-shut-down-ceo-dave-davis.html",
+      "title": "Spirit Airlines CEO on carrier's collapse: 'We just kind of ran out of runway'",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T21:28:34Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "cca255d8": {
+      "url": "https://www.cnbc.com/2026/05/04/pinterest-pins-q1-earnings-report-2026.html",
+      "title": "Pinterest surges 15% after earnings beat as company posts strong guidance",
+      "feed": "cnbc",
+      "published_at": "2026-05-05T02:33:42Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "ea525247": {
+      "url": "https://www.cnbc.com/2026/05/04/whats-behind-eli-lillys-down-and-up-day-after-last-weeks-surge.html",
+      "title": "What's behind Eli Lilly's down-and-up day after last week's post-earnings surge",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T18:29:36Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "03be06f4": {
+      "url": "https://www.cnbc.com/2026/05/04/sec-and-elon-musk-agree-to-settle-lawsuit-over-twitter-buyout-in-2022.html",
+      "title": "SEC and Elon Musk agree to settle lawsuit over Twitter buyout in 2022",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T20:52:38Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "9e8b2e57": {
+      "url": "https://www.cnbc.com/2026/05/04/paramount-skydance-psky-earnings-q1-2026.html",
+      "title": "Paramount earnings, revenue beat expectations as streaming business offers a boost",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T20:48:58Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "688734a9": {
+      "url": "https://www.cnbc.com/2026/05/04/scotus-jeffries-redistrict-new-york.html",
+      "title": "Top Democrat aims for New York redistricting after Supreme Court’s Voting Rights ruling",
+      "feed": "cnbc",
+      "published_at": "2026-05-05T02:08:37Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "5d15d2c5": {
+      "url": "https://www.cnbc.com/2026/05/04/traders-are-doubtful-cohens-gamestop-can-pull-off-monster-ebay-acquisition.html",
+      "title": "Traders are doubtful Cohen's GameStop can pull off monster eBay acquisition",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T19:30:48Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "cc7a8335": {
+      "url": "https://www.cnbc.com/2026/05/04/spirit-airlines-flights-rivals.html",
+      "title": "How Spirit Airlines' demise will benefit rivals — and raise airfares even more",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T16:31:11Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "85c2f9d0": {
+      "url": "https://www.cnbc.com/2026/05/04/novo-nordisk-wegovy-pill-beating-eli-lilly-foundayo-early.html",
+      "title": "Novo Nordisk’s head start on GLP-1 pills forces investors to rethink Eli Lilly's dominance",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T21:13:28Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "151f7e98": {
+      "url": "https://www.cnbc.com/2026/05/04/trump-cole-allen-jail-jan-6-judge-whcd.html",
+      "title": "Pirro rips judge in Trump attack case for apologizing to Cole Allen over jail conditions",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T20:44:51Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "57fbc596": {
+      "url": "https://www.cnbc.com/2026/05/04/anthropic-goldman-blackstone-ai-venture.html",
+      "title": "Anthropic teams with Goldman, Blackstone and others on $1.5 billion AI venture targeting PE-owned firms",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T18:55:20Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "12f6195e": {
+      "url": "https://www.cnbc.com/2026/05/04/chinese-carmaker-geely.html",
+      "title": "How Chinese carmaker Geely put roots in the U.S.",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T19:22:49Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "788230ce": {
+      "url": "https://www.cnbc.com/2026/05/04/ups-fedex-amazon-logistics.html",
+      "title": "UPS, FedEx stocks sink after Amazon expands logistics network to other businesses",
+      "feed": "cnbc",
+      "published_at": "2026-05-04T20:03:20Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "1e7c8faa": {
+      "url": "https://www.fool.com/investing/2026/05/04/why-upstart-jumped-23-in-april/?.tsrc=rss",
+      "title": "Why Upstart Stock Jumped 23% in April",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-05T03:24:52Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "2af180a7": {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/1-p-500-stock-own-030855080.html?.tsrc=rss",
+      "title": "1 S&P 500 Stock to Own for Decades and 2 We Avoid",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-05T03:08:55Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "0d5f8993": {
+      "url": "https://www.fool.com/coverage/etfs/2026/05/04/slyv-wins-on-cost-and-yield-but-iwn-is-winning-the-year/?.tsrc=rss",
+      "title": "SLYV wins on cost and yield, but IWN is winning the year",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-05T01:11:01Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "48a7f4db": {
+      "url": "https://www.fool.com/investing/2026/05/04/why-alphabet-stock-soared-34-in-april-its-best-mon/?.tsrc=rss",
+      "title": "Why Alphabet Stock Soared 34% in April -- One Catalyst Is Its Move to Challenge Data Center AI Chip Leader Nvidia",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-05T00:00:00Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "21790302": {
+      "url": "https://finance.yahoo.com/markets/stocks/live/stock-market-today-tuesday-may-5-iran-uae-ships-233125850.html?.tsrc=rss",
+      "title": "Stock market today: S&P 500, Nasdaq, Dow futures trade flat with investors holding for Iran war developments",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T23:31:25Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "8986b516": {
+      "url": "https://www.fool.com/coverage/etfs/2026/05/04/one-stock-drives-16-of-sche-check-before-you-buy/?.tsrc=rss",
+      "title": "One Stock Drives 16% of SCHE — Check Before You Buy",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T23:26:01Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "20a58131": {
+      "url": "https://www.thestreet.com/investing/stocks/bank-of-america-issues-blunt-warning-to-wall-street-on-stock-market?.tsrc=rss",
+      "title": "Bank of America issues blunt warning to Wall Street on stock market",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T23:17:00Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "edaccc0e": {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/3-consumer-stocks-concern-us-231655147.html?.tsrc=rss",
+      "title": "3 Consumer Stocks That Concern Us",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T23:16:55Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "a1f5325e": {
+      "url": "https://www.fool.com/coverage/stock-market-today/2026/05/04/stock-market-today-may-4-intel-pulls-back-after-rally-as-ai-pc-push-tests-new-client-leadership/?.tsrc=rss",
+      "title": "Stock Market Today, May 4: Intel Pulls Back After Rally as AI PC Push Tests New Client Leadership",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T22:42:55Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "042709a4": {
+      "url": "https://finance.yahoo.com/video/p-500-falls-record-high-223948031.html?.tsrc=rss",
+      "title": "S&P 500 falls from record high on Middle East worries",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T22:39:48Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "bbf9896a": {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/1-industrials-stock-exciting-potential-223655765.html?.tsrc=rss",
+      "title": "1 Industrials Stock with Exciting Potential and 2 We Brush Off",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T22:36:55Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "70ad7f90": {
+      "url": "https://www.fool.com/investing/2026/05/04/does-warren-buffett-know-something-wall-street-doe/?.tsrc=rss",
+      "title": "Does Warren Buffett Know Something Wall Street Doesn't? He Just Delivered a Fresh Warning and Here's What It Means for Investors.",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T22:30:00Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "8dc01800": {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/v-f-vfc-sees-more-221503854.html?.tsrc=rss",
+      "title": "V.F. (VFC) Sees a More Significant Dip Than Broader Market: Some Facts to Know",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T22:15:03Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "fc5ea727": {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/rh-rh-falls-more-steeply-221503199.html?.tsrc=rss",
+      "title": "RH (RH) Falls More Steeply Than Broader Market: What Investors Need to Know",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T22:15:03Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "3c77dc6c": {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/avino-silver-asm-suffers-larger-221502861.html?.tsrc=rss",
+      "title": "Avino Silver (ASM) Suffers a Larger Drop Than the General Market: Key Insights",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T22:15:02Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "713e4504": {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/heres-why-blink-charging-blnk-221502974.html?.tsrc=rss",
+      "title": "Here's Why Blink Charging (BLNK) Fell More Than Broader Market",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T22:15:02Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "bdebebce": {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/autodesk-adsk-increases-despite-market-221502944.html?.tsrc=rss",
+      "title": "Autodesk (ADSK) Increases Despite Market Slip: Here's What You Need to Know",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T22:15:02Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "59152e71": {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/pagseguro-digital-ltd-pags-dips-221502070.html?.tsrc=rss",
+      "title": "PagSeguro Digital Ltd. (PAGS) Dips More Than Broader Market: What You Should Know",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T22:15:02Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "81a469d5": {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/copa-holdings-cpa-registers-bigger-221502906.html?.tsrc=rss",
+      "title": "Copa Holdings (CPA) Registers a Bigger Fall Than the Market: Important Facts to Note",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T22:15:02Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "248c27a6": {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/heres-why-ast-spacemobile-inc-220003428.html?.tsrc=rss",
+      "title": "Here's Why AST SpaceMobile, Inc. (ASTS) Fell More Than Broader Market",
+      "feed": "yahoo_finance",
+      "published_at": "2026-05-04T22:00:03Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "7db14e72": {
+      "url": "https://seekingalpha.com/news/4585302-adtran-beats-top-line-and-bottom-line-estimates-gives-q2-outlook?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
+      "title": "ADTRAN beats top-line and bottom-line estimates; gives Q2 outlook",
+      "feed": "seeking_alpha",
+      "published_at": "2026-05-05T04:21:40Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "c7b51606": {
+      "url": "https://seekingalpha.com/news/4585300-hsbc-non-gaap-eps-of-044-misses-by-172-revenue-of-1862b-beats-by-80m-updates-fy26-outlook?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
+      "title": "HSBC Non-GAAP EPS of $0.44 misses by $1.72, revenue of $18.62B beats by $80M; updates FY26 outlook",
+      "feed": "seeking_alpha",
+      "published_at": "2026-05-05T04:18:48Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "e86a64a5": {
+      "url": "https://seekingalpha.com/news/4585298-meta-taps-morgan-stanley-jpmorgan-for-13b-el-paso-ai-data-center-deal-report?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
+      "title": "Meta taps Morgan Stanley, JPMorgan for $13B El Paso AI data center deal: report",
+      "feed": "seeking_alpha",
+      "published_at": "2026-05-05T04:00:02Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "488e88b4": {
+      "url": "https://seekingalpha.com/news/4584731-tuesdays-economic-calendar?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
+      "title": "Tuesday’s Economic Calendar",
+      "feed": "seeking_alpha",
+      "published_at": "2026-05-05T04:00:00Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "7e807841": {
+      "url": "https://seekingalpha.com/news/4585299-adeia-reiterates-395m-435m-2026-revenue-outlook-amid-ceo-transition-plan-targeting-q4?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
+      "title": "Adeia reiterates $395M-$435M 2026 revenue outlook amid CEO transition plan targeting Q4 successor",
+      "feed": "seeking_alpha",
+      "published_at": "2026-05-05T03:54:04Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "10d66f90": {
+      "url": "https://seekingalpha.com/news/4585297-advanced-energy-forecasts-low-to-midminus-20-percent-2026-revenue-growth-as-it-targets-over?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
+      "title": "Advanced Energy forecasts low-to-mid-20% 2026 revenue growth as it targets over 43% gross margin",
+      "feed": "seeking_alpha",
+      "published_at": "2026-05-05T03:45:14Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "7403356a": {
+      "url": "https://seekingalpha.com/news/4585296-repay-outlines-2026-revenue-of-340m-346m-and-targets-42-percent-adjusted-ebitda-margin-as-it?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
+      "title": "Repay outlines 2026 revenue of $340M-$346M and targets ~42% adjusted EBITDA margin as it plans to close KUBRA in Q2 2026",
+      "feed": "seeking_alpha",
+      "published_at": "2026-05-05T03:44:22Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "a9c3101b": {
+      "url": "https://www.investing.com/news/economy-news/australias-westpac-firsthalf-profit-growth-misses-estimates-on-margin-pressure-4657631",
+      "title": "Australian lender Westpac flags Iran war risks as first-half profit misses estimates",
+      "feed": "investing_com",
+      "published_at": "2026-05-05T04:18:22Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "3a67955a": {
+      "url": "https://www.investing.com/news/stock-market-news/south-korea-to-probe-ship-fire-in-strait-of-hormuz-trump-blames-iranian-attack-4657772",
+      "title": "South Korea to probe ship fire in Strait of Hormuz, Trump blames Iranian attack",
+      "feed": "investing_com",
+      "published_at": "2026-05-05T03:54:11Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "853be4c0": {
+      "url": "https://www.investing.com/news/company-news/propetro-prices-600-million-convertible-notes-offering-93CH-4657771",
+      "title": "ProPetro prices $600 million convertible notes offering",
+      "feed": "investing_com",
+      "published_at": "2026-05-05T03:49:51Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "cb5e339d": {
+      "url": "https://www.investing.com/news/stock-market-news/apple-explores-using-intel-samsung-to-build-main-device-chips-in-the-us-bloomberg-news-reports-4657766",
+      "title": "Apple holds talks with Intel, Samsung for US chipmaking, Bloomberg News reports",
+      "feed": "investing_com",
+      "published_at": "2026-05-05T03:48:33Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "d1d57bec": {
+      "url": "https://www.investing.com/news/world-news/us-military-says-it-struck-vessel-in-caribbean-killing-two-4657769",
+      "title": "US military says it struck vessel in Caribbean, killing two",
+      "feed": "investing_com",
+      "published_at": "2026-05-05T03:42:28Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "dfb70b5e": {
+      "url": "https://www.investing.com/news/stock-market-news/dominican-republic-president-halts-goldquest-mining-project-after-protests-4657758",
+      "title": "Dominican Republic president halts GoldQuest mining project after protests",
+      "feed": "investing_com",
+      "published_at": "2026-05-05T03:42:28Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "f47365a0": {
+      "url": "https://www.investing.com/news/general-news/colorado-firebomb-suspect-to-plead-guilty-to-all-state-charges-defense-says-4657767",
+      "title": "Colorado firebomb suspect to plead guilty to all state charges, defense says",
+      "feed": "investing_com",
+      "published_at": "2026-05-05T03:24:45Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "a4506e37": {
+      "url": "https://www.investing.com/news/world-news/stars-arrive-for-met-gala-as-protesters-target-jeff-bezos-4657698",
+      "title": "Stars embrace costume at Met Gala as protesters target Bezos",
+      "feed": "investing_com",
+      "published_at": "2026-05-05T03:24:24Z",
+      "seen_at": "2026-05-05T04:26:28Z"
+    },
+    "fc7593e1": {
+      "url": "https://www.investing.com/news/stock-market-news/apple-explores-intel-samsung-to-make-chips-for-its-devices--bloomberg-4657768",
+      "title": "Apple explores Intel, Samsung to make chips for its devices - Bloomberg",
+      "feed": "investing_com",
+      "published_at": "2026-05-05T03:18:58Z",
+      "seen_at": "2026-05-05T04:26:28Z"
     }
   }
 }

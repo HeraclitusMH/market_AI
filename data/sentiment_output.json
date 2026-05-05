@@ -1,339 +1,358 @@
 {
   "schema_version": 1,
-  "timestamp": "2026-05-04T14:10:00Z",
-  "run_id": "run_20260504_141000_8c3e",
-  "articles_analyzed": 47,
-  "articles_skipped_dedup": 10,
+  "timestamp": "2026-05-05T04:28:45Z",
+  "run_id": "run_20260505_042845_a3f7",
+  "articles_analyzed": 59,
+  "articles_skipped_dedup": 6,
   "total_articles_fetched": 67,
   "feeds_failed": [
-    "reuters_business: fetch failed: HTTPSConnectionPool(host='feeds.reuters.com', port=443): Max retries exceeded with url: /reuters/businessNews (Caused by NameResolutionError(\"<urllib3.connection.HTTPSConnection object at 0x000002E3B77CE300>: Failed to resolve 'feeds.reuters.com' ([Errno 11001] getaddrinfo failed)\"))",
-    "reuters_markets: fetch failed: HTTPSConnectionPool(host='feeds.reuters.com', port=443): Max retries exceeded with url: /reuters/marketsNews (Caused by NameResolutionError(\"<urllib3.connection.HTTPSConnection object at 0x000002E3B80FA240>: Failed to resolve 'feeds.reuters.com' ([Errno 11001] getaddrinfo failed)\"))"
+    "reuters_business: fetch failed: HTTPSConnectionPool(host='feeds.reuters.com', port=443): Max retries exceeded with url: /reuters/businessNews (Caused by NameResolutionError(\"<urllib3.connection.HTTPSConnection object at 0x00000263F6331B20>: Failed to resolve 'feeds.reuters.com' ([Errno 11001] getaddrinfo failed)\"))",
+    "reuters_markets: fetch failed: HTTPSConnectionPool(host='feeds.reuters.com', port=443): Max retries exceeded with url: /reuters/marketsNews (Caused by NameResolutionError(\"<urllib3.connection.HTTPSConnection object at 0x00000263F6332120>: Failed to resolve 'feeds.reuters.com' ([Errno 11001] getaddrinfo failed)\"))"
   ],
   "market": {
-    "score": 0.0,
-    "summary": "Markets are caught between strong Q1 earnings momentum and escalating US-Iran tensions that pushed oil above $105/barrel, with recession warnings mounting even as Goldman Sachs calls earnings 'exceptionally strong' and RBC sees no top signal yet.",
+    "score": -0.05,
+    "summary": "Markets pulled back from record highs as Iran's attack on UAE and Strait of Hormuz shipping disruptions rattled investors, though strong tech earnings from Palantir and Pinterest and continued AI mega-investment momentum provide partial support.",
     "key_drivers": [
-      "Iran-US standoff in Strait of Hormuz pushes WTI crude above $105, equity futures lower",
-      "Goldman Sachs cites 'exceptionally strong' Q1 earnings as primary driver of rally",
-      "Semiconductor sector surged 40% in April; AMD and Nvidia maintain AI momentum",
-      "Recession risk warnings and Fed policy uncertainty cloud near-term outlook"
+      "Iran-UAE war with Strait of Hormuz shipping disruptions drives equity selloff from record levels",
+      "Palantir 85% revenue growth and Pinterest +15% post-earnings signal continued strong Q1 earnings",
+      "Amazon, Meta, and Alphabet AI mega-investments reinforce tech sector long-term bullishness",
+      "BofA and Buffett issue cautionary signals despite S&P 500 above 7,100 and Nasdaq 13-day win streak"
     ]
   },
   "sectors": {
-    "Energy": {
-      "score": 0.55,
-      "summary": "Oil prices surged 3%+ above $105 WTI as Strait of Hormuz tensions intensify, driving capital flows into energy names with Brent climbing above $111."
-    },
     "Technology": {
-      "score": 0.35,
-      "summary": "Semiconductor ETF surged 40% in April and AMD and Intel show strong momentum, while Meta AI capex concerns and Nvidia facing custom chipmaker competition create partial offsets."
+      "score": 0.30,
+      "summary": "Strong AI investment themes dominate with Meta's $13B data center deal, Alphabet's 34% April surge and custom AI chip ambitions, and Anthropic's enterprise AI venture, while Intel faces post-rally consolidation pressure."
+    },
+    "Energy": {
+      "score": 0.15,
+      "summary": "Middle East tensions and Strait of Hormuz shipping disruption risk maintain underlying support for energy, though oil prices retreated from initial Iran-driven gains as the situation remains fluid."
     },
     "Financials": {
-      "score": 0.10,
-      "summary": "Berkshire earnings beat expectations and Abel earns broad investor confidence at his first annual meeting, though the company's $397B cash pile and massive S&P 500 underperformance signal defensive sector positioning."
-    },
-    "Industrials": {
-      "score": -0.10,
-      "summary": "Factory orders rebounded in March offering a positive economic signal, but Spirit Airlines ceasing operations and UPS dropping on Amazon logistics competition signal ongoing structural pressures."
-    },
-    "Consumer Discretionary": {
-      "score": -0.05,
-      "summary": "Amazon's logistics network expansion demonstrates competitive moat strength, but Spirit Airlines' collapse and mounting recession warnings weigh on discretionary sector sentiment."
+      "score": -0.15,
+      "summary": "HSBC and Westpac both missed Q1 profit estimates on wider-than-expected credit losses, while Bank of America issued a cautionary market warning despite near-record index levels."
     },
     "Healthcare": {
-      "score": -0.30,
-      "summary": "A Deloitte report flags a 'bubble effect' as GLP-1/obesity assets now represent 25% of late-stage pharma pipeline while oncology's share has slipped to 20%, raising concentration risk concerns for the sector."
+      "score": -0.15,
+      "summary": "Novo Nordisk's early lead with its GLP-1 pill formulation is forcing investors to reassess Eli Lilly's dominance in the obesity drug market, creating sector-level uncertainty."
+    },
+    "Industrials": {
+      "score": 0.20,
+      "summary": "Industrials gained 16.3% over the past six months, benefiting from a friendlier regulatory environment under the Trump administration, with continued broker upgrade support."
+    },
+    "Communication Services": {
+      "score": 0.25,
+      "summary": "Pinterest surged 15% on strong Q1 earnings and guidance while Paramount beat expectations and grew streaming subscribers, signaling robust monetization across social media and streaming."
+    },
+    "Consumer Discretionary": {
+      "score": 0.15,
+      "summary": "Disney's Devil Wears Prada 2 opened strongly with a $77M weekend and sector-wide 7.5% six-month gains offset analyst concerns about select consumer discretionary names."
     }
   },
   "tickers": {
-    "AMD": {
+    "AMZN": {
+      "score": 0.35,
+      "summary": "Amazon CEO Jassy frames massive AI spending as a once-in-a-generation opportunity that will reward investors, while logistics network expansion to third parties reinforces competitive moat depth."
+    },
+    "GOOG": {
       "score": 0.40,
-      "summary": "AMD earnings this week with options traders positioned bullishly, maintaining AI chip leadership momentum from April's strong run with markets treating it as a key market test."
+      "summary": "Alphabet's 34% April surge marks its best monthly performance since the rally began, and its move to sell custom AI chips for data centers directly challenges Nvidia's dominant market position."
     },
     "META": {
-      "score": -0.30,
-      "summary": "Facing a billion-dollar public nuisance lawsuit in New Mexico and criticism that AI capex increases of 7% are repeating the metaverse overspend pattern."
+      "score": 0.25,
+      "summary": "Meta is arranging a $13 billion AI data center financing deal through Morgan Stanley and JPMorgan in El Paso, signaling aggressive and well-capitalized AI infrastructure expansion."
     },
-    "AMZN": {
-      "score": 0.30,
-      "summary": "Amazon's move to open its logistics network to third-party rivals demonstrates competitive moat depth and signals continued strategic dominance in e-commerce infrastructure."
+    "INTC": {
+      "score": 0.05,
+      "summary": "Intel faces post-rally consolidation as new client computing leadership is tested for AI PC demand, though Apple's reported chipmaking partnership talks represent a potential high-value opportunity."
     },
-    "BRK.B": {
-      "score": 0.10,
-      "summary": "Berkshire earnings jumped and Abel earns broad investor confidence at his first annual meeting, though trailing the S&P 500 by 40+ points with a $397B cash pile signals a defensive stance."
-    },
-    "NVDA": {
-      "score": 0.20,
-      "summary": "Still the market leader in AI processors but up only 7% in 2026 while custom chipmakers like Marvell nearly doubled, suggesting increasing competitive pressure on its dominant position."
+    "AAPL": {
+      "score": 0.15,
+      "summary": "Apple is exploring partnerships with Intel and Samsung for US-based chip manufacturing, reflecting strategic supply chain diversification ahead of potential domestic manufacturing requirements."
     },
     "UPS": {
       "score": -0.35,
-      "summary": "Stock drops as Amazon opens its logistics network to third-party competitors, directly challenging UPS's core delivery business model."
+      "summary": "Amazon's expansion of its supply chain network to outside companies directly threatens UPS's core delivery business, extending the competitive pressure that sank the stock on Monday."
     },
-    "GOOG": {
-      "score": 0.20,
-      "summary": "Alphabet receives a 'huge call' from Cramer and is cited as a key market mover this week, maintaining positive analyst attention despite broader macro headwinds."
+    "LLY": {
+      "score": -0.20,
+      "summary": "Novo Nordisk's early lead with its GLP-1 Wegovy pill is prompting investors to reassess whether Eli Lilly can maintain its dominant position in the rapidly growing obesity drug market."
     },
-    "INTC": {
-      "score": 0.35,
-      "summary": "Intel is among S&P 500 stocks that have doubled in 2026 and is refreshing executive leadership by appointing an experienced ex-Qualcomm executive for Client Computing."
+    "DIS": {
+      "score": 0.25,
+      "summary": "Disney's Devil Wears Prada 2 opened to a strong $77M weekend, kicking off the summer movie season and demonstrating continued consumer appetite for theatrical entertainment."
     },
-    "LIN": {
-      "score": 0.15,
-      "summary": "Linde receives enthusiastic analyst endorsement and is highlighted by Cramer as a high-conviction quality pick in the current market environment."
+    "NVDA": {
+      "score": -0.10,
+      "summary": "Alphabet's move to develop and sell custom AI chips for data centers represents a growing competitive challenge to Nvidia's dominant position in AI computing infrastructure."
+    },
+    "JPM": {
+      "score": 0.10,
+      "summary": "JPMorgan is co-advising on Meta's $13B El Paso AI data center financing, securing a lead underwriter role in one of the largest AI infrastructure deals of the year."
+    },
+    "MS": {
+      "score": 0.10,
+      "summary": "Morgan Stanley is co-advising on Meta's $13B AI data center financing deal, gaining prominent positioning in a landmark AI infrastructure transaction alongside JPMorgan."
+    },
+    "XOM": {
+      "score": 0.10,
+      "summary": "Middle East tensions and Strait of Hormuz shipping disruption risk provide underlying support for energy names like ExxonMobil, despite oil prices retreating from initial Iran-driven gains."
     },
     "SPY": {
-      "score": -0.15,
-      "summary": "S&P 500 ETF slipped 0.3% pre-bell as Iran-Hormuz tensions pushed oil above $105, with futures showing caution despite the underlying market's strong recent earnings season."
-    },
-    "AAPL": {
-      "score": 0.30,
-      "summary": "Apple is explicitly cited as being in a buy zone as the S&P 500 and Nasdaq trade at all-time highs following strong Big Tech earnings."
-    },
-    "AVGO": {
-      "score": 0.30,
-      "summary": "Broadcom is named alongside Apple as being in a buy zone, benefiting from the strong Big Tech AI earnings cycle."
-    },
-    "MSFT": {
-      "score": -0.30,
-      "summary": "Microsoft is described as lagging its megacap peers as investors question its AI capital expenditure plans, with analyst commentary calling it 'a mess' relative to the Magnificent Seven."
+      "score": -0.10,
+      "summary": "The S&P 500 pulled back from record highs on Iran-UAE conflict news with the Dow falling over 1%, and futures remain flat as investors cautiously assess further Strait of Hormuz developments."
     }
   },
   "sources": [
     {
-      "url": "https://seekingalpha.com/news/4584736-fiserv-q1-2026-earnings-preview?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
-      "title": "Fiserv Q1 2026 Earnings Preview",
+      "url": "https://www.cnbc.com/2026/05/05/hsbc-q1-earnings-banking-finance.html",
+      "title": "HSBC first-quarter pre-tax profit misses estimates on wider-than-expected credit losses",
+      "feed": "cnbc"
+    },
+    {
+      "url": "https://seekingalpha.com/news/4585302-adtran-beats-top-line-and-bottom-line-estimates-gives-q2-outlook",
+      "title": "ADTRAN beats top-line and bottom-line estimates; gives Q2 outlook",
       "feed": "seeking_alpha"
     },
     {
-      "url": "https://seekingalpha.com/news/4584725-factory-orders-rebound-in-march-from-februarys-anemic-gain?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
-      "title": "Factory orders rebound in March from February's anemic gain",
+      "url": "https://seekingalpha.com/news/4585300-hsbc-non-gaap-eps-of-044-misses-by-172-revenue-of-1862b-beats-by-80m-updates-fy26-outlook",
+      "title": "HSBC Non-GAAP EPS of $0.44 misses by $1.72, revenue of $18.62B beats by $80M; updates FY26 outlook",
       "feed": "seeking_alpha"
     },
     {
-      "url": "https://www.cnbc.com/2026/05/04/iran-war-trump-strait-of-hormuz.html",
-      "title": "U.S. military denies Iran's claim it struck American warship in Strait of Hormuz",
-      "feed": "cnbc"
+      "url": "https://www.investing.com/news/economy-news/australias-westpac-firsthalf-profit-growth-misses-estimates-on-margin-pressure-4657631",
+      "title": "Australian lender Westpac flags Iran war risks as first-half profit misses estimates",
+      "feed": "investing_com"
     },
     {
-      "url": "https://seekingalpha.com/news/4584455-here-are-the-major-earnings-after-the-close-monday?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
-      "title": "Here are the major earnings after the close Monday",
+      "url": "https://seekingalpha.com/news/4585298-meta-taps-morgan-stanley-jpmorgan-for-13b-el-paso-ai-data-center-deal-report",
+      "title": "Meta taps Morgan Stanley, JPMorgan for $13B El Paso AI data center deal: report",
       "feed": "seeking_alpha"
     },
     {
-      "url": "https://seekingalpha.com/news/4584732-wall-street-is-mixed-as-focus-remains-on-us-iran-developments?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
-      "title": "Wall Street is mixed as focus remains on U.S.-Iran developments",
+      "url": "https://seekingalpha.com/news/4584731-tuesdays-economic-calendar",
+      "title": "Tuesday's Economic Calendar",
       "feed": "seeking_alpha"
     },
     {
-      "url": "https://seekingalpha.com/news/4584727-intel-appoints-another-ex-qualcomm-exec-this-time-for-client-computing?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
-      "title": "Intel appoints another ex Qualcomm exec, this time for Client Computing",
+      "url": "https://seekingalpha.com/news/4585299-adeia-reiterates-395m-435m-2026-revenue-outlook-amid-ceo-transition-plan-targeting-q4",
+      "title": "Adeia reiterates $395M-$435M 2026 revenue outlook amid CEO transition plan targeting Q4 successor",
       "feed": "seeking_alpha"
     },
     {
-      "url": "https://www.investing.com/news/stock-market-news/fedex-ups-stock-drops-as-amazon-opens-logistics-network-to-rivals-93CH-4656476",
-      "title": "FedEx, UPS stock drops as Amazon opens logistics network to rivals",
+      "url": "https://www.investing.com/news/stock-market-news/south-korea-to-probe-ship-fire-in-strait-of-hormuz-trump-blames-iranian-attack-4657772",
+      "title": "South Korea to probe ship fire in Strait of Hormuz, Trump blames Iranian attack",
       "feed": "investing_com"
     },
     {
-      "url": "https://seekingalpha.com/news/4584712-sturm-ruger-agrees-to-cooperation-pact-with-beretta-holding?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
-      "title": "Sturm Ruger agrees to cooperation pact with Beretta Holding",
+      "url": "https://www.investing.com/news/company-news/propetro-prices-600-million-convertible-notes-offering-93CH-4657771",
+      "title": "ProPetro prices $600 million convertible notes offering",
+      "feed": "investing_com"
+    },
+    {
+      "url": "https://www.investing.com/news/stock-market-news/apple-explores-using-intel-samsung-to-build-main-device-chips-in-the-us-bloomberg-news-reports-4657766",
+      "title": "Apple holds talks with Intel, Samsung for US chipmaking, Bloomberg News reports",
+      "feed": "investing_com"
+    },
+    {
+      "url": "https://seekingalpha.com/news/4585297-advanced-energy-forecasts-low-to-midminus-20-percent-2026-revenue-growth-as-it-targets-over",
+      "title": "Advanced Energy forecasts low-to-mid-20% 2026 revenue growth as it targets over 43% gross margin",
       "feed": "seeking_alpha"
     },
     {
-      "url": "https://www.investing.com/news/transcripts/earnings-call-transcript-cogent-q1-2026-beats-eps-forecast-stock-plummets-93CH-4656474",
-      "title": "Earnings call transcript: Cogent Q1 2026 beats EPS forecast, stock plummets",
-      "feed": "investing_com"
-    },
-    {
-      "url": "https://www.investing.com/news/transcripts/earnings-call-transcript-gildan-activewear-q1-2026-beats-expectations-with-strong-growth-93CH-4656473",
-      "title": "Earnings call transcript: Gildan Activewear Q1 2026 beats expectations with strong growth",
-      "feed": "investing_com"
-    },
-    {
-      "url": "https://www.investing.com/news/cryptocurrency-news/bitcoin-rises-past-80k-on-etf-inflows-strategy-earnings-on-tap-4654984",
-      "title": "Bitcoin retreats after hitting $80k on ETF inflows; Strategy earnings on tap",
-      "feed": "investing_com"
-    },
-    {
-      "url": "https://www.investing.com/news/transcripts/earnings-call-transcript-wisekeys-h2-2025-reveals-strong-growth-and-innovation-93CH-4656471",
-      "title": "Earnings call transcript: Wisekey's H2 2025 reveals strong growth and innovation",
-      "feed": "investing_com"
-    },
-    {
-      "url": "https://www.investing.com/news/company-news/sojitz-fy2025-slides-profit-miss-offset-by-transformation-gains-93CH-4656472",
-      "title": "Sojitz FY2025 slides: profit miss offset by transformation gains",
-      "feed": "investing_com"
-    },
-    {
-      "url": "https://www.investing.com/news/stock-market-news/nzs-a2-milk-shares-slump-on-us-infant-formula-recall-as-cereulide-detected-4654923",
-      "title": "NZ's a2 Milk shares plunge on US infant formula recall as cereulide detected",
-      "feed": "investing_com"
-    },
-    {
-      "url": "https://www.investing.com/news/earnings/ocular-therapeutix-earnings-up-next-as-axpaxli-nda-looms-93CH-4656470",
-      "title": "Ocular Therapeutix earnings up next as AXPAXLI NDA looms",
-      "feed": "investing_com"
-    },
-    {
-      "url": "https://www.investing.com/news/stock-market-news/wex-board-deal-ends-bitter-proxy-battle-with-activist-impactive-4656296",
-      "title": "WEX board deal ends bitter proxy battle with activist Impactive",
-      "feed": "investing_com"
-    },
-    {
-      "url": "https://seekingalpha.com/news/4584698-agnico-eagle-mines-wins-tsx-nod-to-renew-2b-ncib-share-buyback-plan?utm_source=feed_news_all&utm_medium=referral&feed_item_type=news",
-      "title": "Agnico Eagle Mines wins TSX nod to renew $2B NCIB share buyback plan",
+      "url": "https://seekingalpha.com/news/4585296-repay-outlines-2026-revenue-of-340m-346m-and-targets-42-percent-adjusted-ebitda-margin-as-it",
+      "title": "Repay outlines 2026 revenue of $340M-$346M and targets ~42% adjusted EBITDA margin",
       "feed": "seeking_alpha"
     },
     {
-      "url": "https://www.investing.com/news/transcripts/earnings-call-transcript-telesat-q1-2026-can-leo-pivot-offset-legacy-declines-93CH-4656475",
-      "title": "Telesat earnings on deck: Can LEO pivot offset legacy declines?",
+      "url": "https://www.investing.com/news/world-news/us-military-says-it-struck-vessel-in-caribbean-killing-two-4657769",
+      "title": "US military says it struck vessel in Caribbean, killing two",
       "feed": "investing_com"
     },
     {
-      "url": "https://www.cnbc.com/2026/05/04/trump-retirement-savings-rich.html",
-      "title": "Trump said $465,000 in retirement savings is 'rich.' Is it?",
+      "url": "https://www.investing.com/news/stock-market-news/dominican-republic-president-halts-goldquest-mining-project-after-protests-4657758",
+      "title": "Dominican Republic president halts GoldQuest mining project after protests",
+      "feed": "investing_com"
+    },
+    {
+      "url": "https://www.cnbc.com/2026/05/05/secret-service-arrest-spillman-miami-trump-doral-golf.html",
+      "title": "Secret Service officer arrested for indecent exposure in Miami after Trump golf event",
       "feed": "cnbc"
     },
     {
-      "url": "https://finance.yahoo.com/m/68a7ae61-7710-373a-aaa2-a40e3ac796c7/stock-market-today%3A-dow-drops.html?.tsrc=rss",
-      "title": "Stock Market Today: Dow Drops On U.S.-Iran News; Micron, Sandisk Shares Continue To Rally (Live Coverage)",
+      "url": "https://www.fool.com/investing/2026/05/04/why-upstart-jumped-23-in-april/",
+      "title": "Why Upstart Stock Jumped 23% in April",
       "feed": "yahoo_finance"
     },
     {
-      "url": "https://www.fool.com/investing/2026/05/04/why-the-ishares-semiconductor-etf-jumped-40-in-apr/?.tsrc=rss",
-      "title": "Why the iShares Semiconductor ETF Jumped 40% in April",
+      "url": "https://www.investing.com/news/stock-market-news/apple-explores-intel-samsung-to-make-chips-for-its-devices--bloomberg-4657768",
+      "title": "Apple explores Intel, Samsung to make chips for its devices - Bloomberg",
+      "feed": "investing_com"
+    },
+    {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/1-p-500-stock-own-030855080.html",
+      "title": "1 S&P 500 Stock to Own for Decades and 2 We Avoid",
       "feed": "yahoo_finance"
     },
     {
-      "url": "https://www.fool.com/investing/2026/05/04/veeva-systems-just-joined-the-sp-500-3-reasons-to/?.tsrc=rss",
-      "title": "Veeva Systems Just Joined the S&P 500. 3 Reasons to Buy It and 1 Not To.",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://finance.yahoo.com/markets/stocks/articles/rbc-says-higher-stock-market-131952144.html?.tsrc=rss",
-      "title": "RBC says higher stock market valuations don't signal a top yet",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://247wallst.com/investing/2026/05/04/sp-500-faces-oil-fueled-sell-off-pressure-in-possible-return-to-merger-monday-deal/?.tsrc=rss",
-      "title": "S&P 500 Faces Oil-Fueled Sell-off Pressure in Possible Return to Merger Monday Deal",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://www.cnbc.com/2026/05/04/musk-altman-open-ai-settlement-trial-brockman.html",
-      "title": "Musk texted OpenAI's Brockman about settlement two days before trial began",
+      "url": "https://www.cnbc.com/2026/05/05/pinterest-pins-q1-earnings-report-2026.html",
+      "title": "Pinterest surges 15% after earnings beat as company posts strong guidance",
       "feed": "cnbc"
     },
     {
-      "url": "https://www.cnbc.com/2026/05/04/jim-cramers-top-10-things-to-watch-in-the-stock-market-monday.html",
-      "title": "Jim Cramer's top 10 things to watch in the stock market Monday",
+      "url": "https://www.cnbc.com/2026/05/05/byd-april-sales-exports-china-ev-rivals-leapmotor-zeekr.html",
+      "title": "BYD's passenger EV sales drop for an eighth month as competition heats up",
       "feed": "cnbc"
     },
     {
-      "url": "https://www.cnbc.com/2026/05/04/berkshire-shares-trade-higher-as-buffett-successor-abel-scores-good-marks-at-meeting-earnings-jump.html",
-      "title": "Berkshire shares trade higher as Buffett successor Abel scores good marks at meeting, earnings jump",
+      "url": "https://www.cnbc.com/2026/05/05/scotus-jeffries-redistrict-new-york.html",
+      "title": "Top Democrat aims for New York redistricting after Supreme Court's Voting Rights ruling",
       "feed": "cnbc"
     },
     {
-      "url": "https://finance.yahoo.com/markets/stocks/articles/exchange-traded-funds-equity-futures-130447905.html?.tsrc=rss",
-      "title": "Exchange-Traded Funds, Equity Futures Lower Pre-Bell Monday as US-Iran Tensions Escalate Near Strait of Hormuz",
+      "url": "https://www.fool.com/coverage/etfs/2026/05/04/slyv-wins-on-cost-and-yield-but-iwn-is-winning-the-year/",
+      "title": "SLYV wins on cost and yield, but IWN is winning the year",
       "feed": "yahoo_finance"
     },
     {
-      "url": "https://www.cnbc.com/2026/05/04/the-markets-next-test-could-come-down-to-two-stocks.html",
-      "title": "The market's next test could come down to two stocks",
+      "url": "https://www.cnbc.com/2026/05/04/andy-jassy-amazon-investors-rewarded-ai-spending.html",
+      "title": "Andy Jassy says Amazon investors will be rewarded by all its AI spending",
       "feed": "cnbc"
     },
     {
-      "url": "https://247wallst.com/investing/2026/05/04/the-fed-could-crush-trumps-bull-market-heres-the-warning-wall-street-is-missing/?.tsrc=rss",
-      "title": "The Fed Could Crush Trump's Bull Market — Here's the Warning Wall Street Is Missing",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://www.cnbc.com/2026/05/04/strait-hormuz-gas-price-oil-shock-recession-risk-economy-iran-us-war.html",
-      "title": "'Misplaced euphoria': Markets are sleepwalking into a recession amid Iran war oil price shock",
+      "url": "https://www.cnbc.com/2026/05/05/oil-prices-today-wti-brent-iran-war-trump-hormuz.html",
+      "title": "Oil slides as traders assess Middle East developments with Iran attacks keeping markets jittery",
       "feed": "cnbc"
     },
     {
-      "url": "https://finance.yahoo.com/markets/stocks/articles/us-equity-futures-slip-pre-124944839.html?.tsrc=rss",
-      "title": "US Equity Futures Slip Pre-Bell as Middle East Conflict Enters Third Month, Oil Prices Rise",
+      "url": "https://www.fool.com/investing/2026/05/04/why-alphabet-stock-soared-34-in-april-its-best-mon/",
+      "title": "Why Alphabet Stock Soared 34% in April -- One Catalyst Is Its Move to Challenge Data Center AI Chip Leader Nvidia",
       "feed": "yahoo_finance"
     },
     {
-      "url": "https://www.fool.com/investing/2026/05/04/meta-ai-capex-up-7-is-a-bad-surprise-could-this-be/?.tsrc=rss",
-      "title": "Meta AI Capex (Up 7%) Is a Bad Surprise -- Could This Be the Next Metaverse?",
+      "url": "https://finance.yahoo.com/markets/stocks/live/stock-market-today-tuesday-may-5-iran-uae-ships-233125850.html",
+      "title": "Stock market today: S&P 500, Nasdaq, Dow futures trade flat with investors holding for Iran war developments",
       "feed": "yahoo_finance"
     },
     {
-      "url": "https://finance.yahoo.com/markets/stocks/articles/5-stocks-recent-price-strength-124300264.html?.tsrc=rss",
-      "title": "5 Stocks With Recent Price Strength to Gain From April Rally",
+      "url": "https://www.fool.com/coverage/etfs/2026/05/04/one-stock-drives-16-of-sche-check-before-you-buy/",
+      "title": "One Stock Drives 16% of SCHE — Check Before You Buy",
       "feed": "yahoo_finance"
     },
     {
-      "url": "https://finance.yahoo.com/markets/stocks/articles/berkshire-trails-p-500-40-124034498.html?.tsrc=rss",
-      "title": "Berkshire Trails S&P 500 By 40.4 Points As Abel Faces First Test",
+      "url": "https://www.thestreet.com/investing/stocks/bank-of-america-issues-blunt-warning-to-wall-street-on-stock-market",
+      "title": "Bank of America issues blunt warning to Wall Street on stock market",
       "feed": "yahoo_finance"
     },
     {
-      "url": "https://finance.yahoo.com/markets/stocks/articles/exceptionally-strong-u-earnings-driving-123449964.html?.tsrc=rss",
-      "title": "'Exceptionally strong' U.S. earnings the driving force behind stock market rally",
+      "url": "https://finance.yahoo.com/markets/stocks/articles/3-consumer-stocks-concern-us-231655147.html",
+      "title": "3 Consumer Stocks That Concern Us",
       "feed": "yahoo_finance"
     },
     {
-      "url": "https://www.cnbc.com/2026/05/02/spirit-airlines-shutdown-inside-the-final-hours.html",
-      "title": "'Godspeed my friend': Inside the final hours of Spirit Airlines",
+      "url": "https://www.cnbc.com/2026/05/04/the-devil-wears-prada-2-kicks-off-summer-box-office.html",
+      "title": "'The Devil Wears Prada 2' kicks off summer movie season in style with $77 million opening",
       "feed": "cnbc"
     },
     {
-      "url": "https://www.fool.com/investing/2026/05/04/nvidia-is-up-7-in-2026-while-marvell-technology-ha/?.tsrc=rss",
-      "title": "Nvidia Is Up 7% in 2026 While Marvell Technology Has Nearly Doubled. Here's Why.",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://finance.yahoo.com/m/bf397f98-7506-3408-ae60-4cae99313630/these-stocks-are-today%E2%80%99s.html?.tsrc=rss",
-      "title": "These Stocks Are Today's Movers: eBay, GameStop, TSMC, Norwegian, Palantir, Berkshire Hathaway, and More",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://finance.yahoo.com/m/37e6c99d-864c-3e07-9a18-62a36d227089/bitcoin-price-broke-%2480%2C000..html?.tsrc=rss",
-      "title": "Bitcoin Price Broke $80,000. Why the Crypto Rally Is Set to Disappoint.",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://www.proactiveinvestors.com/companies/news/1091644/dow-futures-slip-as-geopolitical-risks-overshadow-last-week-s-rally-1091644.html?.tsrc=rss",
-      "title": "Dow futures slip as geopolitical risks overshadow last week's rally",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://finance.yahoo.com/markets/stocks/articles/buy-3-stocks-backed-broker-121600281.html?.tsrc=rss",
-      "title": "Buy These 3 Stocks Backed by Broker Upgrades in a Near-Record Market",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://www.cnbc.com/2026/05/04/private-student-loan-expansion.html",
-      "title": "Private student loan market set to expand under new federal loan caps — with risks for grad school borrowers",
+      "url": "https://www.cnbc.com/2026/05/04/china-tech-financial-ecosystem-matures-as-hong-kong-ipos-boom.html",
+      "title": "CNBC's The China Connection newsletter: China is rewiring the Silicon Valley model — starting in Hong Kong",
       "feed": "cnbc"
     },
     {
-      "url": "https://finance.yahoo.com/m/afa713b0-1234-abcd-8749-000000000001/these-eight-sp-500-stocks.html?.tsrc=rss",
-      "title": "These Eight S&P 500 Stocks Have Doubled In 2026. No. 3 Reports On Tuesday.",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://finance.yahoo.com/m/b75a90d3-e8ba-3c5f-8b02-c7ac11b1ec07/stock-market%E2%80%99s-record-run.html?.tsrc=rss",
-      "title": "Stock Market's Record Run Remains 'Fragile.' Tensions in Iran Threaten the Rally.",
-      "feed": "yahoo_finance"
-    },
-    {
-      "url": "https://www.cnbc.com/2026/05/04/meta-new-mexico-child-safety-facebook-instagram.html",
-      "title": "Meta's public nuisance case in New Mexico has billion-dollar consequences",
+      "url": "https://www.cnbc.com/2026/05/04/open-ai-executive-leaves-thrive-capital.html",
+      "title": "OpenAI sales leader leaves for role at Thrive Capital",
       "feed": "cnbc"
     },
     {
-      "url": "https://qz.com/oil-prices-dow-futures-iran-strait-hormuz-050426?.tsrc=rss",
-      "title": "Oil prices jump, Dow futures fall on Iran Strait of Hormuz fears",
+      "url": "https://www.cnbc.com/2026/05/04/palantir-pltr-q1-earnings-report-2026.html",
+      "title": "Palantir tops estimates on 85% revenue growth, fastest expansion since market debut in 2020",
+      "feed": "cnbc"
+    },
+    {
+      "url": "https://www.fool.com/coverage/stock-market-today/2026/05/04/stock-market-today-may-4-intel-pulls-back-after-rally-as-ai-pc-push-tests-new-client-leadership/",
+      "title": "Stock Market Today, May 4: Intel Pulls Back After Rally as AI PC Push Tests New Client Leadership",
       "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://finance.yahoo.com/video/p-500-falls-record-high-223948031.html",
+      "title": "S&P 500 falls from record high on Middle East worries",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/1-industrials-stock-exciting-potential-223655765.html",
+      "title": "1 Industrials Stock with Exciting Potential and 2 We Brush Off",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://www.fool.com/investing/2026/05/04/does-warren-buffett-know-something-wall-street-doe/",
+      "title": "Does Warren Buffett Know Something Wall Street Doesn't? He Just Delivered a Fresh Warning and Here's What It Means for Investors.",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/v-f-vfc-sees-more-221503854.html",
+      "title": "V.F. (VFC) Sees a More Significant Dip Than Broader Market: Some Facts to Know",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/rh-rh-falls-more-steeply-221503199.html",
+      "title": "RH (RH) Falls More Steeply Than Broader Market: What Investors Need to Know",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/avino-silver-asm-suffers-larger-221502861.html",
+      "title": "Avino Silver (ASM) Suffers a Larger Drop Than the General Market: Key Insights",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/heres-why-blink-charging-blnk-221502974.html",
+      "title": "Here's Why Blink Charging (BLNK) Fell More Than Broader Market",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/autodesk-adsk-increases-despite-market-221502944.html",
+      "title": "Autodesk (ADSK) Increases Despite Market Slip: Here's What You Need to Know",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/pagseguro-digital-ltd-pags-dips-221502070.html",
+      "title": "PagSeguro Digital Ltd. (PAGS) Dips More Than Broader Market: What You Should Know",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/copa-holdings-cpa-registers-bigger-221502906.html",
+      "title": "Copa Holdings (CPA) Registers a Bigger Fall Than the Market: Important Facts to Note",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/heres-why-ast-spacemobile-inc-220003428.html",
+      "title": "Here's Why AST SpaceMobile, Inc. (ASTS) Fell More Than Broader Market",
+      "feed": "yahoo_finance"
+    },
+    {
+      "url": "https://www.cnbc.com/2026/05/04/iran-war-uae-trump-ceasefire-missiles.html",
+      "title": "Iran attacks UAE; U.S. says it sank boats in Strait of Hormuz",
+      "feed": "cnbc"
+    },
+    {
+      "url": "https://www.cnbc.com/2026/05/04/spirit-airlines-shut-down-ceo-dave-davis.html",
+      "title": "Spirit Airlines CEO on carrier's collapse: 'We just kind of ran out of runway'",
+      "feed": "cnbc"
+    },
+    {
+      "url": "https://www.cnbc.com/2026/05/04/novo-nordisk-wegovy-pill-beating-eli-lilly-foundayo-early.html",
+      "title": "Novo Nordisk's head start on GLP-1 pills forces investors to rethink Eli Lilly's dominance",
+      "feed": "cnbc"
+    },
+    {
+      "url": "https://www.cnbc.com/2026/05/04/sec-and-elon-musk-agree-to-settle-lawsuit-over-twitter-buyout-in-2022.html",
+      "title": "SEC and Elon Musk agree to settle lawsuit over Twitter buyout in 2022",
+      "feed": "cnbc"
+    },
+    {
+      "url": "https://www.cnbc.com/2026/05/04/paramount-skydance-psky-earnings-q1-2026.html",
+      "title": "Paramount earnings, revenue beat expectations as streaming business offers a boost",
+      "feed": "cnbc"
     }
   ]
 }
