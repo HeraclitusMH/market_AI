@@ -2,6 +2,8 @@ import type {
   BotState, OverviewData, Position, Order, Fill, Signal,
   SentimentData, RiskData, RankingRow, PlanRow, ConfigData, ControlResponse,
   RegimeCurrent, RegimeHistoryRow, SentimentProviderUpdateResponse, RefreshRankingsResponse,
+  SentimentRefreshResponse, FundamentalsRefreshResponse,
+  ScoringWeightsResponse, ScoringDocsResponse, RefreshHistoryEvent,
 } from '@/types/api';
 
 const BASE = '/api/v1';
@@ -41,17 +43,15 @@ export const api = {
     post<SentimentProviderUpdateResponse>('/config/sentiment/provider', { provider }),
 
   postControl: (action: string) => post<ControlResponse>(`/controls/${action}`),
-  refreshSentiment: () => post<{ status: string; snapshots_written: number; reason: string }>(
-    '/sentiment/refresh',
-  ),
+  refreshSentiment: () => post<SentimentRefreshResponse>('/sentiment/refresh'),
   refreshFundamentals: (symbol?: string) =>
-    post<{
-      refreshed: number;
-      missing: number;
-      errors: { symbol: string; error: string }[];
-      duration_s: number;
-      symbols: string[];
-    }>(`/fundamentals/refresh${symbol ? `?symbol=${encodeURIComponent(symbol)}` : ''}`),
+    post<FundamentalsRefreshResponse>(
+      `/fundamentals/refresh${symbol ? `?symbol=${encodeURIComponent(symbol)}` : ''}`,
+    ),
+  getScoringWeights: () => get<ScoringWeightsResponse>('/scoring/weights'),
+  getScoringDocs:    () => get<ScoringDocsResponse>('/scoring/docs'),
+  getRefreshHistory: (limit = 20) =>
+    get<RefreshHistoryEvent[]>(`/scoring/refresh-history?limit=${limit}`),
 } as const;
 
 export type ApiClient = typeof api;

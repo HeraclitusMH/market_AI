@@ -4,7 +4,7 @@ from fastapi import APIRouter
 from api.v1 import (
     overview, positions, orders, signals, rankings,
     sentiment, risk, controls, config as config_routes,
-    fundamentals,
+    fundamentals, scoring,
 )
 
 router = APIRouter(prefix="/api/v1")
@@ -18,3 +18,4 @@ router.include_router(risk.router)
 router.include_router(controls.router)   # has its own /controls prefix
 router.include_router(config_routes.router)
 router.include_router(fundamentals.router)
+router.include_router(scoring.router)

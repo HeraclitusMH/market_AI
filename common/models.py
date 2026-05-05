@@ -45,9 +45,11 @@ class Universe(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     symbol = Column(String(20), unique=True, nullable=False, index=True)
+    name = Column(String(200), default="")
     type = Column(String(10), default="STK")  # STK or ETF
     sector = Column(String(50), default="")
     active = Column(Boolean, default=True)
+    sources_json = Column(Text, default="[]")
     liquidity_metrics_json = Column(Text, default="{}")
 
 
@@ -347,6 +349,18 @@ class TradeManagement(Base):
 
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+
+class RefreshLog(Base):
+    """Append-only audit log for manually triggered refresh actions."""
+    __tablename__ = "refresh_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, default=utcnow, nullable=False, index=True)
+    action = Column(String(40), nullable=False)        # rankings | sentiment | fundamentals
+    status = Column(String(20), nullable=False)        # success | error
+    duration_ms = Column(Integer, nullable=False, default=0)
+    message = Column(Text, default="")
 
 
 class RegimeSnapshot(Base):

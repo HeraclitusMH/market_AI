@@ -5,6 +5,7 @@ import { Positions } from '@/pages/Positions';
 import { Orders } from '@/pages/Orders';
 import { Signals } from '@/pages/Signals';
 import { Rankings } from '@/pages/Rankings';
+import { ScoreControl } from '@/pages/ScoreControl';
 import { Sentiment } from '@/pages/Sentiment';
 import { Regime } from '@/pages/Regime';
 import { Risk } from '@/pages/Risk';
@@ -23,6 +24,7 @@ const router = createBrowserRouter(
         { path: 'orders', element: <Orders /> },
         { path: 'signals', element: <Signals /> },
         { path: 'rankings', element: <Rankings /> },
+        { path: 'score-control', element: <ScoreControl /> },
         { path: 'sentiment', element: <Sentiment /> },
         { path: 'regime', element: <Regime /> },
         { path: 'risk', element: <Risk /> },

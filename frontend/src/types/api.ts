@@ -107,13 +107,14 @@ export interface RankingRow {
   components: RankingComponents;
   eligible: boolean;
   reasons: string[];
+  weight_profile?: string | null;
 }
 
 export interface RankingComponents {
-  [key: string]: RankingFactor | Composite7Factor | Record<string, number> | Record<string, unknown> | number | undefined;
+  [key: string]: RankingFactor | Composite6Factor | Record<string, number> | Record<string, unknown> | number | undefined;
   weights_used?: Record<string, number>;
   total_score?: number;
-  composite_7factor?: Composite7Factor;
+  composite_6factor?: Composite6Factor;
 }
 
 export interface RankingFactor {
@@ -126,10 +127,11 @@ export interface RankingFactor {
   raw_score?: number;
 }
 
-export interface Composite7Factor {
+export interface Composite6Factor {
   symbol?: string;
   composite_score: number;
   regime: string;
+  weight_profile: string;
   confidence: number;
   factors: Record<string, CompositeFactor>;
   timestamp?: string;
@@ -260,4 +262,70 @@ export interface RefreshRankingsResponse {
   ranked: number;
   latest_ts: string | null;
   reason?: string;
+}
+
+export interface SentimentRefreshResponse {
+  status: string;
+  snapshots_written: number;
+  reason: string;
+}
+
+export interface FundamentalsRefreshResponse {
+  refreshed: number;
+  missing: number;
+  errors: { symbol: string; error: string }[];
+  duration_s: number;
+  symbols: string[];
+}
+
+export interface WeightProfileWeights {
+  technical: number;
+  momentum: number;
+  sentiment: number;
+  quality: number;
+  growth: number;
+  risk_penalty: number;
+}
+
+export interface ScoringWeightsResponse {
+  profiles: Record<string, WeightProfileWeights>;
+  active_profile: string;
+  active_weights: WeightProfileWeights;
+  regime_level: string;
+}
+
+export interface ParameterBand {
+  range: string;
+  label: string;
+}
+
+export interface ParameterDoc {
+  key: string;
+  label: string;
+  weight: number;
+  what: string;
+  how: string;
+  source: string;
+  subscores: string[];
+  score_min: number;
+  score_max: number;
+  inverted: boolean;
+  bands: ParameterBand[];
+  refresh_via: string;
+  refresh_note: string;
+}
+
+export interface ScoringDocsResponse {
+  parameters: ParameterDoc[];
+  active_profile: string;
+  regime_level: string;
+}
+
+export interface RefreshHistoryEvent {
+  id: number;
+  timestamp: string;
+  action: string;
+  status: string;
+  duration_ms: number;
+  message: string;
 }

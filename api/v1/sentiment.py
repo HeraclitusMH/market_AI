@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from api.deps import get_db
+from api.v1._refresh_log import log_refresh
 from common.config import get_config
 from common.models import SentimentSnapshot
 from common.schema import SentimentLlmBudgetOut, SentimentOut
@@ -119,9 +120,24 @@ def get_sentiment(db: Session = Depends(get_db)):
 
 @router.post("/sentiment/refresh")
 def refresh_sentiment():
-    result = refresh_and_store()
+    import time
+
+    started = time.monotonic()
+    try:
+        result = refresh_and_store()
+    except Exception as exc:
+        log_refresh("sentiment", "error", int((time.monotonic() - started) * 1000), str(exc))
+        raise
+
+    duration_ms = int((time.monotonic() - started) * 1000)
+    status = str(result.get("status", "unknown"))
+    snapshots_written = int(result.get("snapshots_written", 0) or 0)
+    reason = str(result.get("reason", ""))
+    log_status = "success" if status in ("success", "skipped") else "error"
+    message = f"snapshots={snapshots_written}" + (f" reason={reason}" if reason else "")
+    log_refresh("sentiment", log_status, duration_ms, message)
     return {
-        "status": result.get("status", "unknown"),
-        "snapshots_written": result.get("snapshots_written", 0),
-        "reason": result.get("reason", ""),
+        "status": status,
+        "snapshots_written": snapshots_written,
+        "reason": reason,
     }
