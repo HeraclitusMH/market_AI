@@ -5,6 +5,7 @@ export interface Column<T> {
   key: string;
   header: string;
   numeric?: boolean;
+  center?: boolean;
   sortable?: boolean;
   render?: (row: T) => React.ReactNode;
 }
@@ -15,6 +16,10 @@ interface DataTableProps<T extends Record<string, unknown>> {
   emptyMessage?: string;
   maxHeight?: number;
   expandRow?: (row: T) => React.ReactNode;
+  sortKey?: string | null;
+  sortDir?: 'asc' | 'desc';
+  onSortChange?: (key: string, dir: 'asc' | 'desc') => void;
+  manualSort?: boolean;
 }
 
 export function DataTable<T extends Record<string, unknown>>({
@@ -23,12 +28,19 @@ export function DataTable<T extends Record<string, unknown>>({
   emptyMessage = 'No data',
   maxHeight,
   expandRow,
+  sortKey: controlledSortKey,
+  sortDir: controlledSortDir,
+  onSortChange,
+  manualSort = false,
 }: DataTableProps<T>) {
-  const [sortKey, setSortKey] = useState<string | null>(null);
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [internalSortKey, setInternalSortKey] = useState<string | null>(null);
+  const [internalSortDir, setInternalSortDir] = useState<'asc' | 'desc'>('desc');
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const sortKey = controlledSortKey !== undefined ? controlledSortKey : internalSortKey;
+  const sortDir = controlledSortDir ?? internalSortDir;
 
   const sorted = useMemo(() => {
+    if (manualSort) return data;
     if (!sortKey) return data;
     return [...data].sort((a, b) => {
       const av = a[sortKey];
@@ -40,14 +52,19 @@ export function DataTable<T extends Record<string, unknown>>({
       const bs = String(bv ?? '');
       return sortDir === 'asc' ? as.localeCompare(bs) : bs.localeCompare(as);
     });
-  }, [data, sortKey, sortDir]);
+  }, [data, manualSort, sortKey, sortDir]);
 
   function handleSort(key: string) {
+    const nextDir = sortKey === key && sortDir === 'desc' ? 'asc' : 'desc';
+    if (onSortChange) {
+      onSortChange(key, nextDir);
+      return;
+    }
     if (sortKey === key) {
-      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+      setInternalSortDir(nextDir);
     } else {
-      setSortKey(key);
-      setSortDir('desc');
+      setInternalSortKey(key);
+      setInternalSortDir('desc');
     }
   }
 
@@ -78,7 +95,7 @@ export function DataTable<T extends Record<string, unknown>>({
               <th
                 key={col.key}
                 scope="col"
-                className={`${col.numeric ? 'num' : ''}${col.sortable !== false ? ' sortable' : ''}`}
+                className={`${col.numeric ? 'num' : col.center ? 'centered' : ''}${col.sortable !== false ? ' sortable' : ''}`}
                 onClick={col.sortable !== false ? () => handleSort(col.key) : undefined}
               >
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -114,7 +131,7 @@ export function DataTable<T extends Record<string, unknown>>({
                     </td>
                   )}
                   {columns.map((col) => (
-                    <td key={col.key} className={col.numeric ? 'num' : ''}>
+                    <td key={col.key} className={col.numeric ? 'num' : col.center ? 'centered' : ''}>
                       {col.render ? col.render(row) : String(row[col.key] ?? '')}
                     </td>
                   ))}

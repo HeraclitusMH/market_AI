@@ -19,19 +19,34 @@ vi.mock('@/lib/api', () => ({
   },
 }));
 
-function composite(score = 72) {
+function composite(score = 0.72) {
   return {
     composite_score: score,
-    regime: 'rotation_choppy',
+    regime: 'risk_reduced',
+    weight_profile: 'defensive_swing',
     confidence: 0.88,
     factors: {
-      quality: { score: 70, weight: 0.2, contribution: 14, components: {} },
-      value: { score: 65, weight: 0.15, contribution: 9.75, components: {} },
-      momentum: { score: 80, weight: 0.1, contribution: 8, components: {} },
-      growth: { score: 60, weight: 0.15, contribution: 9, components: {} },
-      sentiment: { score: 75, weight: 0.2, contribution: 15, components: {} },
-      technical: { score: 85, weight: 0.15, contribution: 12.75, components: {} },
-      risk: { score: 35, weight: 0.05, contribution: -1.75, components: {} },
+      quality: { score: 0.70, weight: 0.10, contribution: 0.07, components: {} },
+      momentum: { score: 0.80, weight: 0.20, contribution: 0.16, components: {} },
+      growth: { score: 0.60, weight: 0.10, contribution: 0.06, components: {} },
+      sentiment: { score: 0.75, weight: 0.15, contribution: 0.1125, components: {} },
+      technical: { score: 0.85, weight: 0.25, contribution: 0.2125, components: {} },
+      risk_penalty: { score: 0.35, weight: 0.20, contribution: -0.07, components: {} },
+    },
+  };
+}
+
+function rankingRow(id: number, symbol: string, score = 0.4, eligible = false) {
+  return {
+    id,
+    ts: '2026-05-04T10:00:00',
+    symbol,
+    score_total: score,
+    eligible,
+    reasons: [],
+    components: {
+      liquidity: { value_0_1: 1, status: 'ok', eligible: true },
+      composite_6factor: composite(score),
     },
   };
 }
@@ -41,7 +56,7 @@ it('renders Rankings without crashing', () => {
   expect(container).toBeTruthy();
 });
 
-it('renders factor breakdown scores from the 7-factor composite payload', async () => {
+it('renders factor breakdown scores from the 6-factor composite payload', async () => {
   vi.mocked(api.getRankings).mockResolvedValueOnce([
     {
       id: 1,
@@ -61,8 +76,8 @@ it('renders factor breakdown scores from the 7-factor composite payload', async 
           metrics: { last_price: 180, adv_dollar_20d: 50_000_000 },
         },
         fundamentals: { value_0_1: null, status: 'missing' },
-        weights_used: { quality: 0.2, value: 0.15, momentum: 0.1, growth: 0.15, sentiment: 0.2, technical: 0.15, risk: 0.05 },
-        composite_7factor: composite(72),
+        weights_used: { quality: 0.10, momentum: 0.20, growth: 0.10, sentiment: 0.15, technical: 0.25, risk_penalty: 0.20 },
+        composite_6factor: composite(0.72),
       },
     },
   ]);
@@ -72,12 +87,12 @@ it('renders factor breakdown scores from the 7-factor composite payload', async 
   expect(await screen.findAllByText('AAPL')).toHaveLength(2);
   fireEvent.click(screen.getAllByText('AAPL')[1].closest('tr') as HTMLElement);
   expect(screen.getByText('Sentiment')).toBeInTheDocument();
-  expect(screen.getByText('+15.00')).toBeInTheDocument();
+  expect(screen.getByText('+0.11')).toBeInTheDocument();
   expect(screen.getByText('Liquidity Gate')).toBeInTheDocument();
   expect(screen.getByText('Pass')).toBeInTheDocument();
   expect(screen.getByText('Formula')).toBeInTheDocument();
-  expect(screen.getAllByText((_, el) => Boolean(el?.textContent?.includes('Sentiment 75') && el.textContent.includes('20%'))).length).toBeGreaterThan(0);
-  expect(screen.getAllByText((_, el) => Boolean(el?.textContent?.includes('Risk Penalty 35') && el.textContent.includes('5%'))).length).toBeGreaterThan(0);
+  expect(screen.getAllByText((_, el) => Boolean(el?.textContent?.includes('Sentiment 75') && el.textContent.includes('15%'))).length).toBeGreaterThan(0);
+  expect(screen.getAllByText((_, el) => Boolean(el?.textContent?.includes('Risk Penalty 35') && el.textContent.includes('20%'))).length).toBeGreaterThan(0);
   expect(screen.queryByText(/Liquidity.*x/)).not.toBeInTheDocument();
 
   await waitFor(() => {
@@ -108,7 +123,7 @@ it('does not render the old weighted factor formula when composite payload is mi
 
   expect(await screen.findAllByText('SPY')).toHaveLength(2);
   fireEvent.click(screen.getAllByText('SPY')[1].closest('tr') as HTMLElement);
-  expect(screen.getByText(/Missing 7-factor composite payload/)).toBeInTheDocument();
+  expect(screen.getByText(/Missing 6-factor composite payload/)).toBeInTheDocument();
   expect(screen.queryByText(/Sentiment 57 x 46\.2%/)).not.toBeInTheDocument();
   expect(screen.queryByText(/Momentum 97 x 23\.1%/)).not.toBeInTheDocument();
   expect(screen.queryByText(/Risk 75 x 30\.8%/)).not.toBeInTheDocument();
@@ -130,7 +145,7 @@ it('excludes liquidity weights from the score formula', async () => {
         liquidity: { value_0_1: 1, status: 'ok', eligible: true },
         fundamentals: { value_0_1: null, status: 'missing' },
         weights_used: { sentiment: 0.4615, risk: 0.3077, liquidity: 0.2308, fundamentals: 0 },
-        composite_7factor: composite(64),
+        composite_6factor: composite(0.64),
       },
     },
   ]);
@@ -139,8 +154,8 @@ it('excludes liquidity weights from the score formula', async () => {
 
   expect(await screen.findAllByText('SPY')).toHaveLength(2);
   fireEvent.click(screen.getAllByText('SPY')[1].closest('tr') as HTMLElement);
-  expect(screen.getAllByText((_, el) => Boolean(el?.textContent?.includes('Sentiment 75') && el.textContent.includes('20%'))).length).toBeGreaterThan(0);
-  expect(screen.getAllByText((_, el) => Boolean(el?.textContent?.includes('Risk Penalty 35') && el.textContent.includes('5%'))).length).toBeGreaterThan(0);
+  expect(screen.getAllByText((_, el) => Boolean(el?.textContent?.includes('Sentiment 75') && el.textContent.includes('15%'))).length).toBeGreaterThan(0);
+  expect(screen.getAllByText((_, el) => Boolean(el?.textContent?.includes('Risk Penalty 35') && el.textContent.includes('20%'))).length).toBeGreaterThan(0);
   expect(screen.queryByText(/liquidity 100 x/i)).not.toBeInTheDocument();
 });
 
@@ -164,11 +179,11 @@ it('shows missing instead of a neutral sentiment score', async () => {
           },
         },
         liquidity: { value_0_1: 1, status: 'ok', eligible: true },
-        composite_7factor: {
-          ...composite(64),
+        composite_6factor: {
+          ...composite(0.64),
           factors: {
-            ...composite(64).factors,
-            sentiment: { score: 0, weight: 0.2, contribution: 0, components: { missing: true } },
+            ...composite(0.64).factors,
+            sentiment: { score: 0, weight: 0.15, contribution: 0, components: { missing: true } },
           },
         },
       },
@@ -181,4 +196,19 @@ it('shows missing instead of a neutral sentiment score', async () => {
   fireEvent.click(screen.getAllByText('NVDA')[1].closest('tr') as HTMLElement);
   expect(screen.getByText('missing')).toBeInTheDocument();
   expect(screen.queryByText('+10.00')).not.toBeInTheDocument();
+});
+
+it('sorts the full rankings dataset before pagination', async () => {
+  const rows = Array.from({ length: 150 }, (_, index) => rankingRow(index + 1, `A${String(index + 1).padStart(3, '0')}`));
+  rows.push(rankingRow(151, 'ZZZ'));
+  vi.mocked(api.getRankings).mockResolvedValueOnce(rows);
+
+  render(<Rankings />, { wrapper: Wrapper });
+
+  expect(await screen.findByText('A001')).toBeInTheDocument();
+  expect(screen.queryByText('ZZZ')).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getAllByRole('columnheader', { name: /Company/ })[2]);
+
+  expect(await screen.findByText('ZZZ')).toBeInTheDocument();
 });
